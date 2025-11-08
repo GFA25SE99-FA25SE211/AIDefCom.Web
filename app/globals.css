@@ -1,26 +1,459 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ----------- PAGE LAYOUT ----------- */
+.page-container {
+  padding: 2rem;
+  background-color: #f9fafb;
+  min-height: 100vh;
+  font-family: "Inter", sans-serif;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+.section-header {
+  @apply flex flex-col md:flex-row md:items-center md:justify-between mb-6 gap-3;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+.page-footer {
+  @apply text-center text-sm text-gray-500 mt-8;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* ----------- BUTTONS ----------- */
+.btn-gradient {
+  @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium 
+  text-white shadow-sm bg-gradient-to-r from-purple-600 to-blue-500 hover:opacity-90 transition;
+}
+
+.btn-subtle {
+  @apply inline-flex items-center justify-center rounded-md hover:bg-gray-100 transition text-gray-600;
+}
+
+.btn-outline {
+  @apply inline-flex items-center justify-center gap-2 px-3 py-1.5 border border-gray-300 rounded-md 
+  text-gray-700 text-sm hover:bg-gray-100 transition;
+}
+
+.btn-secondary {
+  @apply inline-flex items-center justify-center rounded-md px-3 py-1.5 text-sm font-medium 
+  bg-gray-100 text-gray-700 hover:bg-gray-200 transition;
+}
+
+/* ----------- INPUTS / FORMS ----------- */
+.input-base {
+  @apply border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-700 bg-white
+  focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition;
+}
+
+.input-search {
+  @apply relative flex items-center border border-gray-300 rounded-md bg-white px-3 py-2 text-sm;
+}
+.input-search svg {
+  @apply w-4 h-4 text-gray-400 mr-2;
+}
+.input-search input {
+  @apply flex-1 outline-none border-none bg-transparent text-sm text-gray-700;
+}
+
+/* ----------- CARDS ----------- */
+.card-base {
+  @apply bg-white rounded-xl shadow p-6;
+}
+.card-compact {
+  @apply bg-white rounded-lg shadow-sm border border-gray-100 p-4;
+}
+
+/* ----------- TABLES ----------- */
+.table-base {
+  @apply w-full border-collapse text-sm text-gray-700;
+}
+.table-base th {
+  @apply text-left py-3 px-3 font-semibold text-gray-600 border-b;
+}
+.table-base td {
+  @apply py-3 px-3 border-b;
+}
+.table-base tr:last-child td {
+  @apply border-b-0;
+}
+
+/* ----------- BADGES ----------- */
+.badge {
+  @apply inline-block text-xs font-medium px-2.5 py-1 rounded-full;
+}
+.badge-success {
+  @apply bg-green-50 text-green-700;
+}
+.badge-error {
+  @apply bg-red-50 text-red-700;
+}
+.badge-info {
+  @apply bg-blue-50 text-blue-700;
+}
+.badge-warning {
+  @apply bg-yellow-50 text-yellow-700;
+}
+
+/* ----------- HELP BUTTON ----------- */
+.help-btn {
+  @apply fixed bottom-6 right-6 w-10 h-10 rounded-full flex items-center justify-center 
+  bg-gradient-to-r from-purple-600 to-blue-500 text-white shadow-lg hover:opacity-90 transition;
+}
+
+/* ----------- SCROLLBAR STYLING ----------- */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background-color: #c1c1c1;
+  border-radius: 8px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: #a3a3a3;
+}
+
+/* ----------- UTILITY COLORS ----------- */
+.text-gradient {
+  background: linear-gradient(to right, #7c3aed, #2563eb);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.shadow-soft {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+
+/* --- DASHBOARD GRID --- */
+.dashboard-grid {
+  @apply grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4;
+  margin-top: 1.5rem;
+}
+
+/* --- STAT CARDS --- */
+.stat-card {
+  @apply flex items-center justify-between p-5 rounded-2xl shadow-soft bg-white relative overflow-hidden;
+  transition: all 0.25s ease-in-out;
+}
+.stat-card:hover {
+  @apply shadow-md scale-[1.02];
+}
+
+.stat-info .value {
+  @apply text-3xl font-bold text-gray-800;
+}
+.stat-info .label {
+  @apply text-sm text-gray-500 mt-1;
+}
+.stat-info .change {
+  @apply text-xs text-gray-400 mt-1;
+}
+
+.stat-icon {
+  @apply text-white p-3 rounded-xl flex items-center justify-center;
+}
+.stat-card-blue .stat-icon {
+  background: linear-gradient(to right, #3b82f6, #60a5fa);
+}
+.stat-card-green .stat-icon {
+  background: linear-gradient(to right, #22c55e, #4ade80);
+}
+.stat-card-purple .stat-icon {
+  background: linear-gradient(to right, #8b5cf6, #a78bfa);
+}
+.stat-card-orange .stat-icon {
+  background: linear-gradient(to right, #f97316, #fb923c);
+}
+
+/* --- CHART CARDS --- */
+.chart-card {
+  @apply bg-white rounded-2xl shadow-soft p-5 flex flex-col gap-4;
+  grid-column: span 2 / span 2;
+}
+.chart-header {
+  @apply flex items-center gap-3 border-b pb-2;
+}
+.chart-header h3 {
+  @apply text-base font-semibold text-gray-700;
+}
+.chart-icon {
+  @apply w-9 h-9 rounded-lg flex items-center justify-center;
+}
+.chart-icon-purple {
+  background: linear-gradient(to right, #8b5cf6, #6366f1);
+  color: white;
+}
+.chart-icon-green {
+  background: linear-gradient(to right, #10b981, #34d399);
+  color: white;
+}
+
+/* --- RECENT ACTIVITY --- */
+.activity-card {
+  @apply bg-white rounded-2xl shadow-soft p-5 flex flex-col gap-3 md:col-span-2 xl:col-span-1;
+}
+.activity-header {
+  @apply flex items-center gap-3 border-b pb-2;
+}
+.activity-header h3 {
+  @apply text-base font-semibold text-gray-700;
+}
+.activity-icon {
+  @apply w-9 h-9 rounded-lg bg-gradient-to-r from-purple-600 to-blue-500 text-white flex items-center justify-center;
+}
+.activity-list {
+  @apply flex flex-col gap-3 mt-3;
+}
+.activity-item {
+  @apply flex items-center justify-between text-sm text-gray-700;
+}
+.activity-info {
+  @apply flex flex-col flex-1 ml-3;
+}
+.activity-dot {
+  @apply w-3 h-3 rounded-full;
+}
+.dot-green {
+  @apply bg-green-500;
+}
+.dot-blue {
+  @apply bg-blue-500;
+}
+.dot-purple {
+  @apply bg-purple-500;
+}
+.dot-orange {
+  @apply bg-orange-500;
+}
+.activity-time {
+  @apply text-xs text-gray-400 ml-3 whitespace-nowrap;
+}
+.actor {
+  @apply font-semibold text-gray-800;
+}
+.action {
+  @apply text-gray-500 text-xs;
+}
+
+/* --- FOOTER STATS --- */
+.footer-stat-card {
+  @apply bg-white rounded-2xl shadow-soft p-5 flex flex-col gap-2;
+}
+.footer-stat-label {
+  @apply text-sm text-gray-500;
+}
+.footer-stat-value {
+  @apply text-lg font-semibold text-gray-800;
+}
+.progress-bar-bg {
+  @apply w-full h-2 bg-gray-200 rounded-full overflow-hidden mt-2;
+}
+.progress-bar-fill {
+  @apply h-2 rounded-full;
+}
+.fill-purple {
+  background: linear-gradient(to right, #8b5cf6, #a78bfa);
+}
+.fill-green {
+  background: linear-gradient(to right, #10b981, #34d399);
+}
+.fill-orange {
+  background: linear-gradient(to right, #f97316, #fb923c);
+}
+
+/* --- MAIN PAGE STRUCTURE --- */
+.main-header {
+  @apply mb-6 flex flex-col gap-2;
+}
+.main-title h1 {
+  @apply text-2xl font-semibold text-gray-800;
+}
+.main-title p {
+  @apply text-gray-500 text-sm;
+}
+
+/* --- FORM STRUCTURE --- */
+.form-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-top: 1.25rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-group label {
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 0.4rem;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.95rem;
+  color: #1e293b;
+  background-color: #fff;
+  transition: border-color 0.2s ease;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: #7c3aed;
+  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.15);
+}
+
+/* --- MODAL FOOTER --- */
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 1rem;
+  margin-top: 1.25rem;
+}
+
+/* --- MODAL BUTTONS --- */
+.btn-primary,
+.btn-secondary {
+  font-weight: 600;
+  padding: 0.55rem 1rem;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  transition: all 0.2s ease;
+}
+
+.btn-primary {
+  background: linear-gradient(to right, #7c3aed, #e94691);
+  color: #fff;
+  border: none;
+}
+.btn-primary:hover {
+  opacity: 0.9;
+}
+
+.btn-secondary {
+  border: 1px solid #cbd5e1;
+  color: #334155;
+  background-color: #f8fafc;
+}
+.btn-secondary:hover {
+  background-color: #f1f5f9;
+}
+
+/* --- ADDITIONAL SYSTEM COMPONENTS --- */
+
+/* MODAL WRAPPER (chuẩn cho tất cả modal hệ thống) */
+.modal-overlay {
+  @apply fixed inset-0 bg-black/40 flex items-center justify-center z-50;
+}
+.modal-container {
+  @apply bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg border border-gray-100;
+}
+.modal-header {
+  @apply mb-4;
+}
+.modal-header h2 {
+  @apply text-lg font-semibold text-gray-800;
+}
+.modal-header p {
+  @apply text-sm text-gray-500;
+}
+
+/* FILTER BUTTONS (cho các nút lọc bảng như ReportStatus) */
+.btn-filter {
+  @apply px-3 py-1.5 text-sm rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-100 transition;
+}
+.btn-filter-active {
+  @apply bg-gradient-to-r from-purple-600 to-blue-500 text-white border-transparent;
+}
+
+/* EMPTY STATE (hiển thị khi không có dữ liệu) */
+.empty-state {
+  @apply flex flex-col items-center justify-center text-center text-gray-500 py-12;
+}
+.empty-state-icon {
+  @apply text-5xl mb-3 text-gray-400;
+}
+.empty-state-text {
+  @apply text-sm;
+}
+
+/* ACTION BUTTON GROUP (cho cột Actions trong bảng) */
+.action-btn-group {
+  @apply flex gap-2;
+}
+.action-btn {
+  @apply inline-flex items-center justify-center gap-1 px-3 py-1.5 text-sm font-medium rounded-md transition;
+}
+.action-btn-view {
+  @apply border border-gray-300 text-gray-700 hover:bg-gray-100;
+}
+.action-btn-edit {
+  @apply bg-gradient-to-r from-purple-600 to-blue-500 text-white hover:opacity-90;
+}
+.action-btn-delete {
+  @apply bg-red-500 text-white hover:bg-red-600;
+}
+
+/* TOOLTIP HOVER */
+.tooltip {
+  @apply relative inline-block;
+}
+.tooltip:hover .tooltip-text {
+  @apply opacity-100 visible;
+}
+.tooltip-text {
+  @apply absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs 
+  rounded-md px-2 py-1 opacity-0 invisible transition;
+}
+
+/* TABLE HOVER EFFECT */
+.table-base tbody tr:hover {
+  @apply bg-gray-50 transition;
+}
+
+/* BADGE VARIANTS (mở rộng thêm cho uniform badge tone) */
+.badge-neutral {
+  @apply bg-gray-100 text-gray-600;
+}
+.badge-gradient {
+  @apply bg-gradient-to-r from-purple-600 to-blue-500 text-white;
+}
+
+/* SECTION DIVIDER (cho header và footer phân vùng nội dung) */
+.section-divider {
+  @apply border-t border-gray-200 my-6;
+}
+
+/* LOADING SPINNER (chuẩn hệ thống) */
+.spinner {
+  @apply w-6 h-6 border-2 border-gray-300 border-t-purple-500 rounded-full animate-spin;
+}
+
+/* FORM STATUS TAGS */
+.form-status {
+  @apply text-xs font-medium px-2 py-0.5 rounded-md;
+}
+.form-status-active {
+  @apply bg-green-100 text-green-700;
+}
+.form-status-pending {
+  @apply bg-yellow-100 text-yellow-700;
+}
+.form-status-error {
+  @apply bg-red-100 text-red-700;
+}
+
+/* FLOATING ACTION BUTTON (FAB) */
+.fab {
+  @apply fixed bottom-6 right-6 w-12 h-12 flex items-center justify-center 
+  rounded-full bg-gradient-to-r from-purple-600 to-blue-500 text-white shadow-lg hover:opacity-90 transition;
 }
