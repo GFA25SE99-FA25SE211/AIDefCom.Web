@@ -7,8 +7,8 @@
   },
   "scripts": {
     "dev": "next dev -H 0.0.0.0 -p 3000",
-    "build": "next build",
-    "start": "next start -H 0.0.0.0 -p ${PORT:-8080}",
+    "build": "NODE_ENV=production next build",
+    "start": "NODE_ENV=production node -v && npm -v && next start -H 0.0.0.0 -p ${PORT:-8080}",
     "lint": "eslint",
     "postinstall": "next telemetry disable || true"
   },
