@@ -1,10 +1,13 @@
 "use client";
 
-// SỬA ĐỔI: Đã xóa useMemo ra khỏi import
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Languages, ArrowLeft, Save } from "lucide-react";
+import { groupsApi } from "@/lib/api/groups";
+import { studentsApi } from "@/lib/api/students";
+import { rubricsApi } from "@/lib/api/rubrics";
+import type { GroupDto, StudentDto } from "@/lib/models";
 
 // --- (Code Icons giữ nguyên) ---
 
@@ -120,14 +123,57 @@ export default function ViewScorePage() {
   const router = useRouter();
   const params = useParams();
   const groupId = params.id as string;
-  const groupData = allGroupsData[groupId] || allGroupsData["1"];
-
-  // SỬA ĐỔI: Dùng type 'StudentScore[]'
-  const [studentScores, setStudentScores] = useState<StudentScore[]>(
-    groupData.students
-  );
-  // SỬA ĐỔI: Dùng type 'NotesVisibility'
+  const [groupData, setGroupData] = useState<GroupData | null>(null);
+  const [studentScores, setStudentScores] = useState<StudentScore[]>([]);
   const [notesVisibility, setNotesVisibility] = useState<NotesVisibility>({});
+  const [loading, setLoading] = useState(true);
+  const [rubrics, setRubrics] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchGroupData = async () => {
+      try {
+        setLoading(true);
+        const [groupRes, studentsRes, rubricsRes] = await Promise.all([
+          groupsApi.getById(groupId).catch(() => ({ data: null })),
+          studentsApi.getByGroupId(groupId).catch(() => ({ data: [] })),
+          rubricsApi.getAll().catch(() => ({ data: [] })),
+        ]);
+
+        const group = groupRes.data;
+        const students = studentsRes.data || [];
+        setRubrics(rubricsRes.data || []);
+
+        if (group) {
+          const groupData: GroupData = {
+            name: group.groupName,
+            project: group.projectTitle || "No project title",
+            students: students.map((s: StudentDto, index: number) => ({
+              id: s.id,
+              name: s.fullName || s.userName || "Unknown",
+              role: index === 0 ? "Team Leader" : "Developer",
+              scores: new Array(rubrics.length || 5).fill(0),
+              note: "",
+            })),
+          };
+          setGroupData(groupData);
+          setStudentScores(groupData.students);
+        } else {
+          const defaultData = allGroupsData[groupId] || allGroupsData["1"];
+          setGroupData(defaultData);
+          setStudentScores(defaultData.students);
+        }
+      } catch (error) {
+        console.error("Error fetching group data:", error);
+        const defaultData = allGroupsData[groupId] || allGroupsData["1"];
+        setGroupData(defaultData);
+        setStudentScores(defaultData.students);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchGroupData();
+  }, [groupId]);
 
   const calculateAverage = (scores: number[]) => {
     const total = scores.reduce((acc, score) => acc + score, 0);
@@ -184,9 +230,9 @@ export default function ViewScorePage() {
             {/* Left section */}
             <div>
               <h1 className="text-xl font-semibold text-gray-800">
-                {groupData.name}
+                {groupData?.name || "Loading..."}
               </h1>
-              <p className="text-sm text-gray-500 mt-1">{groupData.project}</p>
+              <p className="text-sm text-gray-500 mt-1">{groupData?.project || ""}</p>
             </div>
 
             {/* Right section */}
@@ -242,13 +288,17 @@ export default function ViewScorePage() {
             </div>
           </div>
 
+          {loading ? (
+            <div className="text-center py-8 text-gray-500">Loading group data...</div>
+          ) : (
+            <>
           {/* Responsive table container */}
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-gray-600">
                   <th className="py-2 pr-4">Student</th>
-                  {criteria.map((name) => (
+                      {(rubrics.length > 0 ? rubrics.map((r: any) => r.rubricName) : criteria).map((name) => (
                     <th key={name} className="py-2 px-3">
                       <div className="flex flex-col">
                         <span className="font-medium">{name}</span>
@@ -350,6 +400,8 @@ export default function ViewScorePage() {
               </tbody>
             </table>
           </div>
+              </>
+            )}
         </div>
 
         <footer className="page-footer text-center text-sm text-gray-500 mt-6">

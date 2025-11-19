@@ -1,7 +1,21 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import AdminSidebar from "../dashboard/components/AdminSidebar";
+import { majorsApi } from "@/lib/api/majors";
+import { semestersApi } from "@/lib/api/semesters";
+import { rubricsApi } from "@/lib/api/rubrics";
+import { projectTasksApi } from "@/lib/api/project-tasks";
+import { committeeAssignmentsApi } from "@/lib/api/committee-assignments";
+import { authApi } from "@/lib/api/auth";
+import type {
+  MajorDto,
+  SemesterDto,
+  RubricDto,
+  ProjectTaskDto,
+  CommitteeAssignmentDto,
+  UserDto,
+} from "@/lib/models";
 
 // Import các Modal đã tạo:
 import AddTaskModal from "../dashboard/components/AddTaskModal";
@@ -36,19 +50,6 @@ interface Task {
   assignedTo: string;
   status: "Pending" | "Completed" | "Inprogress";
 }
-interface Semester {
-  id: string;
-  name: string;
-  year: number;
-  startDate: string;
-  endDate: string;
-  majorID: string;
-}
-interface Major {
-  id: string;
-  name: string;
-  description: string;
-}
 interface Score {
   id: number;
   studentID: string;
@@ -56,25 +57,12 @@ interface Score {
   score: number;
   sessionID: number;
 }
-interface Rubric {
-  id: string;
-  name: string;
-  description: string;
-  createdAt: string;
-}
 interface Note {
   id: number;
   userID: string;
   groupID: number;
   content: string;
   createdAt: string;
-}
-interface Assignment {
-  id: number;
-  userID: string;
-  councilID: number;
-  sessionID: number;
-  role: "Chair" | "Member";
 }
 
 type AdminTabKey =
@@ -104,6 +92,7 @@ const adminTabs: {
 export default function AdminDataManagementPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<AdminTabKey>("tasks");
+  const [loading, setLoading] = useState(false);
 
   // --- Modal states ---
   const [isAddTaskModalOpen, setIsAddTaskModalOpen] = useState(false);
@@ -112,90 +101,82 @@ export default function AdminDataManagementPage() {
   const [isAddRubricModalOpen, setIsAddRubricModalOpen] = useState(false);
 
   const [editingTask, setEditingTask] = useState<Task | null>(null);
-  const [editingSemester, setEditingSemester] = useState<Semester | null>(null);
-  const [editingMajor, setEditingMajor] = useState<Major | null>(null);
-  const [editingRubric, setEditingRubric] = useState<Rubric | null>(null);
+  const [editingSemester, setEditingSemester] = useState<SemesterDto | null>(
+    null
+  );
+  const [editingMajor, setEditingMajor] = useState<MajorDto | null>(null);
+  const [editingRubric, setEditingRubric] = useState<RubricDto | null>(null);
 
-  /* ============ Dummy data ============ */
-  const [tasks, setTasks] = useState<Task[]>([
-    {
-      id: 1,
-      title: "Review defense session reports",
-      description: "Review and approve all reports from January sessions",
-      assignedBy: "Admin",
-      assignedTo: "Secretary",
-      status: "Pending",
-    },
-    {
-      id: 2,
-      title: "Update council assignments",
-      description: "Assign new members to AI Council",
-      assignedBy: "Admin",
-      assignedTo: "Moderator",
-      status: "Completed",
-    },
-  ]);
-  const [semesters, setSemesters] = useState<Semester[]>([
-    {
-      id: "SEM001",
-      name: "Fall 2025",
-      year: 2025,
-      startDate: "2025-08-01",
-      endDate: "2025-12-20",
-      majorID: "CS001",
-    },
-    {
-      id: "SEM002",
-      name: "Spring 2025",
-      year: 2025,
-      startDate: "2025-01-10",
-      endDate: "2025-05-30",
-      majorID: "CS001",
-    },
-  ]);
-  const [majors, setMajors] = useState<Major[]>([
-    {
-      id: "CS001",
-      name: "Computer Science",
-      description: "Bachelor of Computer Science program",
-    },
-    {
-      id: "SE001",
-      name: "Software Engineering",
-      description: "Bachelor of Software Engineering program",
-    },
-  ]);
-  const [scores] = useState<Score[]>([
-    { id: 1, studentID: "U001", rubricID: "R001", score: 8.5, sessionID: 1 },
-    { id: 2, studentID: "U002", rubricID: "R002", score: 9.0, sessionID: 1 },
-  ]);
-  const [rubrics, setRubrics] = useState<Rubric[]>([
-    {
-      id: "R001",
-      name: "Presentation Skills",
-      description: "Evaluates presentation delivery and clarity",
-      createdAt: "2024-12-01",
-    },
-    {
-      id: "R002",
-      name: "Technical Knowledge",
-      description: "Evaluates depth of technical understanding",
-      createdAt: "2024-12-01",
-    },
-  ]);
-  const [notes] = useState<Note[]>([
-    {
-      id: 1,
-      userID: "U001",
-      groupID: 1,
-      content: "Strong project concept, needs more testing",
-      createdAt: "2025-01-14",
-    },
-  ]);
-  const [assignments, setAssignments] = useState<Assignment[]>([
-    { id: 1, userID: "U001", councilID: 1, sessionID: 1, role: "Chair" },
-    { id: 2, userID: "U002", councilID: 1, sessionID: 1, role: "Member" },
-  ]);
+  /* ============ State data ============ */
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [semesters, setSemesters] = useState<SemesterDto[]>([]);
+  const [majors, setMajors] = useState<MajorDto[]>([]);
+  const [scores] = useState<Score[]>([]);
+  const [rubrics, setRubrics] = useState<RubricDto[]>([]);
+  const [notes] = useState<Note[]>([]);
+  const [assignments, setAssignments] = useState<CommitteeAssignmentDto[]>([]);
+  const [users, setUsers] = useState<UserDto[]>([]);
+
+  // Map userId to fullName for quick lookup
+  const userMap = useMemo(() => {
+    const map = new Map<string, string>();
+    users.forEach((user) => {
+      map.set(user.id, user.fullName);
+    });
+    return map;
+  }, [users]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        const [
+          majorsRes,
+          semestersRes,
+          rubricsRes,
+          tasksRes,
+          assignmentsRes,
+          usersRes,
+        ] = await Promise.all([
+          majorsApi.getAll().catch(() => ({ data: [] })),
+          semestersApi.getAll().catch(() => ({ data: [] })),
+          rubricsApi.getAll().catch(() => ({ data: [] })),
+          projectTasksApi.getAll().catch(() => ({ data: [] })),
+          committeeAssignmentsApi.getAll().catch(() => ({ data: [] })),
+          authApi.getAllUsers().catch(() => ({ data: [] })),
+        ]);
+
+        setMajors(majorsRes.data || []);
+        setSemesters(semestersRes.data || []);
+        setRubrics(rubricsRes.data || []);
+        setAssignments(assignmentsRes.data || []);
+        setUsers(usersRes.data || []);
+
+        // Transform tasks
+        const transformedTasks = (tasksRes.data || []).map(
+          (t: ProjectTaskDto) => ({
+            id: t.id,
+            title: t.title,
+            description: t.description || "",
+            assignedBy: t.assignedById,
+            assignedTo: t.assignedToId,
+            status: (t.status === "Completed"
+              ? "Completed"
+              : t.status === "InProgress"
+              ? "Inprogress"
+              : "Pending") as "Pending" | "Completed" | "Inprogress",
+          })
+        );
+        setTasks(transformedTasks);
+      } catch (error) {
+        console.error("Error fetching data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
 
   /* ============ Filters ============ */
   const getFilteredData = (
@@ -224,96 +205,239 @@ export default function AdminDataManagementPage() {
     [tasks, searchQuery]
   );
   const filteredSemesters = useMemo(
-    () => getFilteredData(semesters, ["name", "year", "majorID"], searchQuery),
+    () =>
+      getFilteredData(
+        semesters,
+        ["semesterName", "year", "majorId"],
+        searchQuery
+      ),
     [semesters, searchQuery]
   );
   const filteredMajors = useMemo(
-    () => getFilteredData(majors, ["name", "description"], searchQuery),
+    () => getFilteredData(majors, ["majorName", "description"], searchQuery),
     [majors, searchQuery]
   );
   const filteredRubrics = useMemo(
-    () => getFilteredData(rubrics, ["name", "description"], searchQuery),
+    () => getFilteredData(rubrics, ["rubricName", "description"], searchQuery),
     [rubrics, searchQuery]
   );
   const filteredAssignments = useMemo(
-    () => getFilteredData(assignments, ["userID", "role"], searchQuery),
+    () =>
+      getFilteredData(
+        assignments,
+        ["lecturerId", "lecturerName", "role", "roleName", "councilId"],
+        searchQuery
+      ),
     [assignments, searchQuery]
   );
 
-  /* ============ CRUD Handlers (unchanged logic) ============ */
-  const handleAddTask = (data: Omit<Task, "id" | "assignedBy">) => {
-    setTasks([...tasks, { ...data, id: Date.now(), assignedBy: "Admin" }]);
-    setIsAddTaskModalOpen(false);
+  /* ============ CRUD Handlers ============ */
+  const handleAddTask = async (data: Omit<Task, "id" | "assignedBy">) => {
+    try {
+      await projectTasksApi.create({
+        title: data.title,
+        description: data.description,
+        assignedToId: data.assignedTo,
+      });
+      const response = await projectTasksApi.getAll();
+      const transformedTasks = (response.data || []).map(
+        (t: ProjectTaskDto) => ({
+          id: t.id,
+          title: t.title,
+          description: t.description || "",
+          assignedBy: t.assignedById,
+          assignedTo: t.assignedToId,
+          status: (t.status === "Completed"
+            ? "Completed"
+            : t.status === "InProgress"
+            ? "Inprogress"
+            : "Pending") as "Pending" | "Completed" | "Inprogress",
+        })
+      );
+      setTasks(transformedTasks);
+      setIsAddTaskModalOpen(false);
+    } catch (error: any) {
+      alert(`Error: ${error.message || "Failed to create task"}`);
+    }
   };
-  const handleEditTask = (
+
+  const handleEditTask = async (
     id: number,
     data: Omit<Task, "id" | "assignedBy">
   ) => {
-    setTasks(tasks.map((t) => (t.id === id ? { ...t, ...data } : t)));
-    setEditingTask(null);
+    try {
+      await projectTasksApi.update(id, {
+        title: data.title,
+        description: data.description,
+        assignedToId: data.assignedTo,
+        status: data.status,
+      });
+      const response = await projectTasksApi.getAll();
+      const transformedTasks = (response.data || []).map(
+        (t: ProjectTaskDto) => ({
+          id: t.id,
+          title: t.title,
+          description: t.description || "",
+          assignedBy: t.assignedById,
+          assignedTo: t.assignedToId,
+          status: (t.status === "Completed"
+            ? "Completed"
+            : t.status === "InProgress"
+            ? "Inprogress"
+            : "Pending") as "Pending" | "Completed" | "Inprogress",
+        })
+      );
+      setTasks(transformedTasks);
+      setEditingTask(null);
+    } catch (error: any) {
+      alert(`Error: ${error.message || "Failed to update task"}`);
+    }
   };
-  const handleDeleteTask = (id: number) =>
-    window.confirm(`Delete Task ${id}?`) &&
-    setTasks(tasks.filter((t) => t.id !== id));
 
-  const handleAddSemester = (data: Omit<Semester, "id">) => {
-    const newSem: Semester = {
-      ...data,
-      id: `SEM${Math.floor(Math.random() * 999)}`,
-    };
-    setSemesters([...semesters, newSem]);
-    setIsAddSemesterModalOpen(false);
+  const handleDeleteTask = async (id: number) => {
+    if (window.confirm(`Delete Task ${id}?`)) {
+      try {
+        await projectTasksApi.delete(id);
+        setTasks(tasks.filter((t) => t.id !== id));
+      } catch (error: any) {
+        alert(`Error: ${error.message || "Failed to delete task"}`);
+      }
+    }
   };
-  const handleEditSemester = (id: string, data: Omit<Semester, "id">) => {
-    setSemesters(semesters.map((s) => (s.id === id ? { ...s, ...data } : s)));
-    setEditingSemester(null);
-  };
-  const handleDeleteSemester = (id: string) =>
-    window.confirm(`Delete Semester ${id}?`) &&
-    setSemesters(semesters.filter((s) => s.id !== id));
 
-  const handleAddMajor = (data: Omit<Major, "id">) => {
-    const newMajor: Major = {
-      ...data,
-      id:
-        data.name.slice(0, 2).toUpperCase() + Math.floor(Math.random() * 1000),
-    };
-    setMajors([...majors, newMajor]);
-    setIsAddMajorModalOpen(false);
+  const handleAddSemester = async (data: any) => {
+    try {
+      await semestersApi.create({
+        semesterName: data.name,
+        year: data.year,
+        startDate: data.startDate,
+        endDate: data.endDate,
+        majorId: parseInt(data.majorID),
+      });
+      const response = await semestersApi.getAll();
+      setSemesters(response.data || []);
+      setIsAddSemesterModalOpen(false);
+    } catch (error: any) {
+      alert(`Error: ${error.message || "Failed to create semester"}`);
+    }
   };
-  const handleEditMajor = (id: string, data: Omit<Major, "id">) => {
-    setMajors(majors.map((m) => (m.id === id ? { ...m, ...data } : m)));
-    setEditingMajor(null);
-  };
-  const handleDeleteMajor = (id: string) =>
-    window.confirm(`Delete Major ${id}?`) &&
-    setMajors(majors.filter((m) => m.id !== id));
 
-  const handleAddRubric = (data: Omit<Rubric, "id" | "createdAt">) => {
-    setRubrics([
-      ...rubrics,
-      {
-        ...data,
-        id: `R${Math.floor(Math.random() * 999)}`,
-        createdAt: new Date().toISOString().split("T")[0],
-      },
-    ]);
-    setIsAddRubricModalOpen(false);
+  const handleEditSemester = async (id: number, data: any) => {
+    try {
+      await semestersApi.update(id, {
+        semesterName: data.name,
+        year: data.year,
+        startDate: data.startDate,
+        endDate: data.endDate,
+        majorId: parseInt(data.majorID),
+      });
+      const response = await semestersApi.getAll();
+      setSemesters(response.data || []);
+      setEditingSemester(null);
+    } catch (error: any) {
+      alert(`Error: ${error.message || "Failed to update semester"}`);
+    }
   };
-  const handleEditRubric = (
-    id: string,
-    data: Omit<Rubric, "id" | "createdAt">
-  ) => {
-    setRubrics(rubrics.map((r) => (r.id === id ? { ...r, ...data } : r)));
-    setEditingRubric(null);
-  };
-  const handleDeleteRubric = (id: string) =>
-    window.confirm(`Delete Rubric ${id}?`) &&
-    setRubrics(rubrics.filter((r) => r.id !== id));
 
-  const handleDeleteAssignment = (id: number) =>
-    window.confirm(`Delete assignment ${id}?`) &&
-    setAssignments(assignments.filter((a) => a.id !== id));
+  const handleDeleteSemester = async (id: number) => {
+    if (window.confirm(`Delete Semester ${id}?`)) {
+      try {
+        await semestersApi.delete(id);
+        setSemesters(semesters.filter((s) => s.id !== id));
+      } catch (error: any) {
+        alert(`Error: ${error.message || "Failed to delete semester"}`);
+      }
+    }
+  };
+
+  const handleAddMajor = async (data: any) => {
+    try {
+      await majorsApi.create({
+        majorName: data.name,
+        description: data.description,
+      });
+      const response = await majorsApi.getAll();
+      setMajors(response.data || []);
+      setIsAddMajorModalOpen(false);
+    } catch (error: any) {
+      alert(`Error: ${error.message || "Failed to create major"}`);
+    }
+  };
+
+  const handleEditMajor = async (id: number, data: any) => {
+    try {
+      await majorsApi.update(id, {
+        majorName: data.name,
+        description: data.description,
+      });
+      const response = await majorsApi.getAll();
+      setMajors(response.data || []);
+      setEditingMajor(null);
+    } catch (error: any) {
+      alert(`Error: ${error.message || "Failed to update major"}`);
+    }
+  };
+
+  const handleDeleteMajor = async (id: number) => {
+    if (window.confirm(`Delete Major ${id}?`)) {
+      try {
+        await majorsApi.delete(id);
+        setMajors(majors.filter((m) => m.id !== id));
+      } catch (error: any) {
+        alert(`Error: ${error.message || "Failed to delete major"}`);
+      }
+    }
+  };
+
+  const handleAddRubric = async (data: any) => {
+    try {
+      await rubricsApi.create({
+        rubricName: data.name,
+        description: data.description,
+      });
+      const response = await rubricsApi.getAll();
+      setRubrics(response.data || []);
+      setIsAddRubricModalOpen(false);
+    } catch (error: any) {
+      alert(`Error: ${error.message || "Failed to create rubric"}`);
+    }
+  };
+
+  const handleEditRubric = async (id: number, data: any) => {
+    try {
+      await rubricsApi.update(id, {
+        rubricName: data.name,
+        description: data.description,
+      });
+      const response = await rubricsApi.getAll();
+      setRubrics(response.data || []);
+      setEditingRubric(null);
+    } catch (error: any) {
+      alert(`Error: ${error.message || "Failed to update rubric"}`);
+    }
+  };
+
+  const handleDeleteRubric = async (id: number) => {
+    if (window.confirm(`Delete Rubric ${id}?`)) {
+      try {
+        await rubricsApi.delete(id);
+        setRubrics(rubrics.filter((r) => r.id !== id));
+      } catch (error: any) {
+        alert(`Error: ${error.message || "Failed to delete rubric"}`);
+      }
+    }
+  };
+
+  const handleDeleteAssignment = async (id: number) => {
+    if (window.confirm(`Delete assignment ${id}?`)) {
+      try {
+        await committeeAssignmentsApi.delete(id);
+        setAssignments(assignments.filter((a) => a.id !== id));
+      } catch (error: any) {
+        alert(`Error: ${error.message || "Failed to delete assignment"}`);
+      }
+    }
+  };
 
   /* ============ Renderers ============ */
   const renderHeader = (title: string, onAdd?: () => void) => (
@@ -408,8 +532,8 @@ export default function AdminDataManagementPage() {
               <td>{t.id}</td>
               <td>{t.title}</td>
               <td>{t.description}</td>
-              <td>{t.assignedBy}</td>
-              <td>{t.assignedTo}</td>
+              <td>{userMap.get(t.assignedBy) || t.assignedBy}</td>
+              <td>{userMap.get(t.assignedTo) || t.assignedTo}</td>
               <td>
                 <span
                   className={`badge ${
@@ -453,11 +577,11 @@ export default function AdminDataManagementPage() {
           filteredSemesters.map((s) => (
             <tr key={s.id}>
               <td>{s.id}</td>
-              <td>{s.name}</td>
+              <td>{s.semesterName}</td>
               <td>{s.year}</td>
               <td>{s.startDate}</td>
               <td>{s.endDate}</td>
-              <td>{s.majorID}</td>
+              <td>{s.majorId}</td>
               <td className="text-right">
                 <div className="flex gap-2 justify-end">
                   <button
@@ -486,8 +610,8 @@ export default function AdminDataManagementPage() {
           filteredMajors.map((m) => (
             <tr key={m.id}>
               <td>{m.id}</td>
-              <td>{m.name}</td>
-              <td>{m.description}</td>
+              <td>{m.majorName}</td>
+              <td>{m.description || "N/A"}</td>
               <td className="text-right">
                 <div className="flex gap-2 justify-end">
                   <button
@@ -529,13 +653,12 @@ export default function AdminDataManagementPage() {
         ) &&
         renderSearch("Search rubrics...") &&
         renderTable(
-          ["ID", "Rubric Name", "Description", "Created At", "Actions"],
+          ["ID", "Rubric Name", "Description", "Actions"],
           filteredRubrics.map((r) => (
             <tr key={r.id}>
               <td>{r.id}</td>
-              <td>{r.name}</td>
-              <td>{r.description}</td>
-              <td>{r.createdAt}</td>
+              <td>{r.rubricName}</td>
+              <td>{r.description || "N/A"}</td>
               <td className="text-right">
                 <div className="flex gap-2 justify-end">
                   <button
@@ -574,21 +697,34 @@ export default function AdminDataManagementPage() {
       {activeTab === "assignments" &&
         renderHeader("Committee Assignments") &&
         renderTable(
-          ["ID", "User ID", "Council ID", "Session ID", "Role", "Actions"],
+          ["ID", "Lecturer", "Council ID", "Role", "Actions"],
           filteredAssignments.map((a) => (
             <tr key={a.id}>
               <td>{a.id}</td>
-              <td>{a.userID}</td>
-              <td>{a.councilID}</td>
-              <td>{a.sessionID}</td>
-              <td>{a.role}</td>
+              <td>
+                {userMap.get(a.lecturerId) ||
+                  (a as any).lecturerName ||
+                  a.lecturerId}
+              </td>
+              <td>{a.councilId}</td>
+              <td>{(a as any).roleName || a.role}</td>
               <td className="text-right">
-                <button
-                  className="btn-subtle text-red-600 hover:bg-red-50"
-                  onClick={() => handleDeleteAssignment(a.id)}
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                <div className="flex gap-2 justify-end items-center">
+                  <button
+                    className="btn-subtle"
+                    onClick={() => console.log("edit assignment", a.id)}
+                    title="Edit"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                  <button
+                    className="btn-subtle text-red-600 hover:bg-red-50"
+                    onClick={() => handleDeleteAssignment(a.id)}
+                    title="Delete"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </td>
             </tr>
           ))
@@ -631,24 +767,40 @@ export default function AdminDataManagementPage() {
         <EditSemesterModal
           isOpen
           onClose={() => setEditingSemester(null)}
-          onSubmit={handleEditSemester}
-          semesterData={editingSemester}
+          onSubmit={(id, data) => handleEditSemester(parseInt(id), data)}
+          semesterData={{
+            id: String(editingSemester.id),
+            name: editingSemester.semesterName,
+            year: editingSemester.year,
+            startDate: editingSemester.startDate,
+            endDate: editingSemester.endDate,
+            majorID: String(editingSemester.majorId),
+          }}
         />
       )}
       {editingMajor && (
         <EditMajorModal
           isOpen
           onClose={() => setEditingMajor(null)}
-          onSubmit={handleEditMajor}
-          majorData={editingMajor}
+          onSubmit={(id, data) => handleEditMajor(parseInt(id), data)}
+          majorData={{
+            id: String(editingMajor.id),
+            name: editingMajor.majorName,
+            description: editingMajor.description || "",
+          }}
         />
       )}
       {editingRubric && (
         <EditRubricModal
           isOpen
           onClose={() => setEditingRubric(null)}
-          onSubmit={handleEditRubric}
-          rubricData={editingRubric}
+          onSubmit={(id, data) => handleEditRubric(parseInt(id), data)}
+          rubricData={{
+            id: String(editingRubric.id),
+            name: editingRubric.rubricName,
+            description: editingRubric.description || "",
+            createdAt: new Date().toISOString().split("T")[0],
+          }}
         />
       )}
     </main>

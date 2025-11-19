@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import AdminSidebar from "./components/AdminSidebar";
 import { Line, Pie } from "react-chartjs-2";
 import {
@@ -14,6 +14,10 @@ import {
   Legend,
   ArcElement,
 } from "chart.js";
+import { authApi } from "@/lib/api/auth";
+import { councilsApi } from "@/lib/api/councils";
+import { defenseSessionsApi } from "@/lib/api/defense-sessions";
+import type { UserDto, CouncilDto, DefenseSessionDto } from "@/lib/models";
 
 // --- Chart.js registration ---
 ChartJS.register(
@@ -98,52 +102,204 @@ const RecentActivityIcon = () => (
   </svg>
 );
 
-// --- Dummy Data ---
-const summaryStats = {
-  totalUsers: { value: 199, change: "+12% from last month" },
-  activeCouncils: { value: 8, change: "+2 this week" },
-  defenseSessions: { value: 45, change: "15 upcoming" },
-  activeNow: { value: 23, change: "Online users" },
-};
+// --- Component ---
+export default function AdminDashboardPage() {
+  const [summaryStats, setSummaryStats] = useState({
+    totalUsers: { value: 0, change: "Loading..." },
+    activeCouncils: { value: 0, change: "Loading..." },
+    defenseSessions: { value: 0, change: "Loading..." },
+    activeNow: { value: 0, change: "Online users" },
+  });
+  const [loading, setLoading] = useState(true);
+  const [users, setUsers] = useState<UserDto[]>([]);
+  const [sessions, setSessions] = useState<DefenseSessionDto[]>([]);
+  const [lineChartData, setLineChartData] = useState({
+    labels: [] as string[],
+    datasets: [] as any[],
+  });
+  const [pieChartData, setPieChartData] = useState({
+    labels: [] as string[],
+    datasets: [] as any[],
+  });
+  const [footerStats, setFooterStats] = useState({
+    completedMonth: { value: 0, label: "Sessions", progress: 0 },
+    avgRating: { value: "0.0 / 10.0", progress: 0 },
+    uptime: { value: "99.8%", progress: 99.8 },
+  });
+  const [recentActivity, setRecentActivity] = useState<any[]>([]);
 
-const recentActivity = [
-  {
-    actor: "Dr. Nguyen Van A",
-    action: "Created new council",
-    time: "2h ago",
-    type: "council",
-  },
-  {
-    actor: "John Smith",
-    action: "Completed defense session",
-    time: "5h ago",
-    type: "session",
-  },
-  {
-    actor: "Admin User",
-    action: "Added 5 new accounts",
-    time: "1d ago",
-    type: "account",
-  },
-  {
-    actor: "Dr. Tran Thi B",
-    action: "Submitted grading",
-    time: "1d ago",
-    type: "grading",
-  },
-  {
-    actor: "MSc. Pham Thi D",
-    action: "Uploaded report",
-    time: "2d ago",
-    type: "report",
-  },
-];
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        setLoading(true);
+        const [usersRes, councilsRes, sessionsRes] = await Promise.all([
+          authApi.getAllUsers().catch(() => ({ data: [] })),
+          councilsApi.getAll(false).catch(() => ({ data: [] })),
+          defenseSessionsApi.getAll().catch(() => ({ data: [] })),
+        ]);
 
-const footerStats = {
-  completedMonth: { value: 28, label: "Sessions", progress: 70 },
-  avgRating: { value: "8.5 / 10.0", progress: 85 },
-  uptime: { value: "99.8%", progress: 99.8 },
-};
+        const usersData = usersRes.data || [];
+        const councils = councilsRes.data || [];
+        const sessionsData = sessionsRes.data || [];
+        
+        setUsers(usersData);
+        setSessions(sessionsData);
+
+        const upcomingSessions = sessionsData.filter((s: DefenseSessionDto) => {
+          const sessionDate = new Date(s.sessionDate);
+          return sessionDate >= new Date();
+        });
+
+        const completedSessions = sessionsData.filter((s: DefenseSessionDto) => {
+          const sessionDate = new Date(s.sessionDate);
+          const now = new Date();
+          const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+          return sessionDate >= startOfMonth && sessionDate < now && s.status === "Completed";
+        });
+
+        // Calculate user distribution by roles
+        const roleCounts: { [key: string]: number } = {};
+        usersData.forEach((user: UserDto) => {
+          user.roles?.forEach((role: string) => {
+            roleCounts[role] = (roleCounts[role] || 0) + 1;
+          });
+        });
+
+        const roleLabels = Object.keys(roleCounts);
+        const roleData = Object.values(roleCounts);
+
+        // Calculate sessions by month (last 6 months)
+        const now = new Date();
+        const monthLabels: string[] = [];
+        const sessionCounts: number[] = [];
+        const userCounts: number[] = [];
+
+        for (let i = 5; i >= 0; i--) {
+          const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+          const monthName = date.toLocaleDateString("en-US", { month: "short" });
+          monthLabels.push(monthName);
+
+          const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
+          const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+
+          const sessionsInMonth = sessionsData.filter((s: DefenseSessionDto) => {
+            const sessionDate = new Date(s.sessionDate);
+            return sessionDate >= monthStart && sessionDate <= monthEnd;
+          }).length;
+
+          sessionCounts.push(sessionsInMonth);
+          
+          // Count sessions up to this month for user activity representation
+          const sessionsUpToMonth = sessionsData.filter((s: DefenseSessionDto) => {
+            const sessionDate = new Date(s.sessionDate);
+            return sessionDate <= monthEnd;
+          }).length;
+          userCounts.push(sessionsUpToMonth);
+        }
+
+        // Recent activity from sessions
+        const recentSessions = sessionsData
+          .sort((a: DefenseSessionDto, b: DefenseSessionDto) => {
+            return new Date(b.sessionDate).getTime() - new Date(a.sessionDate).getTime();
+          })
+          .slice(0, 5)
+          .map((s: DefenseSessionDto) => {
+            const sessionDate = new Date(s.sessionDate);
+            const now = new Date();
+            const diffMs = now.getTime() - sessionDate.getTime();
+            const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+            const diffDays = Math.floor(diffHours / 24);
+
+            let timeAgo = "";
+            if (diffHours < 1) {
+              timeAgo = "Just now";
+            } else if (diffHours < 24) {
+              timeAgo = `${diffHours}h ago`;
+            } else {
+              timeAgo = `${diffDays}d ago`;
+            }
+
+            return {
+              actor: s.groupId || "Unknown",
+              action: `Defense session ${s.status}`,
+              time: timeAgo,
+              type: "session",
+            };
+        });
+
+        setSummaryStats({
+          totalUsers: { value: usersData.length, change: "Total accounts" },
+          activeCouncils: { value: councils.filter((c: CouncilDto) => c.isActive).length, change: `${councils.length} total` },
+          defenseSessions: { value: sessionsData.length, change: `${upcomingSessions.length} upcoming` },
+          activeNow: { value: 0, change: "Online users" },
+        });
+
+        setLineChartData({
+          labels: monthLabels,
+          datasets: [
+            {
+              label: "Sessions",
+              data: sessionCounts,
+              borderColor: "rgb(168, 85, 247)",
+              backgroundColor: "rgba(168, 85, 247, 0.4)",
+              tension: 0.3,
+            },
+            {
+              label: "Cumulative Sessions",
+              data: userCounts,
+              borderColor: "rgb(79, 70, 229)",
+              backgroundColor: "rgba(79, 70, 229, 0.4)",
+              tension: 0.3,
+            },
+          ],
+        });
+
+        setPieChartData({
+          labels: roleLabels.length > 0 ? roleLabels : ["No data"],
+          datasets: [
+            {
+              data: roleData.length > 0 ? roleData : [1],
+              backgroundColor: [
+                "rgba(139,92,246,0.8)",
+                "rgba(59,130,246,0.8)",
+                "rgba(34,197,94,0.8)",
+                "rgba(249,115,22,0.8)",
+                "rgba(239,68,68,0.8)",
+                "rgba(100,116,139,0.8)",
+              ],
+              borderColor: "#fff",
+              borderWidth: 1,
+            },
+          ],
+        });
+
+        const totalSessionsThisMonth = sessionsData.filter((s: DefenseSessionDto) => {
+          const sessionDate = new Date(s.sessionDate);
+          const now = new Date();
+          const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+          return sessionDate >= startOfMonth;
+        }).length;
+
+        setFooterStats({
+          completedMonth: {
+            value: completedSessions.length,
+            label: "Sessions",
+            progress: totalSessionsThisMonth > 0 ? Math.round((completedSessions.length / totalSessionsThisMonth) * 100) : 0,
+          },
+          avgRating: { value: "N/A", progress: 0 },
+          uptime: { value: "99.8%", progress: 99.8 },
+        });
+
+        setRecentActivity(recentSessions);
+      } catch (error) {
+        console.error("Error fetching dashboard data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+  }, []);
 
 const getActivityDotColor = (type: string) => {
   switch (type) {
@@ -162,45 +318,6 @@ const getActivityDotColor = (type: string) => {
   }
 };
 
-// --- Chart Data ---
-const lineChartData = {
-  labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
-  datasets: [
-    {
-      label: "Sessions",
-      data: [45, 48, 47, 52, 60, 70],
-      borderColor: "rgb(168, 85, 247)",
-      backgroundColor: "rgba(168, 85, 247, 0.4)",
-      tension: 0.3,
-    },
-    {
-      label: "Users",
-      data: [5, 8, 10, 15, 18, 22],
-      borderColor: "rgb(79, 70, 229)",
-      backgroundColor: "rgba(79, 70, 229, 0.4)",
-      tension: 0.3,
-    },
-  ],
-};
-
-const pieChartData = {
-  labels: ["Students", "Chair", "Members", "Secretary", "Admin", "Moderator"],
-  datasets: [
-    {
-      data: [78, 4, 12, 3, 2, 1],
-      backgroundColor: [
-        "rgba(139,92,246,0.8)",
-        "rgba(59,130,246,0.8)",
-        "rgba(34,197,94,0.8)",
-        "rgba(249,115,22,0.8)",
-        "rgba(239,68,68,0.8)",
-        "rgba(100,116,139,0.8)",
-      ],
-      borderColor: "#fff",
-      borderWidth: 1,
-    },
-  ],
-};
 
 const lineChartOptions = {
   responsive: true,
@@ -217,8 +334,16 @@ const pieChartOptions = {
   plugins: { legend: { position: "right" as const, labels: { padding: 15 } } },
 };
 
-// --- Component ---
-export default function AdminDashboardPage() {
+  if (loading) {
+    return (
+      <main className="page-container">
+        <div className="flex items-center justify-center h-64">
+          <p className="text-gray-500">Loading dashboard data...</p>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="page-container">
       <header className="section-header">
@@ -311,7 +436,8 @@ export default function AdminDashboardPage() {
             <h3>Recent Activity</h3>
           </div>
           <ul className="activity-list">
-            {recentActivity.map((a, i) => (
+            {recentActivity.length > 0 ? (
+              recentActivity.map((a, i) => (
               <li key={i} className="activity-item">
                 <span
                   className={`activity-dot ${getActivityDotColor(a.type)}`}
@@ -322,7 +448,14 @@ export default function AdminDashboardPage() {
                 </div>
                 <span className="activity-time">{a.time}</span>
               </li>
-            ))}
+              ))
+            ) : (
+              <li className="activity-item">
+                <div className="activity-info">
+                  <span className="action text-gray-400">No recent activity</span>
+                </div>
+              </li>
+            )}
           </ul>
         </div>
 
