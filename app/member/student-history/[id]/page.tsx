@@ -1,43 +1,11 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, User, FileText, Clock } from "lucide-react";
-
-// --- Icons gốc giữ lại nếu cần ---
-const SummaryIcon = () => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    fill="none"
-    viewBox="0 0 24 24"
-    strokeWidth={1.5}
-    stroke="currentColor"
-    className="w-5 h-5"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      d="M16.5 6v.75m0 3v.75m0 3v.75m0 3V18m-9-1.5h5.25m-7.5 0h.008M9 4.5h.008M12 4.5h.008M15 4.5h.008M5.25 9a.75.75 0 01.75-.75h12a.75.75 0 01.75.75v.008a.75.75 0 01-.75.75H6a.75.75 0 01-.75-.75V9zm0 3a.75.75 0 01.75-.75h12a.75.75 0 01.75.75v.008a.75.75 0 01-.75.75H6a.75.75 0 01-.75-.75v-.008zm0 3a.75.75 0 01.75-.75h12a.75.75 0 01.75.75v.008a.75.75 0 01-.75.75H6a.75.75 0 01-.75-.75v-.008z"
-    />
-  </svg>
-);
-
-const CalendarIcon = () => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    fill="none"
-    viewBox="0 0 24 24"
-    strokeWidth={1.5}
-    stroke="currentColor"
-    className="w-4 h-4"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5"
-    />
-  </svg>
-);
+import { ArrowLeft, User, FileText, Clock, Calendar, ClipboardList } from "lucide-react";
+import { studentsApi } from "@/lib/api/students";
+import { defenseSessionsApi } from "@/lib/api/defense-sessions";
+import type { StudentDto, DefenseSessionDto } from "@/lib/models";
 
 // ======= Types =======
 interface Attempt {
@@ -136,12 +104,72 @@ export default function StudentHistoryDetailPage() {
   const params = useParams();
   const router = useRouter();
   const studentId = params.id as string;
-  const student: StudentDetail =
-    studentDetailData[studentId] || studentDetailData["SV001"];
+  const [student, setStudent] = useState<StudentDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchStudentData = async () => {
+      try {
+        setLoading(true);
+        const [studentRes, sessionsRes] = await Promise.all([
+          studentsApi.getById(studentId).catch(() => ({ data: null })),
+          defenseSessionsApi.getAll().catch(() => ({ data: [] })),
+        ]);
+
+        const studentData = studentRes.data;
+        if (!studentData) {
+          // Fallback to mock data if not found
+          setStudent(studentDetailData[studentId] || studentDetailData["SV001"]);
+          return;
+        }
+
+        // Get sessions for this student's group
+        const studentSessions = sessionsRes.data?.filter(
+          (s: DefenseSessionDto) => s.groupId === studentData.groupId
+        ) || [];
+
+        // Transform to StudentDetail format
+        const studentDetail: StudentDetail = {
+          id: studentData.id,
+          name: studentData.fullName || studentData.userName || "Unknown",
+          email: studentData.email || "",
+          failedCount: 0, // TODO: Calculate from scores
+          attempts: studentSessions.map((s: DefenseSessionDto, index: number) => ({
+            attempt: `Attempt #${studentSessions.length - index}`,
+            id: `DEF-${s.id}`,
+            date: s.sessionDate,
+            group: "Group", // TODO: Get group name
+            topic: "Project", // TODO: Get project title
+            role: "Member",
+            score: 0, // TODO: Get from scores
+            grade: "N/A",
+            status: "Completed",
+          })),
+        };
+
+        setStudent(studentDetail);
+      } catch (error) {
+        console.error("Error fetching student data:", error);
+        setStudent(studentDetailData[studentId] || studentDetailData["SV001"]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchStudentData();
+  }, [studentId]);
 
   const handleBackToList = () => {
     router.push("/member/student-history");
   };
+
+  if (loading || !student) {
+    return (
+      <main className="main-content">
+        <div className="text-center py-8 text-gray-500">Loading student data...</div>
+      </main>
+    );
+  }
 
   return (
     <>
@@ -254,7 +282,7 @@ export default function StudentHistoryDetailPage() {
                       </td>
                       <td className="py-3 px-4 text-gray-700">{attempt.id}</td>
                       <td className="py-3 px-4 text-gray-700 flex items-center gap-1">
-                        <CalendarIcon /> {attempt.date}
+                        <Calendar className="w-4 h-4" /> {attempt.date}
                       </td>
                       <td className="py-3 px-4 text-gray-700">
                         {attempt.group}

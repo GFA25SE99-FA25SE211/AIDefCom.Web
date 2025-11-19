@@ -1,9 +1,13 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import CreateCouncilForm, {
   CouncilFormData,
 } from "../create-sessions/components/CreateCouncilForm";
+import { councilsApi } from "@/lib/api/councils";
+import { committeeAssignmentsApi } from "@/lib/api/committee-assignments";
+import { authApi } from "@/lib/api/auth";
+import type { CouncilDto, CommitteeAssignmentDto } from "@/lib/models";
 
 // Icons (đã chuẩn kích thước, đồng bộ Tailwind)
 const CreateIcon = () => (
@@ -37,49 +41,106 @@ const CouncilIcon = () => (
   </svg>
 );
 
-// Dữ liệu giả lập
-const existingCouncilsData = [
-  {
-    id: 1,
-    name: "Council for AI Projects - Fall 2025",
-    createdDate: "1/1/2025",
-    memberCount: 4,
-    members: [
-      {
-        name: "Dr. Nguyen Van A",
-        department: "Computer Science",
-        email: "nguyenvana@university.edu",
-        role: "Chair",
-      },
-      {
-        name: "Dr. Tran Thi B",
-        department: "Software Engineering",
-        email: "tranthib@university.edu",
-        role: "Member",
-      },
-      {
-        name: "Dr. Le Van C",
-        department: "AI Research",
-        email: "levanc@university.edu",
-        role: "Member",
-      },
-      {
-        name: "MSc. Pham Thi D",
-        department: "Computer Science",
-        email: "phamthid@university.edu",
-        role: "Secretary",
-      },
-    ],
-  },
-];
+interface CouncilWithMembers extends CouncilDto {
+  memberCount: number;
+  members: Array<{
+    name: string;
+    department: string;
+    email: string;
+    role: string;
+  }>;
+}
 
 export default function ManageCouncilPage() {
   const [isFormVisible, setIsFormVisible] = useState(false);
+  const [councils, setCouncils] = useState<CouncilWithMembers[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const handleCreateCouncil = (formData: CouncilFormData) => {
-    console.log("New council data:", formData);
-    alert("Council created! (Check console for data)");
+  useEffect(() => {
+    const fetchCouncils = async () => {
+      try {
+        setLoading(true);
+        const [councilsRes, assignmentsRes, usersRes] = await Promise.all([
+          councilsApi.getAll(false).catch(() => ({ data: [] })),
+          committeeAssignmentsApi.getAll().catch(() => ({ data: [] })),
+          authApi.getAllUsers().catch(() => ({ data: [] })),
+        ]);
+
+        const councilsData = councilsRes.data || [];
+        const assignments = assignmentsRes.data || [];
+        const users = usersRes.data || [];
+
+        const councilsWithMembers: CouncilWithMembers[] = councilsData.map((council: CouncilDto) => {
+          const councilAssignments = assignments.filter((a: CommitteeAssignmentDto) => a.councilId === council.id);
+          const members = councilAssignments.map((a: CommitteeAssignmentDto) => {
+            const user = users.find((u: any) => u.id === a.lecturerId);
+            return {
+              name: user?.fullName || "Unknown",
+              department: "N/A",
+              email: user?.email || "",
+              role: a.role,
+            };
+          });
+
+          return {
+            ...council,
+            memberCount: members.length,
+            members,
+          };
+        });
+
+        setCouncils(councilsWithMembers);
+      } catch (error) {
+        console.error("Error fetching councils:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCouncils();
+  }, []);
+
+  const handleCreateCouncil = async (formData: CouncilFormData) => {
+    try {
+      await councilsApi.create({
+        councilName: (formData as any).name || (formData as any).councilName || "New Council",
+        description: (formData as any).description || "",
+      });
+
+      // Refresh councils
+      const response = await councilsApi.getAll(false);
+      const councilsData = response.data || [];
+      const assignmentsRes = await committeeAssignmentsApi.getAll();
+      const assignments = assignmentsRes.data || [];
+      const usersRes = await authApi.getAllUsers();
+      const users = usersRes.data || [];
+
+      const councilsWithMembers: CouncilWithMembers[] = councilsData.map((council: CouncilDto) => {
+        const councilAssignments = assignments.filter((a: CommitteeAssignmentDto) => a.councilId === council.id);
+        const members = councilAssignments.map((a: CommitteeAssignmentDto) => {
+          const user = users.find((u: any) => u.id === a.lecturerId);
+          return {
+            name: user?.fullName || "Unknown",
+            department: "N/A",
+            email: user?.email || "",
+            role: a.role,
+          };
+        });
+
+        return {
+          ...council,
+          memberCount: members.length,
+          members,
+        };
+      });
+
+      setCouncils(councilsWithMembers);
     setIsFormVisible(false);
+      alert("Council created successfully!");
+    } catch (error: any) {
+      console.error("Error creating council:", error);
+      alert(`Error: ${error.message || "Failed to create council"}`);
+    }
   };
 
   return (
@@ -119,7 +180,7 @@ export default function ManageCouncilPage() {
           <div className="bg-white p-4 rounded-lg shadow flex items-center justify-between mb-6">
             <div>
               <div className="text-xl font-semibold">
-                {existingCouncilsData.length}
+                {councils.length}
               </div>
               <div className="text-sm text-gray-500">Total Councils</div>
             </div>
@@ -129,9 +190,13 @@ export default function ManageCouncilPage() {
           </div>
 
           {/* Danh sách */}
+          {loading ? (
+            <div className="text-center py-8 text-gray-500">Loading councils...</div>
+          ) : (
+            <>
           <h2 className="text-lg font-semibold mb-3">Existing Councils</h2>
           <div className="space-y-4">
-            {existingCouncilsData.map((council) => (
+                {councils.map((council) => (
               <div
                 key={council.id}
                 className="bg-white rounded-lg shadow p-4 border border-gray-100"
@@ -142,9 +207,9 @@ export default function ManageCouncilPage() {
                       <CouncilIcon />
                     </div>
                     <div>
-                      <h3 className="font-medium">{council.name}</h3>
+                      <h3 className="font-medium">{council.councilName}</h3>
                       <p className="text-xs text-gray-500">
-                        Created on {council.createdDate}
+                        {council.description || "No description"}
                       </p>
                     </div>
                   </div>
@@ -181,6 +246,8 @@ export default function ManageCouncilPage() {
               </div>
             ))}
           </div>
+            </>
+          )}
         </>
       )}
 

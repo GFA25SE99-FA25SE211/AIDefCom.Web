@@ -1,55 +1,12 @@
 "use client";
 
-import { Languages } from "lucide-react";
-
-// Icons
-const LanguageIcon = () => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    fill="none"
-    viewBox="0 0 24 24"
-    strokeWidth="1.5"
-    stroke="currentColor"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      d="M10.5 21l5.25-11.25L21 21m-9-3h7.5M3 5.621a48.474 48.474 0 016-.371m0 0c1.12 0 2.233.038 3.334.114M9 5.25v1.875m0 0H7.5M9 5.25v1.875m0 0H10.5m-1.5 0v3.75m0 0H7.5m1.5 0H10.5m6.375 0l-1.125-2.625M15.375 9.75l-1.125-2.625m0 0H13.125m1.125 2.625v3.75m0 0H13.125m1.125 0h1.125"
-    />
-  </svg>
-);
-
-const MemberIcon = () => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    fill="none"
-    viewBox="0 0 24 24"
-    strokeWidth="1.5"
-    stroke="currentColor"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A1.5 1.5 0 0118 21.75H6a1.5 1.5 0 01-1.499-1.632z"
-    />
-  </svg>
-);
-
-const InfoIcon = () => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    fill="none"
-    viewBox="0 0 24 24"
-    strokeWidth="1.5"
-    stroke="currentColor"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z"
-    />
-  </svg>
-);
+import { useEffect, useState } from "react";
+import { Languages, Users, Info } from "lucide-react";
+import { groupsApi } from "@/lib/api/groups";
+import { defenseSessionsApi } from "@/lib/api/defense-sessions";
+import { committeeAssignmentsApi } from "@/lib/api/committee-assignments";
+import { authApi } from "@/lib/api/auth";
+import type { GroupDto, DefenseSessionDto } from "@/lib/models";
 
 // Dữ liệu (giữ nguyên)
 const scoreData = [
@@ -145,7 +102,81 @@ const scoreData = [
   },
 ];
 
+interface ScoreData {
+  groupName: string;
+  projectTitle: string;
+  avgScore: string | null;
+  members: Array<{
+    name: string;
+    score: string;
+    status: "Submitted" | "Pending";
+  }>;
+}
+
 export default function PeerScoresPage() {
+  const [scoreData, setScoreData] = useState<ScoreData[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchPeerScores = async () => {
+      try {
+        setLoading(true);
+        const [groupsRes, sessionsRes, assignmentsRes, usersRes] = await Promise.all([
+          groupsApi.getAll().catch(() => ({ data: [] })),
+          defenseSessionsApi.getAll().catch(() => ({ data: [] })),
+          committeeAssignmentsApi.getAll().catch(() => ({ data: [] })),
+          authApi.getAllUsers().catch(() => ({ data: [] })),
+        ]);
+
+        const groups = groupsRes.data || [];
+        const sessions = sessionsRes.data || [];
+        const assignments = assignmentsRes.data || [];
+        const users = usersRes.data || [];
+
+        // Transform data to score format
+        const scores: ScoreData[] = groups.map((group: GroupDto) => {
+          const groupSessions = sessions.filter((s: DefenseSessionDto) => s.groupId === group.id);
+          const groupAssignments = assignments.filter((a: any) => 
+            groupSessions.some((s: DefenseSessionDto) => s.id === a.defenseSessionId)
+          );
+
+          const members = groupAssignments.map((a: any) => {
+            const user = users.find((u: any) => u.id === a.lecturerId);
+            return {
+              name: user?.fullName || "Unknown",
+              score: "-", // TODO: Get from scores API
+              status: "Pending" as const,
+            };
+          });
+
+          return {
+            groupName: group.groupName,
+            projectTitle: group.projectTitle || "No project title",
+            avgScore: null, // TODO: Calculate from scores
+            members,
+          };
+        });
+
+        setScoreData(scores.length > 0 ? scores : scoreData); // Fallback to default if empty
+      } catch (error) {
+        console.error("Error fetching peer scores:", error);
+        setScoreData(scoreData); // Use default data on error
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPeerScores();
+  }, []);
+
+  if (loading) {
+    return (
+      <main className="main-content">
+        <div className="text-center py-8 text-gray-500">Loading peer scores...</div>
+      </main>
+    );
+  }
+
   return (
     <>
       <main className="main-content">
@@ -172,7 +203,7 @@ export default function PeerScoresPage() {
         <div className="note-box bg-white rounded-xl border border-gray-100 shadow-sm p-5 my-6 flex gap-4 items-center">
           {/* Icon */}
           <div className="note-icon flex items-center justify-center w-10 h-10 rounded-full bg-gradient-to-r from-purple-600 to-blue-500 text-white shadow-md">
-            <InfoIcon />
+            <Info className="w-5 h-5" />
           </div>
 
           {/* Text */}
@@ -187,7 +218,7 @@ export default function PeerScoresPage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {scoreData.map((group) => (
+          {(scoreData.length > 0 ? scoreData : scoreData).map((group) => (
             <div
               key={group.groupName}
               className="score-card bg-white rounded-xl shadow p-5"
@@ -227,7 +258,7 @@ export default function PeerScoresPage() {
                   >
                     <div className="col-span-7 flex items-center gap-3 text-sm text-gray-800">
                       <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-600">
-                        <MemberIcon />
+                        <Users className="w-5 h-5" />
                       </div>
                       <span>{member.name}</span>
                     </div>

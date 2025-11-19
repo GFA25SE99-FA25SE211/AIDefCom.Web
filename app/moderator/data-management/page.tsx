@@ -1,6 +1,14 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { Plus, Pencil, Trash2, Search } from "lucide-react";
+import { councilsApi } from "@/lib/api/councils";
+import { groupsApi } from "@/lib/api/groups";
+import { studentsApi } from "@/lib/api/students";
+import { defenseSessionsApi } from "@/lib/api/defense-sessions";
+import { transcriptsApi } from "@/lib/api/transcripts";
+import { reportsApi } from "@/lib/api/reports";
+import type { CouncilDto, GroupDto, StudentDto, DefenseSessionDto } from "@/lib/models";
 
 import AddCouncilModal from "../create-sessions/components/AddCouncilModal";
 import AddGroupModal from "../create-sessions/components/AddGroupModal";
@@ -11,68 +19,6 @@ import EditCouncilModal from "../create-sessions/components/EditCouncilModal";
 import EditGroupModal from "../create-sessions/components/EditGroupModal";
 import EditStudentModal from "../create-sessions/components/EditStudentModal";
 import EditSessionModal from "../create-sessions/components/EditSessionModal";
-
-// --- Icons (kept minimal) ---
-const AddIcon = () => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth={1.5}
-    className="w-4 h-4"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      d="M12 4.5v15m7.5-7.5h-15"
-    />
-  </svg>
-);
-const EditIcon = () => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth={1.5}
-    className="w-4 h-4"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.8 19.315l-1.8.5.5-1.8L16.862 4.487z"
-    />
-  </svg>
-);
-const DeleteIcon = () => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth={1.5}
-    className="w-4 h-4"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      d="M6 7.5h12M9.75 7.5v9m4.5-9v9M4.5 7.5h15M10 4.5h4"
-    />
-  </svg>
-);
-const SearchIcon = () => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth={1.5}
-    className="w-4 h-4 text-gray-400"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      d="M21 21l-4.5-4.5M5.25 10.5A5.25 5.25 0 1010.5 15.75 5.25 5.25 0 005.25 10.5z"
-    />
-  </svg>
-);
 
 // Types (kept)
 type Council = {
@@ -160,163 +106,208 @@ export default function DataManagementPage() {
   const [editingSession, setEditingSession] = useState<Session | null>(null);
   const [isEditSessionModalOpen, setIsEditSessionModalOpen] = useState(false);
 
-  // Dummy data
-  const [councils, setCouncils] = useState<Council[]>([
-    {
-      id: 1,
-      description: "AI Defense Council - Fall 2025",
-      createdDate: "2025-01-01",
-      status: "Active",
-    },
-    {
-      id: 2,
-      description: "Software Engineering Council - Spring 2025",
-      createdDate: "2025-01-05",
-      status: "Active",
-    },
-  ]);
-  const [groups, setGroups] = useState<Group[]>([
-    {
-      id: 1,
-      topicEN: "AI-Based Recommendation System",
-      topicVN: "Hệ thống Gợi ý dựa trên AI",
-      semester: "SEM001",
-      status: "Active",
-    },
-    {
-      id: 2,
-      topicEN: "Blockchain for Healthcare",
-      topicVN: "Blockchain cho Y tế",
-      semester: "SEM001",
-      status: "Active",
-    },
-  ]);
-  const [students, setStudents] = useState<Student[]>([
-    {
-      id: 1,
-      userId: "U001",
-      groupId: 1,
-      dob: "2003-05-15",
-      gender: "Male",
-      role: "Leader",
-    },
-    {
-      id: 2,
-      userId: "U002",
-      groupId: 1,
-      dob: "2003-08-20",
-      gender: "Female",
-      role: "Member",
-    },
-  ]);
-  const [sessions, setSessions] = useState<Session[]>([
-    {
-      id: 1,
-      groupId: 1,
-      location: "Room A-301",
-      date: "2025-01-15",
-      time: "09:00 - 11:00",
-      status: "Scheduled",
-    },
-  ]);
-  const [transcripts, setTranscripts] = useState<Transcript[]>([
-    {
-      id: 1,
-      sessionId: 1,
-      createdAt: "2025-01-15",
-      status: "Pending",
-      isApproved: false,
-      groupName: "Group 1",
-      date: "January 15, 2025",
-      time: "09:00 - 11:00",
-      location: "Room A-301",
-      transcriptText: "[00:00:15] Chair: Good morning everyone...",
-      audioFile: "/audio/session1.mp3",
-    },
-  ]);
-  const [reports] = useState<Report[]>([
-    {
-      id: 1,
-      sessionId: 1,
-      generatedDate: "2025-01-15",
-      summary: "Excellent presentation",
-      filePath: "/reports/session1.pdf",
-    },
-  ]);
+  // State data
+  const [councils, setCouncils] = useState<Council[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [transcripts, setTranscripts] = useState<Transcript[]>([]);
+  const [reports, setReports] = useState<Report[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  // Handlers (kept)
-  const handleAddCouncil = (data: {
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        const [councilsRes, groupsRes, studentsRes, sessionsRes, transcriptsRes, reportsRes] = await Promise.all([
+          councilsApi.getAll(false).catch(() => ({ data: [] })),
+          groupsApi.getAll().catch(() => ({ data: [] })),
+          studentsApi.getAll().catch(() => ({ data: [] })),
+          defenseSessionsApi.getAll().catch(() => ({ data: [] })),
+          transcriptsApi.getAll().catch(() => ({ data: [] })),
+          reportsApi.getAll().catch(() => ({ data: [] })),
+        ]);
+
+        // Transform councils
+        const councilsData = (councilsRes.data || []).map((c: CouncilDto) => ({
+          id: c.id,
+          description: c.description || c.councilName || "",
+          createdDate: c.createdDate ? new Date(c.createdDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+          status: c.isActive ? "Active" as const : "Inactive" as const,
+        }));
+        setCouncils(councilsData);
+
+        // Transform groups
+        const groupsData = (groupsRes.data || []).map((g: GroupDto) => ({
+          id: parseInt(g.id) || 0,
+          topicEN: g.projectTitle || "No title",
+          topicVN: g.projectTitle || "Không có tiêu đề",
+          semester: String(g.semesterId),
+          status: "Active" as const,
+        }));
+        setGroups(groupsData);
+
+        // Transform students
+        const studentsData = (studentsRes.data || []).map((s: StudentDto, index: number) => ({
+          id: index + 1,
+          userId: s.id,
+          groupId: parseInt(s.groupId || "0") || 0,
+          dob: s.dateOfBirth || "",
+          gender: s.gender || "",
+          role: index === 0 ? "Leader" as const : "Member" as const,
+        }));
+        setStudents(studentsData);
+
+        // Transform sessions
+        const sessionsData = (sessionsRes.data || []).map((s: DefenseSessionDto) => ({
+          id: s.id,
+          groupId: parseInt(s.groupId) || 0,
+          location: s.location || "TBD",
+          date: s.sessionDate,
+          time: s.sessionTime || "TBD",
+          status: "Scheduled" as const,
+        }));
+        setSessions(sessionsData);
+
+        // Transform transcripts
+        const transcriptsData = (transcriptsRes.data || []).map((t: any) => ({
+          id: t.id,
+          sessionId: t.sessionId,
+          createdAt: t.createdAt || new Date().toISOString().split('T')[0],
+          status: t.isApproved ? "Approved" as const : "Pending" as const,
+          isApproved: t.isApproved || false,
+          groupName: "Group",
+          date: new Date().toLocaleDateString("en-US", { year: 'numeric', month: 'long', day: 'numeric' }),
+          time: "TBD",
+          location: "TBD",
+          transcriptText: t.transcriptText || "",
+          audioFile: t.audioFilePath || "",
+        }));
+        setTranscripts(transcriptsData);
+
+        // Transform reports
+        const reportsData = (reportsRes.data || []).map((r: any) => ({
+          id: r.id,
+          sessionId: r.sessionId,
+          generatedDate: r.generatedDate || new Date().toISOString().split('T')[0],
+          summary: r.summary || "No summary",
+          filePath: r.filePath || "",
+        }));
+        setReports(reportsData);
+      } catch (error) {
+        console.error("Error fetching data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  // Handlers
+  const handleAddCouncil = async (data: {
     description: string;
     isActive: boolean;
   }) => {
-    setCouncils([
-      ...councils,
-      {
-        id: Date.now(),
-        description: data.description,
-        createdDate: new Date().toISOString().split("T")[0],
-        status: data.isActive ? "Active" : "Inactive",
-      },
-    ]);
-    setIsAddCouncilModalOpen(false);
+    try {
+      await councilsApi.create({
+        councilName: data.description,
+        description: "",
+      });
+      const response = await councilsApi.getAll(false);
+      const councilsData = (response.data || []).map((c: CouncilDto) => ({
+        id: c.id,
+        description: c.description || c.councilName || "",
+        createdDate: c.createdDate ? new Date(c.createdDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+        status: c.isActive ? "Active" as const : "Inactive" as const,
+      }));
+      setCouncils(councilsData);
+      setIsAddCouncilModalOpen(false);
+    } catch (error: any) {
+      alert(`Error: ${error.message || "Failed to create council"}`);
+    }
   };
-  const handleAddGroup = (data: {
+
+  const handleAddGroup = async (data: {
     topicEN: string;
     topicVN: string;
     semesterId: string;
     status: string;
   }) => {
-    setGroups([
-      ...groups,
-      {
-        id: Date.now(),
-        topicEN: data.topicEN,
-        topicVN: data.topicVN,
-        semester: data.semesterId,
-        status: data.status as Group["status"],
-      },
-    ]);
-    setIsAddGroupModalOpen(false);
+    try {
+      await groupsApi.create({
+        groupName: data.topicEN,
+        projectTitle: data.topicVN,
+        semesterId: parseInt(data.semesterId) || 1,
+      });
+      const response = await groupsApi.getAll();
+      const groupsData = (response.data || []).map((g: GroupDto) => ({
+        id: parseInt(g.id) || 0,
+        topicEN: g.projectTitle || "No title",
+        topicVN: g.projectTitle || "Không có tiêu đề",
+        semester: String(g.semesterId),
+        status: "Active" as const,
+      }));
+      setGroups(groupsData);
+      setIsAddGroupModalOpen(false);
+    } catch (error: any) {
+      alert(`Error: ${error.message || "Failed to create group"}`);
+    }
   };
-  const handleAddStudent = (data: {
+
+  const handleAddStudent = async (data: {
     userId: string;
     groupId: string;
     dob: string;
     gender: string;
     role: string;
   }) => {
-    setStudents([
-      ...students,
-      {
-        id: Date.now(),
-        userId: data.userId,
-        groupId: parseInt(data.groupId, 10) || 0,
-        dob: data.dob,
-        gender: data.gender,
-        role: data.role as Student["role"],
-      },
-    ]);
-    setIsAddStudentModalOpen(false);
+    try {
+      await studentsApi.update(data.userId, {
+        studentCode: data.userId,
+        fullName: data.userId,
+        groupId: data.groupId,
+      });
+      const response = await studentsApi.getAll();
+      const studentsData = (response.data || []).map((s: StudentDto, index: number) => ({
+        id: index + 1,
+        userId: s.id,
+        groupId: parseInt(s.groupId || "0") || 0,
+        dob: s.dateOfBirth || "",
+        gender: s.gender || "",
+        role: index === 0 ? "Leader" as const : "Member" as const,
+      }));
+      setStudents(studentsData);
+      setIsAddStudentModalOpen(false);
+    } catch (error: any) {
+      alert(`Error: ${error.message || "Failed to add student"}`);
+    }
   };
-  const handleEditCouncil = (
+  const handleEditCouncil = async (
     id: number,
     data: { description: string; isActive: boolean }
   ) => {
-    setCouncils((prev) =>
-      prev.map((c) =>
-        c.id === id
-          ? {
-              ...c,
-              description: data.description,
-              status: data.isActive ? "Active" : "Inactive",
-            }
-          : c
-      )
-    );
-    setIsEditCouncilModalOpen(false);
-    setEditingCouncil(null);
+    try {
+      await councilsApi.update(id, {
+        councilName: data.description,
+        description: "",
+      });
+      const response = await councilsApi.getAll(false);
+      const councilsData = (response.data || []).map((c: CouncilDto) => ({
+        id: c.id,
+        description: c.description || c.councilName || "",
+        createdDate: c.createdDate ? new Date(c.createdDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+        status: c.isActive ? "Active" as const : "Inactive" as const,
+      }));
+      setCouncils(councilsData);
+      setIsEditCouncilModalOpen(false);
+      setEditingCouncil(null);
+    } catch (error: any) {
+      alert(`Error: ${error.message || "Failed to update council"}`);
+    }
   };
-  const handleEditGroup = (
+
+  const handleEditGroup = async (
     id: number,
     data: {
       topicEN: string;
@@ -325,23 +316,29 @@ export default function DataManagementPage() {
       status: string;
     }
   ) => {
-    setGroups((prev) =>
-      prev.map((g) =>
-        g.id === id
-          ? {
-              ...g,
-              topicEN: data.topicEN,
-              topicVN: data.topicVN,
-              semester: data.semesterId,
-              status: data.status as Group["status"],
-            }
-          : g
-      )
-    );
-    setIsEditGroupModalOpen(false);
-    setEditingGroup(null);
+    try {
+      await groupsApi.update(String(id), {
+        groupName: data.topicEN,
+        projectTitle: data.topicVN,
+        semesterId: parseInt(data.semesterId) || 1,
+      });
+      const response = await groupsApi.getAll();
+      const groupsData = (response.data || []).map((g: GroupDto) => ({
+        id: parseInt(g.id) || 0,
+        topicEN: g.projectTitle || "No title",
+        topicVN: g.projectTitle || "Không có tiêu đề",
+        semester: String(g.semesterId),
+        status: "Active" as const,
+      }));
+      setGroups(groupsData);
+      setIsEditGroupModalOpen(false);
+      setEditingGroup(null);
+    } catch (error: any) {
+      alert(`Error: ${error.message || "Failed to update group"}`);
+    }
   };
-  const handleEditStudent = (
+
+  const handleEditStudent = async (
     id: number,
     data: {
       userId: string;
@@ -351,24 +348,33 @@ export default function DataManagementPage() {
       role: string;
     }
   ) => {
-    setStudents((prev) =>
-      prev.map((s) =>
-        s.id === id
-          ? {
-              ...s,
-              userId: data.userId,
-              groupId: parseInt(data.groupId, 10) || s.groupId,
-              dob: data.dob,
-              gender: data.gender,
-              role: data.role as Student["role"],
-            }
-          : s
-      )
-    );
-    setIsEditStudentModalOpen(false);
-    setEditingStudent(null);
+    try {
+      const student = students.find((s) => s.id === id);
+      if (student) {
+        await studentsApi.update(student.userId, {
+          studentCode: data.userId,
+          fullName: data.userId,
+          groupId: data.groupId,
+        });
+        const response = await studentsApi.getAll();
+        const studentsData = (response.data || []).map((s: StudentDto, index: number) => ({
+          id: index + 1,
+          userId: s.id,
+          groupId: parseInt(s.groupId || "0") || 0,
+          dob: s.dateOfBirth || "",
+          gender: s.gender || "",
+          role: index === 0 ? "Leader" as const : "Member" as const,
+        }));
+        setStudents(studentsData);
+      }
+      setIsEditStudentModalOpen(false);
+      setEditingStudent(null);
+    } catch (error: any) {
+      alert(`Error: ${error.message || "Failed to update student"}`);
+    }
   };
-  const handleEditSession = (
+
+  const handleEditSession = async (
     id: number,
     data: {
       groupId: string;
@@ -378,39 +384,80 @@ export default function DataManagementPage() {
       status: string;
     }
   ) => {
-    setSessions((prev) =>
-      prev.map((s) =>
-        s.id === id
-          ? {
-              ...s,
-              groupId: parseInt(data.groupId, 10) || s.groupId,
-              location: data.location,
-              date: data.date,
-              time: data.time,
-              status: data.status as Session["status"],
-            }
-          : s
-      )
-    );
-    setIsEditSessionModalOpen(false);
-    setEditingSession(null);
+    try {
+      await defenseSessionsApi.update(id, {
+        groupId: data.groupId,
+        sessionDate: data.date,
+        sessionTime: data.time,
+        location: data.location,
+      });
+      const response = await defenseSessionsApi.getAll();
+      const sessionsData = (response.data || []).map((s: DefenseSessionDto) => ({
+        id: s.id,
+        groupId: parseInt(s.groupId) || 0,
+        location: s.location || "TBD",
+        date: s.sessionDate,
+        time: s.sessionTime || "TBD",
+        status: "Scheduled" as const,
+      }));
+      setSessions(sessionsData);
+      setIsEditSessionModalOpen(false);
+      setEditingSession(null);
+    } catch (error: any) {
+      alert(`Error: ${error.message || "Failed to update session"}`);
+    }
   };
 
-  const handleApproveTranscript = (id: number) => {
-    setTranscripts((prev) =>
-      prev.map((t) =>
-        t.id === id ? { ...t, status: "Approved", isApproved: true } : t
-      )
-    );
-    setSelectedTranscript(null);
+  const handleApproveTranscript = async (id: number) => {
+    try {
+      await transcriptsApi.update(id, {
+        isApproved: true,
+      });
+      const response = await transcriptsApi.getAll();
+      const transcriptsData = (response.data || []).map((t: any) => ({
+        id: t.id,
+        sessionId: t.sessionId,
+        createdAt: t.createdAt || new Date().toISOString().split('T')[0],
+        status: t.isApproved ? "Approved" as const : "Pending" as const,
+        isApproved: t.isApproved || false,
+        groupName: "Group",
+        date: new Date().toLocaleDateString("en-US", { year: 'numeric', month: 'long', day: 'numeric' }),
+        time: "TBD",
+        location: "TBD",
+        transcriptText: t.transcriptText || "",
+        audioFile: t.audioFilePath || "",
+      }));
+      setTranscripts(transcriptsData);
+      setSelectedTranscript(null);
+    } catch (error: any) {
+      alert(`Error: ${error.message || "Failed to approve transcript"}`);
+    }
   };
-  const handleRejectTranscript = (id: number) => {
-    setTranscripts((prev) =>
-      prev.map((t) =>
-        t.id === id ? { ...t, status: "Rejected", isApproved: false } : t
-      )
-    );
-    setSelectedTranscript(null);
+
+  const handleRejectTranscript = async (id: number) => {
+    try {
+      await transcriptsApi.update(id, {
+        isApproved: false,
+      });
+      const response = await transcriptsApi.getAll();
+      const transcriptsData = (response.data || []).map((t: any) => ({
+        id: t.id,
+        sessionId: t.sessionId,
+        createdAt: t.createdAt || new Date().toISOString().split('T')[0],
+        status: "Rejected" as const,
+        isApproved: false,
+        groupName: "Group",
+        date: new Date().toLocaleDateString("en-US", { year: 'numeric', month: 'long', day: 'numeric' }),
+        time: "TBD",
+        location: "TBD",
+        transcriptText: t.transcriptText || "",
+        audioFile: t.audioFilePath || "",
+      }));
+      setTranscripts(transcriptsData);
+      setSelectedTranscript(null);
+    } catch (error: any) {
+      alert(`Error: ${error.message || "Failed to reject transcript"}`);
+    }
   };
   const handleDownloadReport = (filePath: string) => {
     // simulate download
@@ -419,44 +466,47 @@ export default function DataManagementPage() {
 
   // Render helpers (UI only)
   const renderCouncilsTable = () => (
-    <div className="bg-white rounded-lg shadow-sm border p-4">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-gray-800">
-          Council Management
-        </h2>
-        <button
-          className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-gradient-to-r from-purple-600 to-blue-500 text-white text-sm"
-          onClick={() => setIsAddCouncilModalOpen(true)}
-        >
-          <AddIcon /> Add Council
-        </button>
-      </div>
-
-      <div className="flex items-center mb-4">
-        <div className="relative w-72">
-          <div className="absolute left-3 top-2">
-            <SearchIcon />
-          </div>
-          <input
-            className="w-full pl-10 pr-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-200 outline-none"
-            placeholder="Search councils..."
-          />
+      <div className="bg-white rounded-lg shadow-sm border p-4">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-gray-800">
+            Council Management
+          </h2>
+          <button
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-gradient-to-r from-purple-600 to-blue-500 text-white text-sm"
+            onClick={() => setIsAddCouncilModalOpen(true)}
+          >
+            <Plus className="w-4 h-4" /> Add Council
+          </button>
         </div>
-      </div>
 
-      <div className="overflow-auto">
-        <table className="w-full text-sm border-collapse">
-          <thead>
-            <tr className="text-left text-gray-600 text-xs uppercase">
-              <th className="px-3 py-2">ID</th>
-              <th className="px-3 py-2">Description</th>
-              <th className="px-3 py-2">Created</th>
-              <th className="px-3 py-2">Status</th>
-              <th className="px-3 py-2 text-center">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {councils.map((c) => (
+        <div className="flex items-center mb-4">
+          <div className="relative w-72">
+            <div className="absolute left-3 top-2">
+              <Search className="w-4 h-4 text-gray-400" />
+            </div>
+            <input
+              className="w-full pl-10 pr-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-200 outline-none"
+              placeholder="Search councils..."
+            />
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="text-center py-8 text-gray-500">Loading councils...</div>
+        ) : (
+          <div className="overflow-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="text-left text-gray-600 text-xs uppercase">
+                  <th className="px-3 py-2">ID</th>
+                  <th className="px-3 py-2">Description</th>
+                  <th className="px-3 py-2">Created</th>
+                  <th className="px-3 py-2">Status</th>
+                  <th className="px-3 py-2 text-center">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {councils.map((c) => (
               <tr key={c.id} className="border-t hover:bg-gray-50">
                 <td className="px-3 py-2">{c.id}</td>
                 <td className="px-3 py-2">{c.description}</td>
@@ -482,13 +532,13 @@ export default function DataManagementPage() {
                       }}
                       title="Edit"
                     >
-                      <EditIcon />
+                      <Pencil className="w-4 h-4" />
                     </button>
                     <button
                       className="p-2 rounded-md hover:bg-gray-100"
                       title="Delete"
                     >
-                      <DeleteIcon />
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 </td>
@@ -497,51 +547,55 @@ export default function DataManagementPage() {
           </tbody>
         </table>
       </div>
+        )}
     </div>
   );
 
   const renderGroupsTable = () => (
-    <div className="bg-white rounded-lg shadow-sm border p-4">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-gray-800">
-          Group Management
-        </h2>
-        <div className="flex items-center gap-2">
-          <button
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-gradient-to-r from-purple-600 to-blue-500 text-white text-sm"
-            onClick={() => setIsAddGroupModalOpen(true)}
-          >
-            <AddIcon /> Add Group
-          </button>
-        </div>
-      </div>
-
-      <div className="mb-4">
-        <div className="relative w-96">
-          <div className="absolute left-3 top-2">
-            <SearchIcon />
+      <div className="bg-white rounded-lg shadow-sm border p-4">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-gray-800">
+            Group Management
+          </h2>
+          <div className="flex items-center gap-2">
+            <button
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-gradient-to-r from-purple-600 to-blue-500 text-white text-sm"
+              onClick={() => setIsAddGroupModalOpen(true)}
+            >
+              <Plus className="w-4 h-4" /> Add Group
+            </button>
           </div>
-          <input
-            className="w-full pl-10 pr-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-200 outline-none"
-            placeholder="Search groups..."
-          />
         </div>
-      </div>
 
-      <div className="overflow-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-gray-600 text-xs uppercase">
-              <th className="px-3 py-2">ID</th>
-              <th className="px-3 py-2">Topic (EN)</th>
-              <th className="px-3 py-2">Topic (VN)</th>
-              <th className="px-3 py-2">Semester</th>
-              <th className="px-3 py-2">Status</th>
-              <th className="px-3 py-2 text-center">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {groups.map((g) => (
+        <div className="mb-4">
+          <div className="relative w-96">
+            <div className="absolute left-3 top-2">
+              <Search className="w-4 h-4 text-gray-400" />
+            </div>
+            <input
+              className="w-full pl-10 pr-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-200 outline-none"
+              placeholder="Search groups..."
+            />
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="text-center py-8 text-gray-500">Loading groups...</div>
+        ) : (
+          <div className="overflow-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-gray-600 text-xs uppercase">
+                  <th className="px-3 py-2">ID</th>
+                  <th className="px-3 py-2">Topic (EN)</th>
+                  <th className="px-3 py-2">Topic (VN)</th>
+                  <th className="px-3 py-2">Semester</th>
+                  <th className="px-3 py-2">Status</th>
+                  <th className="px-3 py-2 text-center">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {groups.map((g) => (
               <tr key={g.id} className="border-t hover:bg-gray-50">
                 <td className="px-3 py-2">{g.id}</td>
                 <td className="px-3 py-2">{g.topicEN}</td>
@@ -568,13 +622,13 @@ export default function DataManagementPage() {
                       }}
                       title="Edit"
                     >
-                      <EditIcon />
+                      <Pencil className="w-4 h-4" />
                     </button>
                     <button
                       className="p-2 rounded-md hover:bg-gray-100"
                       title="Delete"
                     >
-                      <DeleteIcon />
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 </td>
@@ -583,6 +637,7 @@ export default function DataManagementPage() {
           </tbody>
         </table>
       </div>
+        )}
     </div>
   );
 
@@ -597,38 +652,41 @@ export default function DataManagementPage() {
             className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-gradient-to-r from-purple-600 to-blue-500 text-white text-sm"
             onClick={() => setIsAddStudentModalOpen(true)}
           >
-            <AddIcon /> Add Student
+            <Plus className="w-4 h-4" /> Add Student
           </button>
         </div>
       </div>
 
-      <div className="mb-4">
-        <div className="relative w-96">
-          <div className="absolute left-3 top-2">
-            <SearchIcon />
+        <div className="mb-4">
+          <div className="relative w-96">
+            <div className="absolute left-3 top-2">
+              <Search className="w-4 h-4 text-gray-400" />
+            </div>
+            <input
+              className="w-full pl-10 pr-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-200 outline-none"
+              placeholder="Search students..."
+            />
           </div>
-          <input
-            className="w-full pl-10 pr-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-200 outline-none"
-            placeholder="Search students..."
-          />
         </div>
-      </div>
 
-      <div className="overflow-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-gray-600 text-xs uppercase">
-              <th className="px-3 py-2">ID</th>
-              <th className="px-3 py-2">User ID</th>
-              <th className="px-3 py-2">Group ID</th>
-              <th className="px-3 py-2">DOB</th>
-              <th className="px-3 py-2">Gender</th>
-              <th className="px-3 py-2">Role</th>
-              <th className="px-3 py-2 text-center">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {students.map((s) => (
+        {loading ? (
+          <div className="text-center py-8 text-gray-500">Loading students...</div>
+        ) : (
+          <div className="overflow-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-gray-600 text-xs uppercase">
+                  <th className="px-3 py-2">ID</th>
+                  <th className="px-3 py-2">User ID</th>
+                  <th className="px-3 py-2">Group ID</th>
+                  <th className="px-3 py-2">DOB</th>
+                  <th className="px-3 py-2">Gender</th>
+                  <th className="px-3 py-2">Role</th>
+                  <th className="px-3 py-2 text-center">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {students.map((s) => (
               <tr key={s.id} className="border-t hover:bg-gray-50">
                 <td className="px-3 py-2">{s.id}</td>
                 <td className="px-3 py-2">{s.userId}</td>
@@ -650,13 +708,13 @@ export default function DataManagementPage() {
                       }}
                       title="Edit"
                     >
-                      <EditIcon />
+                      <Pencil className="w-4 h-4" />
                     </button>
                     <button
                       className="p-2 rounded-md hover:bg-gray-100"
                       title="Delete"
                     >
-                      <DeleteIcon />
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 </td>
@@ -665,32 +723,36 @@ export default function DataManagementPage() {
           </tbody>
         </table>
       </div>
+        )}
     </div>
   );
 
   // sessions / transcripts / reports reuse same styling
   const renderSessionsTable = () => (
     <div className="bg-white rounded-lg shadow-sm border p-4">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-gray-800">
-          Defense Session Management
-        </h2>
-      </div>
-      <div className="overflow-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-gray-600 text-xs uppercase">
-              <th className="px-3 py-2">ID</th>
-              <th className="px-3 py-2">Group ID</th>
-              <th className="px-3 py-2">Location</th>
-              <th className="px-3 py-2">Date</th>
-              <th className="px-3 py-2">Time</th>
-              <th className="px-3 py-2">Status</th>
-              <th className="px-3 py-2 text-center">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sessions.map((s) => (
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-gray-800">
+            Defense Session Management
+          </h2>
+        </div>
+        {loading ? (
+          <div className="text-center py-8 text-gray-500">Loading sessions...</div>
+        ) : (
+          <div className="overflow-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-gray-600 text-xs uppercase">
+                  <th className="px-3 py-2">ID</th>
+                  <th className="px-3 py-2">Group ID</th>
+                  <th className="px-3 py-2">Location</th>
+                  <th className="px-3 py-2">Date</th>
+                  <th className="px-3 py-2">Time</th>
+                  <th className="px-3 py-2">Status</th>
+                  <th className="px-3 py-2 text-center">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sessions.map((s) => (
               <tr key={s.id} className="border-t hover:bg-gray-50">
                 <td className="px-3 py-2">{s.id}</td>
                 <td className="px-3 py-2">{s.groupId}</td>
@@ -712,13 +774,13 @@ export default function DataManagementPage() {
                       }}
                       title="Edit"
                     >
-                      <EditIcon />
+                      <Pencil className="w-4 h-4" />
                     </button>
                     <button
                       className="p-2 rounded-md hover:bg-gray-100"
                       title="Delete"
                     >
-                      <DeleteIcon />
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 </td>
@@ -727,6 +789,7 @@ export default function DataManagementPage() {
           </tbody>
         </table>
       </div>
+        )}
     </div>
   );
 
@@ -737,24 +800,27 @@ export default function DataManagementPage() {
           Transcript Management
         </h2>
       </div>
-      <p className="text-sm text-gray-500 mb-4">
-        Transcripts are automatically generated from defense sessions. You can
-        view and approve them here.
-      </p>
-      <div className="overflow-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-gray-600 text-xs uppercase">
-              <th className="px-3 py-2">ID</th>
-              <th className="px-3 py-2">Session ID</th>
-              <th className="px-3 py-2">Created</th>
-              <th className="px-3 py-2">Status</th>
-              <th className="px-3 py-2">Approved</th>
-              <th className="px-3 py-2 text-center">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {transcripts.map((t) => (
+        <p className="text-sm text-gray-500 mb-4">
+          Transcripts are automatically generated from defense sessions. You can
+          view and approve them here.
+        </p>
+        {loading ? (
+          <div className="text-center py-8 text-gray-500">Loading transcripts...</div>
+        ) : (
+          <div className="overflow-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-gray-600 text-xs uppercase">
+                  <th className="px-3 py-2">ID</th>
+                  <th className="px-3 py-2">Session ID</th>
+                  <th className="px-3 py-2">Created</th>
+                  <th className="px-3 py-2">Status</th>
+                  <th className="px-3 py-2">Approved</th>
+                  <th className="px-3 py-2 text-center">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {transcripts.map((t) => (
               <tr key={t.id} className="border-t hover:bg-gray-50">
                 <td className="px-3 py-2">{t.id}</td>
                 <td className="px-3 py-2">{t.sessionId}</td>
@@ -786,6 +852,7 @@ export default function DataManagementPage() {
           </tbody>
         </table>
       </div>
+        )}
     </div>
   );
 
@@ -796,23 +863,26 @@ export default function DataManagementPage() {
           Report Management
         </h2>
       </div>
-      <p className="text-sm text-gray-500 mb-4">
-        Reports are generated after defense sessions. You can download and view
-        them here.
-      </p>
-      <div className="overflow-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-gray-600 text-xs uppercase">
-              <th className="px-3 py-2">ID</th>
-              <th className="px-3 py-2">Session ID</th>
-              <th className="px-3 py-2">Generated</th>
-              <th className="px-3 py-2">Summary</th>
-              <th className="px-3 py-2 text-center">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {reports.map((r) => (
+        <p className="text-sm text-gray-500 mb-4">
+          Reports are generated after defense sessions. You can download and view
+          them here.
+        </p>
+        {loading ? (
+          <div className="text-center py-8 text-gray-500">Loading reports...</div>
+        ) : (
+          <div className="overflow-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-gray-600 text-xs uppercase">
+                  <th className="px-3 py-2">ID</th>
+                  <th className="px-3 py-2">Session ID</th>
+                  <th className="px-3 py-2">Generated</th>
+                  <th className="px-3 py-2">Summary</th>
+                  <th className="px-3 py-2 text-center">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {reports.map((r) => (
               <tr key={r.id} className="border-t hover:bg-gray-50">
                 <td className="px-3 py-2">{r.id}</td>
                 <td className="px-3 py-2">{r.sessionId}</td>
@@ -839,6 +909,7 @@ export default function DataManagementPage() {
           </tbody>
         </table>
       </div>
+        )}
     </div>
   );
 

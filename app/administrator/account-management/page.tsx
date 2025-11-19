@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import AdminSidebar from "../dashboard/components/AdminSidebar";
 import CreateAccountModal, {
   AccountFormData as CreateAccountData,
@@ -9,10 +9,11 @@ import EditAccountModal, {
   AccountEditFormData,
 } from "../dashboard/components/EditAccountModal";
 import { Plus, Users, Search, Pencil, Trash2 } from "lucide-react";
+import { authApi } from "@/lib/api/auth";
 
 // --- Types ---
 interface UserAccount {
-  id: number;
+  id: string;
   name: string;
   email: string;
   role: string;
@@ -20,55 +21,6 @@ interface UserAccount {
   status: "Active" | "Inactive";
   createdDate: string;
 }
-
-// --- Dummy Data ---
-const initialUsers: UserAccount[] = [
-  {
-    id: 1,
-    name: "Dr. Nguyen Van A",
-    email: "nguyenvana@university.edu",
-    role: "Chair",
-    department: "Computer Science",
-    status: "Active",
-    createdDate: "15/1/2024",
-  },
-  {
-    id: 2,
-    name: "Dr. Tran Thi B",
-    email: "tranthib@university.edu",
-    role: "Member",
-    department: "Software Engineering",
-    status: "Active",
-    createdDate: "20/1/2024",
-  },
-  {
-    id: 3,
-    name: "MSc. Pham Thi D",
-    email: "phamthid@university.edu",
-    role: "Secretary",
-    department: "Computer Science",
-    status: "Active",
-    createdDate: "1/2/2024",
-  },
-  {
-    id: 4,
-    name: "John Smith",
-    email: "johnsmith@student.edu",
-    role: "Student",
-    department: "Computer Science",
-    status: "Active",
-    createdDate: "1/9/2024",
-  },
-  {
-    id: 5,
-    name: "Admin User",
-    email: "admin@university.edu",
-    role: "Administrator",
-    department: "IT Department",
-    status: "Active",
-    createdDate: "1/1/2023",
-  },
-];
 
 const allRoles = [
   "All Roles",
@@ -81,12 +33,49 @@ const allRoles = [
 ];
 
 export default function AccountManagementPage() {
-  const [users, setUsers] = useState<UserAccount[]>(initialUsers);
+  const [users, setUsers] = useState<UserAccount[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedRole, setSelectedRole] = useState("All Roles");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserAccount | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        setLoading(true);
+        const response = await authApi.getAllUsers();
+        
+        // Check if response has the expected structure
+        if (!response || !response.data) {
+          console.warn("Unexpected response structure:", response);
+          setUsers([]);
+          return;
+        }
+
+        const apiUsers = (response.data || []).map((user: any) => ({
+          id: user.id || user.Id || "",
+          name: user.fullName || user.FullName || user.email || user.Email || "Unknown",
+          email: user.email || user.Email || "",
+          role: user.roles?.[0] || user.Roles?.[0] || "Student",
+          department: "N/A",
+          status: "Active" as const,
+          createdDate: new Date().toLocaleDateString("en-GB"),
+        }));
+        setUsers(apiUsers);
+      } catch (error: any) {
+        console.error("Error fetching users:", error);
+        // Show user-friendly error message
+        alert(`Failed to load users: ${error.message || "Unknown error"}\n\nPlease check:\n1. Backend API is running at http://localhost:5015\n2. Check browser console for details`);
+        setUsers([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchUsers();
+  }, []);
 
   const roleSummary = useMemo(() => {
     const counts: { [key: string]: number } = {
@@ -121,47 +110,83 @@ export default function AccountManagementPage() {
     });
   }, [users, searchTerm, selectedRole]);
 
-  const handleCreateAccount = (data: CreateAccountData) => {
-    const newUser: UserAccount = {
-      id: Date.now(),
-      name: data.fullName,
+  const handleCreateAccount = async (data: CreateAccountData) => {
+    try {
+      await authApi.createAccount({
       email: data.email,
-      role: data.role,
-      department: data.department,
-      status: "Active",
+        password: "DefaultPassword123!", // Default password, user should change on first login
+        fullName: data.fullName,
+        phoneNumber: "", // Optional field, can be updated later
+      });
+      
+      if (data.role && data.role !== "Student") {
+        await authApi.assignRole(data.email, data.role);
+      }
+
+      // Refresh users list
+      const response = await authApi.getAllUsers();
+      const apiUsers = (response.data || []).map((user: any) => ({
+        id: user.id,
+        name: user.fullName || user.email,
+        email: user.email,
+        role: user.roles?.[0] || "Student",
+        department: "N/A",
+        status: "Active" as const,
       createdDate: new Date().toLocaleDateString("en-GB"),
-    };
-    setUsers([...users, newUser]);
+      }));
+      setUsers(apiUsers);
     setIsCreateModalOpen(false);
-    alert("Account created!");
+      alert("Account created successfully!");
+    } catch (error: any) {
+      console.error("Error creating account:", error);
+      alert(`Error: ${error.message || "Failed to create account"}`);
+    }
   };
 
-  const handleEditAccount = (
+  const handleEditAccount = async (
     id: number | string,
     data: AccountEditFormData
   ) => {
-    setUsers((prevUsers) =>
-      prevUsers.map((user) =>
-        user.id === id
-          ? {
-              ...user,
-              name: data.fullName,
-              email: data.email,
-              role: data.role,
-              department: data.department,
-            }
-          : user
-      )
-    );
+    try {
+      // Update role if changed
+      if (data.role) {
+        await authApi.assignRole(data.email, data.role);
+      }
+
+      // Refresh users list
+      const response = await authApi.getAllUsers();
+      const apiUsers = (response.data || []).map((user: any) => ({
+        id: user.id,
+        name: user.fullName || user.email,
+        email: user.email,
+        role: user.roles?.[0] || "Student",
+        department: "N/A",
+        status: "Active" as const,
+        createdDate: new Date().toLocaleDateString("en-GB"),
+      }));
+      setUsers(apiUsers);
     setIsEditModalOpen(false);
     setEditingUser(null);
-    alert("Account updated!");
+      alert("Account updated successfully!");
+    } catch (error: any) {
+      console.error("Error updating account:", error);
+      alert(`Error: ${error.message || "Failed to update account"}`);
+    }
   };
 
-  const handleDeleteAccount = (id: number | string) => {
-    if (window.confirm(`Are you sure you want to delete user ID ${id}?`)) {
-      setUsers((prevUsers) => prevUsers.filter((user) => user.id !== id));
-      alert("Account deleted!");
+  const handleDeleteAccount = async (id: number | string) => {
+    const user = users.find((u) => u.id === id);
+    if (!user) return;
+
+    if (window.confirm(`Are you sure you want to delete account ${user.email}?`)) {
+      try {
+        await authApi.softDeleteAccount(user.email);
+        setUsers((prevUsers) => prevUsers.filter((u) => u.id !== id));
+        alert("Account deleted successfully!");
+      } catch (error: any) {
+        console.error("Error deleting account:", error);
+        alert(`Error: ${error.message || "Failed to delete account"}`);
+      }
     }
   };
 
@@ -234,6 +259,9 @@ export default function AccountManagementPage() {
           </h2>
         </div>
 
+        {loading ? (
+          <div className="py-8 text-center text-gray-500">Loading users...</div>
+        ) : (
         <table className="table-base w-full">
           <thead>
             <tr>
@@ -294,6 +322,7 @@ export default function AccountManagementPage() {
             )}
           </tbody>
         </table>
+        )}
       </div>
 
       <footer className="page-footer">
