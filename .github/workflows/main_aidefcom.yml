@@ -13,24 +13,34 @@ jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     permissions:
-      contents: read       # cần cho actions/checkout
+      contents: read       # cần cho checkout
       id-token: write      # cần cho azure/login (OIDC)
 
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Set up Node.js version
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          # Nếu app của bạn set "engines": { "node": "20.x" } thì nên để 20.x
+          # Nên khớp với version cấu hình trên Azure (WEBSITE_NODE_DEFAULT_VERSION)
           node-version: '22.x'
+          cache: 'npm'
+          cache-dependency-path: |
+            package-lock.json
 
-      - name: Install, build and test
-        run: |
-          npm install
-          npm run build --if-present
-          npm run test --if-present
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build app
+        run: npm run build --if-present
+
+      - name: Run tests
+        run: npm run test --if-present
+
+      # Giảm size gói deploy: không gửi node_modules lên Azure
+      - name: Clean node_modules before deploy
+        run: rm -rf node_modules
 
       - name: Login to Azure
         uses: azure/login@v2
@@ -46,4 +56,3 @@ jobs:
           app-name: 'aidefcom'
           slot-name: 'Production'   # nếu bạn không dùng slot riêng có thể bỏ dòng này
           package: .
-
