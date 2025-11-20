@@ -24,7 +24,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           # Nếu app của bạn set "engines": { "node": "20.x" } thì nên để 20.x
-          node-version: '20.x'
+          node-version: '22.x'
 
       - name: Install, build and test
         run: |
@@ -46,3 +46,4 @@ jobs:
           app-name: 'aidefcom'
           slot-name: 'Production'   # nếu bạn không dùng slot riêng có thể bỏ dòng này
           package: .
+
