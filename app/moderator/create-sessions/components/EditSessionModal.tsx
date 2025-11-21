@@ -54,7 +54,7 @@ const ClockIcon = () => (
 
 interface Session {
   id: number;
-  groupId: number;
+  groupId: string | number; // Allow both string (group name) and number (group id)
   location: string;
   date: string;
   time: string;

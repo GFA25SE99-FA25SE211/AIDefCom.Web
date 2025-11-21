@@ -2,13 +2,21 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Plus, Calendar, Clock, MapPin, Users, CheckCircle } from "lucide-react";
+import {
+  Plus,
+  Calendar,
+  Clock,
+  MapPin,
+  Users,
+  CheckCircle,
+} from "lucide-react";
 import CreateSessionForm, {
   SessionFormData,
 } from "./components/CreateSessionForm";
 import { defenseSessionsApi } from "@/lib/api/defense-sessions";
 import { groupsApi } from "@/lib/api/groups";
 import type { DefenseSessionDto, GroupDto } from "@/lib/models";
+import { swalConfig } from "@/lib/utils/sweetAlert";
 
 // Inline SVG icons nhỏ gọn (kích thước 20x20)
 const Icon = ({ children }: { children: React.ReactNode }) => (
@@ -16,6 +24,22 @@ const Icon = ({ children }: { children: React.ReactNode }) => (
     {children}
   </span>
 );
+
+const normalizeGroup = (group: GroupDto): GroupDto => ({
+  ...group,
+  groupName:
+    group.groupName ||
+    group.projectCode ||
+    group.topicTitle_EN ||
+    group.topicTitle_VN ||
+    `Group ${group.id?.slice(0, 6) || ""}`,
+  projectTitle:
+    group.projectTitle ||
+    group.topicTitle_EN ||
+    group.topicTitle_VN ||
+    group.projectCode ||
+    "No project title",
+});
 
 export default function CreateSessionsPage() {
   const [isFormVisible, setIsFormVisible] = useState(false);
@@ -33,7 +57,8 @@ export default function CreateSessionsPage() {
         ]);
 
         setSessions(sessionsRes.data || []);
-        setGroups(groupsRes.data || []);
+        const normalizedGroups = (groupsRes.data || []).map(normalizeGroup);
+        setGroups(normalizedGroups);
       } catch (error) {
         console.error("Error fetching data:", error);
       } finally {
@@ -48,58 +73,70 @@ export default function CreateSessionsPage() {
     try {
       const group = groups.find((g) => g.groupName === formData.groupName);
       if (!group) {
-        alert("Group not found!");
+        await swalConfig.error(
+          "Group Not Found",
+          "The specified group could not be found. Please check the group name and try again."
+        );
         return;
       }
 
       await defenseSessionsApi.create({
         groupId: group.id,
-        sessionDate: formData.defenseDate,
-        sessionTime: formData.defenseTime,
+        defenseDate: formData.defenseDate,
+        startTime: formData.defenseTime,
+        endTime: formData.defenseTime, // TODO: Add endTime to form
         location: formData.location,
       });
 
       // Refresh sessions
       const response = await defenseSessionsApi.getAll();
       setSessions(response.data || []);
-    setIsFormVisible(false);
-      alert("Session created successfully!");
+      setIsFormVisible(false);
+
+      await swalConfig.success(
+        "Session Created Successfully!",
+        "The defense session has been scheduled successfully."
+      );
     } catch (error: any) {
       console.error("Error creating session:", error);
-      alert(`Error: ${error.message || "Failed to create session"}`);
+      await swalConfig.error(
+        "Failed to Create Session",
+        error.message ||
+          "An unexpected error occurred while creating the session."
+      );
     }
   };
 
   const scheduledSessions = sessions
     .filter((s) => {
-      const sessionDate = new Date(s.sessionDate);
+      const sessionDate = new Date(s.defenseDate);
       return sessionDate >= new Date();
     })
     .map((s) => {
       const group = groups.find((g) => g.id === s.groupId);
-      const sessionDate = new Date(s.sessionDate);
+      const sessionDate = new Date(s.defenseDate);
       return {
         id: s.id,
         groupName: group?.groupName || "Unknown",
         date: sessionDate.toLocaleDateString("en-GB"),
-        time: s.sessionTime || "TBD",
+        time: s.startTime || "TBD",
         location: s.location || "TBD",
       };
     });
 
   const completedSessions = sessions
     .filter((s) => {
-      const sessionDate = new Date(s.sessionDate);
+      const sessionDate = new Date(s.defenseDate);
       return sessionDate < new Date();
     })
     .map((s) => {
       const group = groups.find((g) => g.id === s.groupId);
-      const sessionDate = new Date(s.sessionDate);
+      const sessionDate = new Date(s.defenseDate);
       return {
         id: s.id,
         groupName: group?.groupName || "Unknown",
         date: sessionDate.toLocaleDateString("en-GB"),
-        time: s.sessionTime || "TBD",
+        time: s.startTime || "TBD",
         location: s.location || "TBD",
       };
     });

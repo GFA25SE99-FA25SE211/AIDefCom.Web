@@ -9,7 +9,6 @@ interface UserAccount {
   name: string;
   email: string;
   role: string;
-  department: string;
   status: string;
   createdDate: string;
 }
@@ -18,7 +17,6 @@ export interface AccountEditFormData {
   fullName: string;
   email: string;
   role: string;
-  department: string;
 }
 
 interface EditAccountModalProps {
@@ -37,26 +35,23 @@ const EditAccountModal: React.FC<EditAccountModalProps> = ({
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [role, setRole] = useState("");
-  const [department, setDepartment] = useState("");
 
   useEffect(() => {
     if (accountData) {
       setFullName(accountData.name);
       setEmail(accountData.email);
       setRole(accountData.role);
-      setDepartment(accountData.department);
     } else {
       setFullName("");
       setEmail("");
       setRole("");
-      setDepartment("");
     }
   }, [accountData]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!accountData) return;
-    onSubmit(accountData.id, { fullName, email, role, department });
+    onSubmit(accountData.id, { fullName, email, role });
   };
 
   if (!accountData) return null;
@@ -128,18 +123,6 @@ const EditAccountModal: React.FC<EditAccountModalProps> = ({
             <option value="Secretary">Secretary</option>
             <option value="Student">Student</option>
           </select>
-        </div>
-
-        <div className="form-group">
-          <label htmlFor="editDepartment">Department</label>
-          <input
-            id="editDepartment"
-            type="text"
-            placeholder="Computer Science"
-            value={department}
-            onChange={(e) => setDepartment(e.target.value)}
-            required
-          />
         </div>
       </form>
     </Modal>

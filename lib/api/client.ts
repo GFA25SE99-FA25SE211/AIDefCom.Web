@@ -81,12 +81,52 @@ class ApiClient {
           statusText: response.statusText,
           error: errorData,
           url,
+          rawResponse: errorText.substring(0, 500), // Include raw response for debugging
         });
-        throw new Error(errorMessage);
+        
+        // Provide more descriptive error messages based on status code
+        let userFriendlyMessage = errorMessage;
+        if (response.status === 404) {
+          userFriendlyMessage = `Resource not found: ${errorMessage}`;
+        } else if (response.status === 401) {
+          userFriendlyMessage = `Authentication required: ${errorMessage}`;
+        } else if (response.status === 403) {
+          userFriendlyMessage = `Access forbidden: ${errorMessage}`;
+        } else if (response.status === 500) {
+          userFriendlyMessage = `Server error: ${errorMessage}`;
+        } else if (response.status >= 400 && response.status < 500) {
+          userFriendlyMessage = `Client error (${response.status}): ${errorMessage}`;
+        } else if (response.status >= 500) {
+          userFriendlyMessage = `Server error (${response.status}): ${errorMessage}`;
+        }
+        
+        throw new Error(userFriendlyMessage);
       }
 
-      const data = await response.json();
-      return data;
+      // Handle empty response body (common for DELETE operations)
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        try {
+          const data = await response.json();
+          return data;
+        } catch (jsonError) {
+          // If JSON parsing fails but response was ok, return a success indicator
+          console.warn(`JSON parsing failed for successful response [${endpoint}]:`, jsonError);
+          return { 
+            code: response.status, 
+            message: 'Operation completed successfully',
+            data: null as T
+          };
+        }
+      } else {
+        // For non-JSON responses (e.g., plain text or empty), return success
+        const textData = await response.text();
+        return { 
+          code: response.status,
+          message: textData || 'Operation completed successfully',
+          data: textData as T
+        };
+      }
     } catch (error) {
       console.error(`API Error [${endpoint}]:`, error);
       // Re-throw with more context if it's a network error

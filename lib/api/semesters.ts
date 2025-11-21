@@ -6,8 +6,8 @@ import type {
 } from '@/lib/models';
 
 export const semestersApi = {
-  getAll: async () => {
-    return apiClient.get<SemesterDto[]>('/api/semesters');
+  getAll: async (includeDeleted: boolean = false) => {
+    return apiClient.get<SemesterDto[]>(`/api/semesters?includeDeleted=${includeDeleted}`);
   },
 
   getById: async (id: number) => {
@@ -28,6 +28,10 @@ export const semestersApi = {
 
   delete: async (id: number) => {
     return apiClient.delete(`/api/semesters/${id}`);
+  },
+
+  restore: async (id: number) => {
+    return apiClient.put(`/api/semesters/${id}/restore`, {});
   },
 };
 

@@ -141,21 +141,27 @@ export default function AdminDashboardPage() {
         const usersData = usersRes.data || [];
         const councils = councilsRes.data || [];
         const sessionsData = sessionsRes.data || [];
-        
+
         setUsers(usersData);
         setSessions(sessionsData);
 
         const upcomingSessions = sessionsData.filter((s: DefenseSessionDto) => {
-          const sessionDate = new Date(s.sessionDate);
+          const sessionDate = new Date(s.defenseDate);
           return sessionDate >= new Date();
         });
 
-        const completedSessions = sessionsData.filter((s: DefenseSessionDto) => {
-          const sessionDate = new Date(s.sessionDate);
-          const now = new Date();
-          const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-          return sessionDate >= startOfMonth && sessionDate < now && s.status === "Completed";
-        });
+        const completedSessions = sessionsData.filter(
+          (s: DefenseSessionDto) => {
+            const sessionDate = new Date(s.defenseDate);
+            const now = new Date();
+            const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+            return (
+              sessionDate >= startOfMonth &&
+              sessionDate < now &&
+              s.status === "Completed"
+            );
+          }
+        );
 
         // Calculate user distribution by roles
         const roleCounts: { [key: string]: number } = {};
@@ -176,35 +182,44 @@ export default function AdminDashboardPage() {
 
         for (let i = 5; i >= 0; i--) {
           const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
-          const monthName = date.toLocaleDateString("en-US", { month: "short" });
+          const monthName = date.toLocaleDateString("en-US", {
+            month: "short",
+          });
           monthLabels.push(monthName);
 
           const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
           const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0);
 
-          const sessionsInMonth = sessionsData.filter((s: DefenseSessionDto) => {
-            const sessionDate = new Date(s.sessionDate);
-            return sessionDate >= monthStart && sessionDate <= monthEnd;
-          }).length;
+          const sessionsInMonth = sessionsData.filter(
+            (s: DefenseSessionDto) => {
+              const sessionDate = new Date(s.defenseDate);
+              return sessionDate >= monthStart && sessionDate <= monthEnd;
+            }
+          ).length;
 
           sessionCounts.push(sessionsInMonth);
-          
+
           // Count sessions up to this month for user activity representation
-          const sessionsUpToMonth = sessionsData.filter((s: DefenseSessionDto) => {
-            const sessionDate = new Date(s.sessionDate);
-            return sessionDate <= monthEnd;
-          }).length;
+          const sessionsUpToMonth = sessionsData.filter(
+            (s: DefenseSessionDto) => {
+              const sessionDate = new Date(s.defenseDate);
+              return sessionDate <= monthEnd;
+            }
+          ).length;
           userCounts.push(sessionsUpToMonth);
         }
 
         // Recent activity from sessions
         const recentSessions = sessionsData
           .sort((a: DefenseSessionDto, b: DefenseSessionDto) => {
-            return new Date(b.sessionDate).getTime() - new Date(a.sessionDate).getTime();
+            return (
+              new Date(b.defenseDate).getTime() -
+              new Date(a.defenseDate).getTime()
+            );
           })
           .slice(0, 5)
           .map((s: DefenseSessionDto) => {
-            const sessionDate = new Date(s.sessionDate);
+            const sessionDate = new Date(s.defenseDate);
             const now = new Date();
             const diffMs = now.getTime() - sessionDate.getTime();
             const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
@@ -225,12 +240,18 @@ export default function AdminDashboardPage() {
               time: timeAgo,
               type: "session",
             };
-        });
+          });
 
         setSummaryStats({
           totalUsers: { value: usersData.length, change: "Total accounts" },
-          activeCouncils: { value: councils.filter((c: CouncilDto) => c.isActive).length, change: `${councils.length} total` },
-          defenseSessions: { value: sessionsData.length, change: `${upcomingSessions.length} upcoming` },
+          activeCouncils: {
+            value: councils.filter((c: CouncilDto) => c.isActive).length,
+            change: `${councils.length} total`,
+          },
+          defenseSessions: {
+            value: sessionsData.length,
+            change: `${upcomingSessions.length} upcoming`,
+          },
           activeNow: { value: 0, change: "Online users" },
         });
 
@@ -273,18 +294,25 @@ export default function AdminDashboardPage() {
           ],
         });
 
-        const totalSessionsThisMonth = sessionsData.filter((s: DefenseSessionDto) => {
-          const sessionDate = new Date(s.sessionDate);
-          const now = new Date();
-          const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-          return sessionDate >= startOfMonth;
-        }).length;
+        const totalSessionsThisMonth = sessionsData.filter(
+          (s: DefenseSessionDto) => {
+            const sessionDate = new Date(s.defenseDate);
+            const now = new Date();
+            const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+            return sessionDate >= startOfMonth;
+          }
+        ).length;
 
         setFooterStats({
           completedMonth: {
             value: completedSessions.length,
             label: "Sessions",
-            progress: totalSessionsThisMonth > 0 ? Math.round((completedSessions.length / totalSessionsThisMonth) * 100) : 0,
+            progress:
+              totalSessionsThisMonth > 0
+                ? Math.round(
+                    (completedSessions.length / totalSessionsThisMonth) * 100
+                  )
+                : 0,
           },
           avgRating: { value: "N/A", progress: 0 },
           uptime: { value: "99.8%", progress: 99.8 },
@@ -301,38 +329,39 @@ export default function AdminDashboardPage() {
     fetchDashboardData();
   }, []);
 
-const getActivityDotColor = (type: string) => {
-  switch (type) {
-    case "council":
-      return "dot-green";
-    case "session":
-      return "dot-blue";
-    case "account":
-      return "dot-green";
-    case "grading":
-      return "dot-purple";
-    case "report":
-      return "dot-orange";
-    default:
-      return "dot-blue";
-  }
-};
+  const getActivityDotColor = (type: string) => {
+    switch (type) {
+      case "council":
+        return "dot-green";
+      case "session":
+        return "dot-blue";
+      case "account":
+        return "dot-green";
+      case "grading":
+        return "dot-purple";
+      case "report":
+        return "dot-orange";
+      default:
+        return "dot-blue";
+    }
+  };
 
+  const lineChartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { position: "bottom" as const },
+      title: { display: false },
+    },
+  };
 
-const lineChartOptions = {
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: {
-    legend: { position: "bottom" as const },
-    title: { display: false },
-  },
-};
-
-const pieChartOptions = {
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: { legend: { position: "right" as const, labels: { padding: 15 } } },
-};
+  const pieChartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { position: "right" as const, labels: { padding: 15 } },
+    },
+  };
 
   if (loading) {
     return (
@@ -438,21 +467,23 @@ const pieChartOptions = {
           <ul className="activity-list">
             {recentActivity.length > 0 ? (
               recentActivity.map((a, i) => (
-              <li key={i} className="activity-item">
-                <span
-                  className={`activity-dot ${getActivityDotColor(a.type)}`}
-                />
-                <div className="activity-info">
-                  <span className="actor">{a.actor}</span>
-                  <span className="action">{a.action}</span>
-                </div>
-                <span className="activity-time">{a.time}</span>
-              </li>
+                <li key={i} className="activity-item">
+                  <span
+                    className={`activity-dot ${getActivityDotColor(a.type)}`}
+                  />
+                  <div className="activity-info">
+                    <span className="actor">{a.actor}</span>
+                    <span className="action">{a.action}</span>
+                  </div>
+                  <span className="activity-time">{a.time}</span>
+                </li>
               ))
             ) : (
               <li className="activity-item">
                 <div className="activity-info">
-                  <span className="action text-gray-400">No recent activity</span>
+                  <span className="action text-gray-400">
+                    No recent activity
+                  </span>
                 </div>
               </li>
             )}

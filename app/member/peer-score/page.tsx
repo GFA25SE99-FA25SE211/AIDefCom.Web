@@ -8,8 +8,19 @@ import { committeeAssignmentsApi } from "@/lib/api/committee-assignments";
 import { authApi } from "@/lib/api/auth";
 import type { GroupDto, DefenseSessionDto } from "@/lib/models";
 
-// Dữ liệu (giữ nguyên)
-const scoreData = [
+interface ScoreData {
+  groupName: string;
+  projectTitle: string;
+  avgScore: string | null;
+  members: Array<{
+    name: string;
+    score: string;
+    status: "Submitted" | "Pending";
+  }>;
+}
+
+// Dữ liệu mẫu (fallback)
+const defaultScoreData: ScoreData[] = [
   {
     groupName: "Group 1",
     projectTitle: "Smart Learning Management System",
@@ -102,19 +113,21 @@ const scoreData = [
   },
 ];
 
-interface ScoreData {
-  groupName: string;
-  projectTitle: string;
-  avgScore: string | null;
-  members: Array<{
-    name: string;
-    score: string;
-    status: "Submitted" | "Pending";
-  }>;
-}
+const getGroupDisplayName = (group: GroupDto) =>
+  group.groupName ||
+  group.projectCode ||
+  group.topicTitle_EN ||
+  group.topicTitle_VN ||
+  `Group ${group.id?.slice(0, 6) || ""}`;
+
+const getProjectTitle = (group: GroupDto) =>
+  group.projectTitle ||
+  group.topicTitle_EN ||
+  group.topicTitle_VN ||
+  "No project title";
 
 export default function PeerScoresPage() {
-  const [scoreData, setScoreData] = useState<ScoreData[]>([]);
+const [scoreData, setScoreData] = useState<ScoreData[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -134,33 +147,40 @@ export default function PeerScoresPage() {
         const users = usersRes.data || [];
 
         // Transform data to score format
-        const scores: ScoreData[] = groups.map((group: GroupDto) => {
+        const scores: ScoreData[] = groups.map((group: GroupDto): ScoreData => {
           const groupSessions = sessions.filter((s: DefenseSessionDto) => s.groupId === group.id);
           const groupAssignments = assignments.filter((a: any) => 
             groupSessions.some((s: DefenseSessionDto) => s.id === a.defenseSessionId)
           );
 
-          const members = groupAssignments.map((a: any) => {
+          const members: Array<{
+            name: string;
+            score: string;
+            status: "Pending" | "Submitted";
+          }> = groupAssignments.map((a: any) => {
             const user = users.find((u: any) => u.id === a.lecturerId);
             return {
               name: user?.fullName || "Unknown",
               score: "-", // TODO: Get from scores API
-              status: "Pending" as const,
+              status: "Pending" as "Pending" | "Submitted",
             };
           });
 
+          const displayName = getGroupDisplayName(group);
+          const projectTitle = getProjectTitle(group);
+
           return {
-            groupName: group.groupName,
-            projectTitle: group.projectTitle || "No project title",
+            groupName: displayName,
+            projectTitle,
             avgScore: null, // TODO: Calculate from scores
             members,
           };
         });
 
-        setScoreData(scores.length > 0 ? scores : scoreData); // Fallback to default if empty
+        setScoreData(scores.length > 0 ? scores : defaultScoreData); // Fallback to default if empty
       } catch (error) {
         console.error("Error fetching peer scores:", error);
-        setScoreData(scoreData); // Use default data on error
+        setScoreData(defaultScoreData); // Use default data on error
       } finally {
         setLoading(false);
       }
@@ -218,9 +238,10 @@ export default function PeerScoresPage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {(scoreData.length > 0 ? scoreData : scoreData).map((group) => (
+          {(scoreData.length > 0 ? scoreData : defaultScoreData).map(
+            (group, groupIndex) => (
             <div
-              key={group.groupName}
+              key={`${group.groupName}-${groupIndex}`}
               className="score-card bg-white rounded-xl shadow p-5"
             >
               <div className="score-card-header flex items-start justify-between gap-4">
@@ -251,9 +272,9 @@ export default function PeerScoresPage() {
                   <span className="col-span-2 text-right">Status</span>
                 </div>
 
-                {group.members.map((member) => (
+                {group.members.map((member, memberIndex) => (
                   <div
-                    key={member.name}
+                    key={`${group.groupName}-${member.name}-${memberIndex}`}
                     className="score-table-row grid grid-cols-12 items-center py-3 border-b last:border-b-0"
                   >
                     <div className="col-span-7 flex items-center gap-3 text-sm text-gray-800">
@@ -290,7 +311,8 @@ export default function PeerScoresPage() {
                 ))}
               </div>
             </div>
-          ))}
+            )
+          )}
         </div>
 
         <footer className="page-footer text-center text-sm text-gray-500 mt-8">

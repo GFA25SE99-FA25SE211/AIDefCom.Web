@@ -5,6 +5,7 @@ export interface CommitteeAssignmentDto {
   councilId: number;
   defenseSessionId: number;
   role: string;
+  roleName?: string; // API có thể trả về roleName
 }
 
 export interface CommitteeAssignmentCreateDto {

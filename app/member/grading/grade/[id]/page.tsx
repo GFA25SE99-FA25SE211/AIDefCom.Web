@@ -143,9 +143,21 @@ export default function GradeGroupPage() {
         setRubrics(rubricsRes.data || []);
 
         if (group) {
+          const displayName =
+            group.groupName ||
+            group.projectCode ||
+            group.topicTitle_EN ||
+            group.topicTitle_VN ||
+            `Group ${group.id?.slice(0, 6) || ""}`;
+          const projectTitle =
+            group.projectTitle ||
+            group.topicTitle_EN ||
+            group.topicTitle_VN ||
+            "No project title";
+
           const groupData: GroupData = {
-            name: group.groupName,
-            project: group.projectTitle || "No project title",
+            name: displayName,
+            project: projectTitle,
             students: students.map((s: StudentDto, index: number) => ({
               id: s.id,
               name: s.fullName || s.userName || "Unknown",

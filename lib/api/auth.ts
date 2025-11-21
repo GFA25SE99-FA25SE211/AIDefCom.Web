@@ -27,7 +27,9 @@ export const authApi = {
   },
 
   softDeleteAccount: async (email: string) => {
-    return apiClient.delete(`/api/auth/accounts/${email}`);
+    // URL encode the email to handle special characters
+    const encodedEmail = encodeURIComponent(email);
+    return apiClient.delete(`/api/auth/accounts/${encodedEmail}`);
   },
 
   restoreAccount: async (email: string) => {
