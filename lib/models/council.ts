@@ -1,6 +1,8 @@
 // Council Models
 export interface CouncilDto {
   id: number;
+  majorId: number;
+  majorName: string;
   councilName?: string;
   description?: string;
   createdDate?: string;

@@ -21,18 +21,18 @@ const SaveIcon = () => (
 );
 
 interface Group {
-  id: number;
+  id: string;
   topicEN: string;
   topicVN: string;
   semester: string;
-  status: "Active" | "Completed" | "Pending";
+  status: string;
 }
 
 interface EditGroupModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (
-    id: number,
+    id: string,
     data: {
       topicEN: string;
       topicVN: string;

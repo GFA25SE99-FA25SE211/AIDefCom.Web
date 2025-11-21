@@ -137,7 +137,7 @@ export default function StudentHistoryDetailPage() {
           attempts: studentSessions.map((s: DefenseSessionDto, index: number) => ({
             attempt: `Attempt #${studentSessions.length - index}`,
             id: `DEF-${s.id}`,
-            date: s.sessionDate,
+            date: s.defenseDate,
             group: "Group", // TODO: Get group name
             topic: "Project", // TODO: Get project title
             role: "Member",

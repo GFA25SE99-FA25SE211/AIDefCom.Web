@@ -5,7 +5,8 @@ export interface SemesterDto {
   year: number;
   startDate: string;
   endDate: string;
-  majorId: number;
+  // Backend doesn't return majorId in SemesterReadDto
+  majorId?: number;
 }
 
 export interface SemesterCreateDto {

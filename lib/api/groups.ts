@@ -6,8 +6,8 @@ import type {
 } from '@/lib/models';
 
 export const groupsApi = {
-  getAll: async () => {
-    return apiClient.get<GroupDto[]>('/api/groups');
+  getAll: async (includeDeleted: boolean = false) => {
+    return apiClient.get<GroupDto[]>(`/api/groups?includeDeleted=${includeDeleted}`);
   },
 
   getById: async (id: string) => {
@@ -28,6 +28,10 @@ export const groupsApi = {
 
   delete: async (id: string) => {
     return apiClient.delete(`/api/groups/${id}`);
+  },
+
+  restore: async (id: string) => {
+    return apiClient.put(`/api/groups/${id}/restore`, {});
   },
 };
 

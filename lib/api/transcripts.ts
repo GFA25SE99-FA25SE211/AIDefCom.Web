@@ -29,5 +29,9 @@ export const transcriptsApi = {
   delete: async (id: number) => {
     return apiClient.delete(`/api/transcripts/${id}`);
   },
+
+  restore: async (id: number) => {
+    return apiClient.put(`/api/transcripts/${id}/restore`, {});
+  },
 };
 
