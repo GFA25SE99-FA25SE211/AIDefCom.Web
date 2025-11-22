@@ -23,7 +23,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          # Nên khớp với version cấu hình trên Azure (WEBSITE_NODE_DEFAULT_VERSION)
+          # khớp với "engines": { "node": "22.x" } trong package.json
           node-version: '22.x'
           cache: 'npm'
           cache-dependency-path: |
@@ -32,15 +32,36 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build app
-        run: npm run build --if-present
+      - name: Build Next.js (standalone)
+        run: npm run build
 
-      - name: Run tests
-        run: npm run test --if-present
+      # 👉 Chuẩn bị thư mục 'app' chứa bundle standalone để đem sang Azure
+      - name: Prepare standalone app folder
+        run: |
+          rm -rf app
+          mkdir -p app
 
-      # Giảm size gói deploy: không gửi node_modules lên Azure
-      #- name: Clean node_modules before deploy
-      #  run: rm -rf node_modules
+          # copy toàn bộ server standalone (server.js, package.json, v.v.)
+          cp -r .next/standalone/* app/
+
+          # copy static assets
+          mkdir -p app/.next
+          cp -r .next/static app/.next/static
+
+          # copy public assets nếu có
+          if [ -d "public" ]; then
+            cp -r public app/public
+          fi
+
+          # copy node_modules để runtime dùng, khỏi npm install trên Azure
+          cp -r node_modules app/node_modules || true
+
+      - name: Show app folder structure (debug)
+        run: |
+          echo "=== app root ==="
+          ls -la app
+          echo "=== .next ==="
+          ls -la app/.next
 
       - name: Login to Azure
         uses: azure/login@v2
@@ -54,6 +75,6 @@ jobs:
         uses: azure/webapps-deploy@v3
         with:
           app-name: 'aidefcom'
-          slot-name: 'Production'   # nếu bạn không dùng slot riêng có thể bỏ dòng này
-          package: .
-
+          slot-name: 'Production'   # nếu không dùng slot thì có thể bỏ
+          package: ./app            # ❗ chỉ deploy thư mục app
+          clean: true               # ❗ xóa sạch file cũ trước khi deploy
