@@ -41,20 +41,24 @@ jobs:
           rm -rf app
           mkdir -p app
 
-          # copy toàn bộ server standalone (server.js, package.json, v.v.)
-          cp -r .next/standalone/* app/
+          # copy server.js, package.json, v.v. (trừ thư mục .next ẩn)
+          cp -R .next/standalone/* app/ || true
+
+          # ⭐ copy riêng thư mục .next (vì bị ẩn nên * không match)
+          cp -R .next/standalone/.next app/.next
 
           # copy static assets
-          mkdir -p app/.next
-          cp -r .next/static app/.next/static
+          mkdir -p app/.next/static
+          cp -R .next/static/* app/.next/static/ || true
 
           # copy public assets nếu có
           if [ -d "public" ]; then
-            cp -r public app/public
+            cp -R public app/public
           fi
 
           # copy node_modules để runtime dùng, khỏi npm install trên Azure
-          cp -r node_modules app/node_modules || true
+          cp -R node_modules app/node_modules || true
+
 
       - name: Show app folder structure (debug)
         run: |
@@ -78,3 +82,4 @@ jobs:
           slot-name: 'Production'   # nếu không dùng slot thì có thể bỏ
           package: ./app            # ❗ chỉ deploy thư mục app
           clean: true               # ❗ xóa sạch file cũ trước khi deploy
+
