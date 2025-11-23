@@ -1,37 +1,63 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { Languages, Search, Users } from "lucide-react";
+import { studentsApi } from "@/lib/api/students";
+import { defenseSessionsApi } from "@/lib/api/defense-sessions";
+import type { StudentDto } from "@/lib/models";
 
-const studentListData = [
-  {
-    id: "SV001",
-    name: "Nguyen Van A",
-    email: "a.nguyen@example.com",
-    failedDefenses: 2,
-  },
-  {
-    id: "SV002",
-    name: "Tran Thi B",
-    email: "b.tran@example.com",
-    failedDefenses: 0,
-  },
-  {
-    id: "SV003",
-    name: "Le Van C",
-    email: "c.le@example.com",
-    failedDefenses: 1,
-  },
-  {
-    id: "SV004",
-    name: "Pham Van D",
-    email: "d.pham@example.com",
-    failedDefenses: 0,
-  },
-];
+interface StudentWithHistory extends StudentDto {
+  failedDefenses: number;
+}
 
 export default function StudentHistoryListPage() {
+  const [students, setStudents] = useState<StudentWithHistory[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchStudents = async () => {
+      try {
+        setLoading(true);
+        const [studentsRes, sessionsRes] = await Promise.all([
+          studentsApi.getAll().catch(() => ({ data: [] })),
+          defenseSessionsApi.getAll().catch(() => ({ data: [] })),
+        ]);
+
+        const studentsData = studentsRes.data || [];
+        const sessions = sessionsRes.data || [];
+
+        // Calculate failed defenses for each student
+        const studentsWithHistory: StudentWithHistory[] = studentsData.map((student: StudentDto) => {
+          // This is a simplified calculation - you may need to adjust based on actual score data
+          const failedDefenses = 0; // TODO: Calculate from scores when score API is available
+          return {
+            ...student,
+            failedDefenses,
+          };
+        });
+
+        setStudents(studentsWithHistory);
+      } catch (error) {
+        console.error("Error fetching students:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchStudents();
+  }, []);
+
+  const filteredStudents = students.filter((student) => {
+    const searchLower = searchTerm.toLowerCase();
+    return (
+      student.studentCode?.toLowerCase().includes(searchLower) ||
+      student.fullName?.toLowerCase().includes(searchLower) ||
+      student.userName?.toLowerCase().includes(searchLower) ||
+      student.email?.toLowerCase().includes(searchLower)
+    );
+  });
   return (
     <>
       <main className="main-content">
@@ -60,6 +86,8 @@ export default function StudentHistoryListPage() {
               type="text"
               placeholder="Search by name, student ID, or email..."
               className="flex-1 outline-none text-sm text-gray-700 placeholder-gray-400"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
         </div>
@@ -69,10 +97,13 @@ export default function StudentHistoryListPage() {
           <div className="flex items-center gap-2 mb-4">
             <Users className="w-5 h-5 text-blue-600" />
             <h2 className="text-lg font-semibold text-gray-800">
-              Students ({studentListData.length})
+              Students ({filteredStudents.length})
             </h2>
           </div>
 
+          {loading ? (
+            <div className="text-center py-8 text-gray-500">Loading students...</div>
+          ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead>
@@ -86,13 +117,13 @@ export default function StudentHistoryListPage() {
               </thead>
 
               <tbody>
-                {studentListData.map((student) => (
+                  {filteredStudents.map((student) => (
                   <tr
                     key={student.id}
                     className="border-b last:border-0 hover:bg-gray-50 transition"
                   >
                     <td className="py-3 px-4 font-medium text-gray-800">
-                      {student.id}
+                        {student.studentCode || student.id}
                     </td>
 
                     <td className="py-3 px-4">
@@ -100,11 +131,11 @@ export default function StudentHistoryListPage() {
                         href={`/member/student-history/${student.id}`}
                         className="text-indigo-600 hover:underline font-medium"
                       >
-                        {student.name}
+                          {student.fullName || student.userName || "Unknown"}
                       </Link>
                     </td>
 
-                    <td className="py-3 px-4 text-gray-700">{student.email}</td>
+                      <td className="py-3 px-4 text-gray-700">{student.email || "N/A"}</td>
 
                     <td className="py-3 px-4 text-center">
                       <span
@@ -128,9 +159,17 @@ export default function StudentHistoryListPage() {
                     </td>
                   </tr>
                 ))}
+                  {filteredStudents.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="text-center py-8 text-gray-400">
+                        No students found.
+                      </td>
+                    </tr>
+                  )}
               </tbody>
             </table>
           </div>
+          )}
         </div>
 
         {/* Footer */}

@@ -1,9 +1,14 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Languages, ArrowLeft, Save } from "lucide-react";
+import { groupsApi } from "@/lib/api/groups";
+import { studentsApi } from "@/lib/api/students";
+import { memberNotesApi } from "@/lib/api/member-notes";
+import { rubricsApi } from "@/lib/api/rubrics";
+import type { GroupDto, StudentDto } from "@/lib/models";
 
 interface StudentScore {
   id: string;
@@ -117,11 +122,70 @@ export default function GradeGroupPage() {
   const router = useRouter();
   const params = useParams();
   const groupId = params.id as string;
-  const groupData = allGroupsData[groupId] || allGroupsData["2"];
-  const [studentScores, setStudentScores] = useState<StudentScore[]>(
-    groupData.students
-  );
+  const [groupData, setGroupData] = useState<GroupData | null>(null);
+  const [studentScores, setStudentScores] = useState<StudentScore[]>([]);
   const [notesVisibility, setNotesVisibility] = useState<NotesVisibility>({});
+  const [loading, setLoading] = useState(true);
+  const [rubrics, setRubrics] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchGroupData = async () => {
+      try {
+        setLoading(true);
+        const [groupRes, studentsRes, rubricsRes] = await Promise.all([
+          groupsApi.getById(groupId).catch(() => ({ data: null })),
+          studentsApi.getByGroupId(groupId).catch(() => ({ data: [] })),
+          rubricsApi.getAll().catch(() => ({ data: [] })),
+        ]);
+
+        const group = groupRes.data;
+        const students = studentsRes.data || [];
+        setRubrics(rubricsRes.data || []);
+
+        if (group) {
+          const displayName =
+            group.groupName ||
+            group.projectCode ||
+            group.topicTitle_EN ||
+            group.topicTitle_VN ||
+            `Group ${group.id?.slice(0, 6) || ""}`;
+          const projectTitle =
+            group.projectTitle ||
+            group.topicTitle_EN ||
+            group.topicTitle_VN ||
+            "No project title";
+
+          const groupData: GroupData = {
+            name: displayName,
+            project: projectTitle,
+            students: students.map((s: StudentDto, index: number) => ({
+              id: s.id,
+              name: s.fullName || s.userName || "Unknown",
+              role: index === 0 ? "Team Leader" : "Developer",
+              scores: new Array(rubrics.length || 5).fill(0),
+              note: "",
+            })),
+          };
+          setGroupData(groupData);
+          setStudentScores(groupData.students);
+        } else {
+          // Fallback to default data
+          const defaultData = allGroupsData[groupId] || allGroupsData["2"];
+          setGroupData(defaultData);
+          setStudentScores(defaultData.students);
+        }
+      } catch (error) {
+        console.error("Error fetching group data:", error);
+        const defaultData = allGroupsData[groupId] || allGroupsData["2"];
+        setGroupData(defaultData);
+        setStudentScores(defaultData.students);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchGroupData();
+  }, [groupId]);
 
   const calculateAverage = (scores: number[]) =>
     (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(2);
@@ -149,10 +213,29 @@ export default function GradeGroupPage() {
   const toggleNoteVisibility = (studentId: string) =>
     setNotesVisibility((prev) => ({ ...prev, [studentId]: !prev[studentId] }));
 
-  const handleSave = () => {
-    console.log("Saving scores:", studentScores);
-    alert("Scores saved! (Check console for data)");
-    router.push("/member/groups-to-grade");
+  const handleSave = async () => {
+    try {
+      // TODO: Save scores to API when score API is available
+      // For now, save notes
+      for (const student of studentScores) {
+        if (student.note && groupData) {
+          try {
+            await memberNotesApi.create({
+              userId: "", // TODO: Get current user ID
+              groupId: groupId,
+              content: student.note,
+            });
+          } catch (error) {
+            console.error(`Error saving note for student ${student.id}:`, error);
+          }
+        }
+      }
+      alert("Scores and notes saved successfully!");
+      router.push("/member/groups-to-grade");
+    } catch (error: any) {
+      console.error("Error saving scores:", error);
+      alert(`Error: ${error.message || "Failed to save scores"}`);
+    }
   };
 
   const handleCancel = () => router.push("/member/groups-to-grade");
@@ -166,9 +249,9 @@ export default function GradeGroupPage() {
             {/* Left section */}
             <div>
               <h1 className="text-xl font-semibold text-gray-800">
-                {groupData.name}
+                {groupData?.name || "Loading..."}
               </h1>
-              <p className="text-sm text-gray-500 mt-1">{groupData.project}</p>
+              <p className="text-sm text-gray-500 mt-1">{groupData?.project || ""}</p>
             </div>
 
             {/* Right section */}
@@ -221,27 +304,31 @@ export default function GradeGroupPage() {
             </div>
           </div>
 
-          {/* Table */}
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-gray-600">
-                  <th className="py-2 pr-4">Student</th>
-                  {criteria.map((name) => (
+          {loading ? (
+            <div className="text-center py-8 text-gray-500">Loading group data...</div>
+          ) : (
+            <>
+              {/* Table */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-gray-600">
+                      <th className="py-2 pr-4">Student</th>
+                      {(rubrics.length > 0 ? rubrics.map((r: any) => r.rubricName) : criteria).map((name) => (
                     <th key={name} className="py-2 px-3">
                       <div className="flex flex-col">
                         <span className="font-medium">{name}</span>
                         <span className="text-xs text-gray-400">(Max: 10)</span>
                       </div>
                     </th>
-                  ))}
-                  <th className="py-2 px-3">Average</th>
-                  <th className="py-2 px-3">Actions</th>
-                </tr>
-              </thead>
+                      ))}
+                      <th className="py-2 px-3">Average</th>
+                      <th className="py-2 px-3">Actions</th>
+                    </tr>
+                  </thead>
 
-              <tbody>
-                {studentScores.map((student, studentIndex) => (
+                  <tbody>
+                    {studentScores.map((student, studentIndex) => (
                   <React.Fragment key={student.id}>
                     <tr className="border-t">
                       <td className="py-4 pr-4 align-top w-64">
@@ -325,10 +412,12 @@ export default function GradeGroupPage() {
                       </tr>
                     )}
                   </React.Fragment>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </div>
 
         <footer className="page-footer text-center text-sm text-gray-500 mt-6">

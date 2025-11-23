@@ -1,6 +1,21 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { Plus, Pencil, Trash2, Search, Download } from "lucide-react";
+import { swalConfig } from "@/lib/utils/sweetAlert";
+import { councilsApi } from "@/lib/api/councils";
+import { groupsApi } from "@/lib/api/groups";
+import { studentsApi } from "@/lib/api/students";
+import { defenseSessionsApi } from "@/lib/api/defense-sessions";
+import { transcriptsApi } from "@/lib/api/transcripts";
+import { reportsApi } from "@/lib/api/reports";
+import { semestersApi } from "@/lib/api/semesters";
+import type {
+  CouncilDto,
+  GroupDto,
+  StudentDto,
+  DefenseSessionDto,
+} from "@/lib/models";
 
 import AddCouncilModal from "../create-sessions/components/AddCouncilModal";
 import AddGroupModal from "../create-sessions/components/AddGroupModal";
@@ -12,93 +27,32 @@ import EditGroupModal from "../create-sessions/components/EditGroupModal";
 import EditStudentModal from "../create-sessions/components/EditStudentModal";
 import EditSessionModal from "../create-sessions/components/EditSessionModal";
 
-// --- Icons (kept minimal) ---
-const AddIcon = () => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth={1.5}
-    className="w-4 h-4"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      d="M12 4.5v15m7.5-7.5h-15"
-    />
-  </svg>
-);
-const EditIcon = () => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth={1.5}
-    className="w-4 h-4"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.8 19.315l-1.8.5.5-1.8L16.862 4.487z"
-    />
-  </svg>
-);
-const DeleteIcon = () => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth={1.5}
-    className="w-4 h-4"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      d="M6 7.5h12M9.75 7.5v9m4.5-9v9M4.5 7.5h15M10 4.5h4"
-    />
-  </svg>
-);
-const SearchIcon = () => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth={1.5}
-    className="w-4 h-4 text-gray-400"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      d="M21 21l-4.5-4.5M5.25 10.5A5.25 5.25 0 1010.5 15.75 5.25 5.25 0 005.25 10.5z"
-    />
-  </svg>
-);
-
 // Types (kept)
 type Council = {
   id: number;
+  name: string;
   description: string;
   createdDate: string;
   status: "Active" | "Inactive";
 };
 type Group = {
-  id: number;
+  id: string;
   topicEN: string;
   topicVN: string;
   semester: string;
   status: "Active" | "Completed" | "Pending";
 };
-type Student = {
+type LocalStudent = {
   id: number;
   userId: string;
-  groupId: number;
+  groupId: string | number; // Allow both string (group name) and number (group id)
   dob: string;
   gender: string;
   role: "Leader" | "Member";
 };
 type Session = {
   id: number;
-  groupId: number;
+  groupId: string | number; // Allow both string (group name) and number (group id)
   location: string;
   date: string;
   time: string;
@@ -155,169 +109,364 @@ export default function DataManagementPage() {
   const [isEditCouncilModalOpen, setIsEditCouncilModalOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState<Group | null>(null);
   const [isEditGroupModalOpen, setIsEditGroupModalOpen] = useState(false);
-  const [editingStudent, setEditingStudent] = useState<Student | null>(null);
+  const [editingStudent, setEditingStudent] = useState<LocalStudent | null>(
+    null
+  );
   const [isEditStudentModalOpen, setIsEditStudentModalOpen] = useState(false);
   const [editingSession, setEditingSession] = useState<Session | null>(null);
   const [isEditSessionModalOpen, setIsEditSessionModalOpen] = useState(false);
 
-  // Dummy data
-  const [councils, setCouncils] = useState<Council[]>([
-    {
-      id: 1,
-      description: "AI Defense Council - Fall 2025",
-      createdDate: "2025-01-01",
-      status: "Active",
-    },
-    {
-      id: 2,
-      description: "Software Engineering Council - Spring 2025",
-      createdDate: "2025-01-05",
-      status: "Active",
-    },
-  ]);
-  const [groups, setGroups] = useState<Group[]>([
-    {
-      id: 1,
-      topicEN: "AI-Based Recommendation System",
-      topicVN: "Hệ thống Gợi ý dựa trên AI",
-      semester: "SEM001",
-      status: "Active",
-    },
-    {
-      id: 2,
-      topicEN: "Blockchain for Healthcare",
-      topicVN: "Blockchain cho Y tế",
-      semester: "SEM001",
-      status: "Active",
-    },
-  ]);
-  const [students, setStudents] = useState<Student[]>([
-    {
-      id: 1,
-      userId: "U001",
-      groupId: 1,
-      dob: "2003-05-15",
-      gender: "Male",
-      role: "Leader",
-    },
-    {
-      id: 2,
-      userId: "U002",
-      groupId: 1,
-      dob: "2003-08-20",
-      gender: "Female",
-      role: "Member",
-    },
-  ]);
-  const [sessions, setSessions] = useState<Session[]>([
-    {
-      id: 1,
-      groupId: 1,
-      location: "Room A-301",
-      date: "2025-01-15",
-      time: "09:00 - 11:00",
-      status: "Scheduled",
-    },
-  ]);
-  const [transcripts, setTranscripts] = useState<Transcript[]>([
-    {
-      id: 1,
-      sessionId: 1,
-      createdAt: "2025-01-15",
-      status: "Pending",
-      isApproved: false,
-      groupName: "Group 1",
-      date: "January 15, 2025",
-      time: "09:00 - 11:00",
-      location: "Room A-301",
-      transcriptText: "[00:00:15] Chair: Good morning everyone...",
-      audioFile: "/audio/session1.mp3",
-    },
-  ]);
-  const [reports] = useState<Report[]>([
-    {
-      id: 1,
-      sessionId: 1,
-      generatedDate: "2025-01-15",
-      summary: "Excellent presentation",
-      filePath: "/reports/session1.pdf",
-    },
-  ]);
+  // State data
+  const [councils, setCouncils] = useState<Council[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [students, setStudents] = useState<LocalStudent[]>([]);
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [transcripts, setTranscripts] = useState<Transcript[]>([]);
+  const [reports, setReports] = useState<Report[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  // Handlers (kept)
-  const handleAddCouncil = (data: {
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        const [
+          councilsRes,
+          groupsRes,
+          studentsRes,
+          sessionsRes,
+          transcriptsRes,
+          reportsRes,
+          semestersRes,
+        ] = await Promise.all([
+          councilsApi
+            .getAll(false)
+            .catch(() => ({ code: 500, message: "Failed", data: [] })),
+          groupsApi
+            .getAll(false)
+            .catch(() => ({ code: 500, message: "Failed", data: [] })),
+          studentsApi
+            .getAll()
+            .catch(() => ({ code: 500, message: "Failed", data: [] })),
+          defenseSessionsApi
+            .getAll()
+            .catch(() => ({ code: 500, message: "Failed", data: [] })),
+          transcriptsApi
+            .getAll()
+            .catch(() => ({ code: 500, message: "Failed", data: [] })),
+          reportsApi
+            .getAll()
+            .catch(() => ({ code: 500, message: "Failed", data: [] })),
+          semestersApi
+            .getAll()
+            .catch(() => ({ code: 500, message: "Failed", data: [] })),
+        ]);
+
+        console.log("API Responses:", {
+          semesters: semestersRes,
+          groups: groupsRes,
+          students: studentsRes,
+        });
+
+        // Create lookup maps
+        const semesterMap = new Map();
+        (Array.isArray(semestersRes.data) ? semestersRes.data : []).forEach(
+          (s: any) => {
+            semesterMap.set(
+              String(s.id),
+              s.name || s.semesterName || `Semester ${s.id}`
+            );
+          }
+        );
+
+        const groupMap = new Map();
+        (Array.isArray(groupsRes.data) ? groupsRes.data : []).forEach(
+          (g: any) => {
+            const groupName =
+              g.projectCode ||
+              g.groupName ||
+              g.topicTitle_EN ||
+              g.projectTitle ||
+              `Group ${g.id?.slice(0, 8) || "Unknown"}`;
+            groupMap.set(String(g.id), groupName);
+          }
+        );
+
+        console.log("Lookup Maps:", {
+          semesterMap: Object.fromEntries(semesterMap),
+          groupMap: Object.fromEntries(groupMap),
+        });
+
+        // Transform councils
+        const councilsData = (
+          Array.isArray(councilsRes.data) ? councilsRes.data : []
+        ).map((c: CouncilDto) => ({
+          id: c.id,
+          name: c.councilName || c.majorName || `Council ${c.id}`,
+          description: c.description || "",
+          createdDate: c.createdDate
+            ? new Date(c.createdDate).toISOString().split("T")[0]
+            : new Date().toISOString().split("T")[0],
+          status: c.isActive ? ("Active" as const) : ("Inactive" as const),
+        }));
+        setCouncils(councilsData);
+
+        // Transform groups
+        const groupsData = (
+          Array.isArray(groupsRes.data) ? groupsRes.data : []
+        ).map((g: GroupDto) => ({
+          id: g.id || "0",
+          topicEN:
+            g.projectCode ||
+            g.groupName ||
+            g.topicTitle_EN ||
+            g.projectTitle ||
+            `Group ${g.id?.slice(0, 8) || "Unknown"}`,
+          topicVN:
+            g.topicTitle_VN ||
+            g.projectTitle ||
+            g.projectCode ||
+            g.groupName ||
+            "Không có tiêu đề",
+          semester:
+            semesterMap.get(String(g.semesterId)) || `Semester ${g.semesterId}`,
+          status: "Active" as const,
+        }));
+        setGroups(groupsData);
+
+        // Transform students
+        const studentsData = (studentsRes.data || []).map(
+          (s: StudentDto, index: number) => {
+            // Try multiple possible group ID field names
+            const studentGroupId =
+              s.groupId ||
+              (s as any).group_id ||
+              (s as any).groupID ||
+              (s as any).Group_ID;
+
+            console.log(`Student ${index + 1}:`, {
+              studentData: s,
+              groupId: studentGroupId,
+              groupIdType: typeof studentGroupId,
+              foundInMap: groupMap.get(String(studentGroupId)),
+            });
+
+            return {
+              id: index + 1,
+              userId:
+                s.studentCode ||
+                s.userName ||
+                s.fullName ||
+                `Student ${s.id?.slice(0, 8) || index + 1}`,
+              groupId: studentGroupId
+                ? groupMap.get(String(studentGroupId)) ||
+                  `Group ${studentGroupId}`
+                : "No Group Assigned",
+              dob: s.dateOfBirth || "",
+              gender: s.gender || "",
+              role: index === 0 ? ("Leader" as const) : ("Member" as const),
+            };
+          }
+        );
+        setStudents(studentsData);
+
+        // Transform sessions
+        const sessionsData = (sessionsRes.data || []).map(
+          (s: DefenseSessionDto) => ({
+            id: s.id,
+            groupId:
+              groupMap.get(String(s.groupId)) ||
+              `Group ${s.groupId?.slice(0, 8)}` ||
+              "Unknown Group",
+            location: s.location || "TBD",
+            date: s.defenseDate
+              ? new Date(s.defenseDate).toISOString().split("T")[0]
+              : "",
+            time:
+              s.startTime && s.endTime
+                ? `${s.startTime} - ${s.endTime}`
+                : s.startTime || "TBD",
+            status:
+              s.status === "Completed"
+                ? ("Completed" as const)
+                : ("Scheduled" as const),
+          })
+        );
+        setSessions(sessionsData);
+
+        // Transform transcripts
+        const transcriptsData = (transcriptsRes.data || []).map((t: any) => ({
+          id: t.id,
+          sessionId: t.sessionId,
+          createdAt: t.createdAt || new Date().toISOString().split("T")[0],
+          status: t.isApproved ? ("Approved" as const) : ("Pending" as const),
+          isApproved: t.isApproved || false,
+          groupName: "Group",
+          date: new Date().toLocaleDateString("en-US", {
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+          }),
+          time: "TBD",
+          location: "TBD",
+          transcriptText: t.transcriptText || "",
+          audioFile: t.audioFilePath || "",
+        }));
+        setTranscripts(transcriptsData);
+
+        // Transform reports
+        const reportsData = (reportsRes.data || []).map((r: any) => ({
+          id: r.id,
+          sessionId: r.sessionId,
+          generatedDate:
+            r.generatedDate || new Date().toISOString().split("T")[0],
+          summary: r.summary || "No summary",
+          filePath: r.filePath || "",
+        }));
+        setReports(reportsData);
+      } catch (error) {
+        console.error("Error fetching data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  // Handlers
+  const handleAddCouncil = async (data: {
     description: string;
     isActive: boolean;
   }) => {
-    setCouncils([
-      ...councils,
-      {
-        id: Date.now(),
-        description: data.description,
-        createdDate: new Date().toISOString().split("T")[0],
-        status: data.isActive ? "Active" : "Inactive",
-      },
-    ]);
-    setIsAddCouncilModalOpen(false);
+    try {
+      await councilsApi.create({
+        councilName: data.description,
+        description: "",
+      });
+      const response = await councilsApi.getAll(false);
+      const councilsData = (response.data || []).map((c: CouncilDto) => ({
+        id: c.id,
+        name: c.councilName || c.majorName || `Council ${c.id}`,
+        description: c.description || "",
+        createdDate: c.createdDate
+          ? new Date(c.createdDate).toISOString().split("T")[0]
+          : new Date().toISOString().split("T")[0],
+        status: c.isActive ? ("Active" as const) : ("Inactive" as const),
+      }));
+      setCouncils(councilsData);
+      setIsAddCouncilModalOpen(false);
+      await swalConfig.success("Success!", "Council created successfully!");
+    } catch (error: any) {
+      await swalConfig.error(
+        "Error Creating Council",
+        error.message || "Failed to create council"
+      );
+    }
   };
-  const handleAddGroup = (data: {
+
+  const handleAddGroup = async (data: {
     topicEN: string;
     topicVN: string;
     semesterId: string;
     status: string;
   }) => {
-    setGroups([
-      ...groups,
-      {
-        id: Date.now(),
-        topicEN: data.topicEN,
-        topicVN: data.topicVN,
-        semester: data.semesterId,
-        status: data.status as Group["status"],
-      },
-    ]);
-    setIsAddGroupModalOpen(false);
+    try {
+      await groupsApi.create({
+        groupName: data.topicEN,
+        projectTitle: data.topicVN,
+        semesterId: parseInt(data.semesterId) || 1,
+      });
+      const response = await groupsApi.getAll(false);
+      const groupsData = (response.data || []).map((g: GroupDto) => ({
+        id: g.id || "0",
+        topicEN: g.projectTitle || "No title",
+        topicVN: g.projectTitle || "Không có tiêu đề",
+        semester: String(g.semesterId),
+        status: "Active" as const,
+      }));
+      setGroups(groupsData);
+      setIsAddGroupModalOpen(false);
+      await swalConfig.success("Success!", "Group created successfully!");
+    } catch (error: any) {
+      await swalConfig.error(
+        "Error Creating Group",
+        error.message || "Failed to create group"
+      );
+    }
   };
-  const handleAddStudent = (data: {
+
+  const handleAddStudent = async (data: {
     userId: string;
     groupId: string;
     dob: string;
     gender: string;
     role: string;
   }) => {
-    setStudents([
-      ...students,
-      {
-        id: Date.now(),
-        userId: data.userId,
-        groupId: parseInt(data.groupId, 10) || 0,
-        dob: data.dob,
-        gender: data.gender,
-        role: data.role as Student["role"],
-      },
-    ]);
-    setIsAddStudentModalOpen(false);
+    try {
+      await studentsApi.update(data.userId, {
+        studentCode: data.userId,
+        fullName: data.userId,
+        groupId: data.groupId,
+      });
+      const response = await studentsApi.getAll();
+      const studentsData = (response.data || []).map(
+        (s: StudentDto, index: number) => ({
+          id: index + 1,
+          userId:
+            s.studentCode ||
+            s.userName ||
+            s.fullName ||
+            `Student ${s.id?.slice(0, 8) || index + 1}`,
+          groupId: `Group ${s.groupId}`,
+          dob: s.dateOfBirth || "",
+          gender: s.gender || "",
+          role: index === 0 ? ("Leader" as const) : ("Member" as const),
+        })
+      );
+      setStudents(studentsData);
+      setIsAddStudentModalOpen(false);
+      await swalConfig.success("Success!", "Student added successfully!");
+    } catch (error: any) {
+      await swalConfig.error(
+        "Error Adding Student",
+        error.message || "Failed to add student"
+      );
+    }
   };
-  const handleEditCouncil = (
+
+  const handleEditCouncil = async (
     id: number,
     data: { description: string; isActive: boolean }
   ) => {
-    setCouncils((prev) =>
-      prev.map((c) =>
-        c.id === id
-          ? {
-              ...c,
-              description: data.description,
-              status: data.isActive ? "Active" : "Inactive",
-            }
-          : c
-      )
-    );
-    setIsEditCouncilModalOpen(false);
-    setEditingCouncil(null);
+    try {
+      await councilsApi.update(id, {
+        councilName: data.description,
+        description: "",
+      });
+      const response = await councilsApi.getAll(false);
+      const councilsData = (response.data || []).map((c: CouncilDto) => ({
+        id: c.id,
+        name: c.councilName || c.majorName || `Council ${c.id}`,
+        description: c.description || "",
+        createdDate: c.createdDate
+          ? new Date(c.createdDate).toISOString().split("T")[0]
+          : new Date().toISOString().split("T")[0],
+        status: c.isActive ? ("Active" as const) : ("Inactive" as const),
+      }));
+      setCouncils(councilsData);
+      setIsEditCouncilModalOpen(false);
+      setEditingCouncil(null);
+      await swalConfig.success("Success!", "Council updated successfully!");
+    } catch (error: any) {
+      await swalConfig.error(
+        "Error Updating Council",
+        error.message || "Failed to update council"
+      );
+    }
   };
-  const handleEditGroup = (
-    id: number,
+
+  const handleEditGroup = async (
+    id: string,
     data: {
       topicEN: string;
       topicVN: string;
@@ -325,23 +474,33 @@ export default function DataManagementPage() {
       status: string;
     }
   ) => {
-    setGroups((prev) =>
-      prev.map((g) =>
-        g.id === id
-          ? {
-              ...g,
-              topicEN: data.topicEN,
-              topicVN: data.topicVN,
-              semester: data.semesterId,
-              status: data.status as Group["status"],
-            }
-          : g
-      )
-    );
-    setIsEditGroupModalOpen(false);
-    setEditingGroup(null);
+    try {
+      await groupsApi.update(id, {
+        groupName: data.topicEN,
+        projectTitle: data.topicVN,
+        semesterId: parseInt(data.semesterId) || 1,
+      });
+      const response = await groupsApi.getAll(false);
+      const groupsData = (response.data || []).map((g: GroupDto) => ({
+        id: g.id || "0",
+        topicEN: g.projectTitle || "No title",
+        topicVN: g.projectTitle || "Không có tiêu đề",
+        semester: String(g.semesterId),
+        status: "Active" as const,
+      }));
+      setGroups(groupsData);
+      setIsEditGroupModalOpen(false);
+      setEditingGroup(null);
+      await swalConfig.success("Success!", "Group updated successfully!");
+    } catch (error: any) {
+      await swalConfig.error(
+        "Error Updating Group",
+        error.message || "Failed to update group"
+      );
+    }
   };
-  const handleEditStudent = (
+
+  const handleEditStudent = async (
     id: number,
     data: {
       userId: string;
@@ -351,24 +510,43 @@ export default function DataManagementPage() {
       role: string;
     }
   ) => {
-    setStudents((prev) =>
-      prev.map((s) =>
-        s.id === id
-          ? {
-              ...s,
-              userId: data.userId,
-              groupId: parseInt(data.groupId, 10) || s.groupId,
-              dob: data.dob,
-              gender: data.gender,
-              role: data.role as Student["role"],
-            }
-          : s
-      )
-    );
-    setIsEditStudentModalOpen(false);
-    setEditingStudent(null);
+    try {
+      const student = students.find((s) => s.id === id);
+      if (student) {
+        await studentsApi.update(student.userId, {
+          studentCode: data.userId,
+          fullName: data.userId,
+          groupId: data.groupId,
+        });
+        const response = await studentsApi.getAll();
+        const studentsData = (response.data || []).map(
+          (s: StudentDto, index: number) => ({
+            id: index + 1,
+            userId:
+              s.studentCode ||
+              s.userName ||
+              s.fullName ||
+              `Student ${s.id?.slice(0, 8) || index + 1}`,
+            groupId: `Group ${s.groupId}`,
+            dob: s.dateOfBirth || "",
+            gender: s.gender || "",
+            role: index === 0 ? ("Leader" as const) : ("Member" as const),
+          })
+        );
+        setStudents(studentsData);
+        await swalConfig.success("Success!", "Student updated successfully!");
+      }
+      setIsEditStudentModalOpen(false);
+      setEditingStudent(null);
+    } catch (error: any) {
+      await swalConfig.error(
+        "Error Updating Student",
+        error.message || "Failed to update student"
+      );
+    }
   };
-  const handleEditSession = (
+
+  const handleEditSession = async (
     id: number,
     data: {
       groupId: string;
@@ -378,43 +556,274 @@ export default function DataManagementPage() {
       status: string;
     }
   ) => {
-    setSessions((prev) =>
-      prev.map((s) =>
-        s.id === id
-          ? {
-              ...s,
-              groupId: parseInt(data.groupId, 10) || s.groupId,
-              location: data.location,
-              date: data.date,
-              time: data.time,
-              status: data.status as Session["status"],
-            }
-          : s
-      )
-    );
-    setIsEditSessionModalOpen(false);
-    setEditingSession(null);
+    try {
+      await defenseSessionsApi.update(id, {
+        groupId: data.groupId,
+        defenseDate: data.date,
+        startTime: data.time.split(" - ")[0] || data.time,
+        endTime: data.time.split(" - ")[1] || data.time,
+        location: data.location,
+      });
+      const response = await defenseSessionsApi.getAll();
+      const sessionsData = (response.data || []).map(
+        (s: DefenseSessionDto) => ({
+          id: s.id,
+          groupId: `Group ${s.groupId?.slice(0, 8)}` || "Unknown Group",
+          location: s.location || "TBD",
+          date: s.defenseDate
+            ? new Date(s.defenseDate).toISOString().split("T")[0]
+            : "",
+          time:
+            s.startTime && s.endTime
+              ? `${s.startTime} - ${s.endTime}`
+              : s.startTime || "TBD",
+          status:
+            s.status === "Completed"
+              ? ("Completed" as const)
+              : ("Scheduled" as const),
+        })
+      );
+      setSessions(sessionsData);
+      setIsEditSessionModalOpen(false);
+      setEditingSession(null);
+      await swalConfig.success("Success!", "Session updated successfully!");
+    } catch (error: any) {
+      await swalConfig.error(
+        "Error Updating Session",
+        error.message || "Failed to update session"
+      );
+    }
   };
 
-  const handleApproveTranscript = (id: number) => {
-    setTranscripts((prev) =>
-      prev.map((t) =>
-        t.id === id ? { ...t, status: "Approved", isApproved: true } : t
-      )
+  // Delete handlers - all using swalConfig consistently
+  const handleDeleteCouncil = async (id: number) => {
+    const result = await swalConfig.confirm(
+      "Delete Council?",
+      `Are you sure you want to delete council with ID: ${id}?`,
+      "Yes, delete it!"
     );
-    setSelectedTranscript(null);
+
+    if (result.isConfirmed) {
+      try {
+        await councilsApi.softDelete(id);
+        setCouncils(councils.filter((c) => c.id !== id));
+        await swalConfig.success("Deleted!", "Council deleted successfully!");
+      } catch (error: any) {
+        console.error("Error deleting council:", error);
+        await swalConfig.error(
+          "Error Deleting Council",
+          error.message || "Failed to delete council"
+        );
+      }
+    }
   };
-  const handleRejectTranscript = (id: number) => {
-    setTranscripts((prev) =>
-      prev.map((t) =>
-        t.id === id ? { ...t, status: "Rejected", isApproved: false } : t
-      )
+
+  const handleDeleteGroup = async (id: string) => {
+    const result = await swalConfig.confirm(
+      "Delete Group?",
+      `Are you sure you want to delete this group? This action cannot be undone.`,
+      "Yes, delete it!"
     );
-    setSelectedTranscript(null);
+
+    if (!result.isConfirmed) return;
+
+    try {
+      await groupsApi.delete(id);
+      setGroups(groups.filter((g) => g.id !== id));
+      await swalConfig.success("Deleted!", "Group deleted successfully!");
+    } catch (error: any) {
+      console.error("Error deleting group:", error);
+      await swalConfig.error(
+        "Error Deleting Group",
+        error.message || "Failed to delete group"
+      );
+    }
   };
-  const handleDownloadReport = (filePath: string) => {
+
+  const handleDeleteStudent = async (studentId: string) => {
+    const result = await swalConfig.confirm(
+      "Delete Student?",
+      `Are you sure you want to delete this student? This action cannot be undone.`,
+      "Yes, delete it!"
+    );
+
+    if (!result.isConfirmed) return;
+
+    try {
+      await studentsApi.delete(studentId);
+      // Manually refresh students list
+      const response = await studentsApi.getAll();
+      const studentsData = (response.data || []).map(
+        (s: StudentDto, index: number) => ({
+          id: index + 1,
+          userId:
+            s.studentCode ||
+            s.userName ||
+            s.fullName ||
+            `Student ${s.id?.slice(0, 8) || index + 1}`,
+          groupId: "No Group Assigned", // Will be updated with proper mapping
+          dob: s.dateOfBirth || "",
+          gender: s.gender || "",
+          role: index === 0 ? ("Leader" as const) : ("Member" as const),
+        })
+      );
+      setStudents(studentsData);
+      await swalConfig.success("Deleted!", "Student deleted successfully!");
+    } catch (error: any) {
+      console.error("Error deleting student:", error);
+      await swalConfig.error(
+        "Error Deleting Student",
+        error.message || "Failed to delete student"
+      );
+    }
+  };
+
+  const handleDeleteSession = async (id: number) => {
+    const result = await swalConfig.confirm(
+      "Delete Session?",
+      `Are you sure you want to delete this session? This action cannot be undone.`,
+      "Yes, delete it!"
+    );
+
+    if (!result.isConfirmed) return;
+
+    try {
+      await defenseSessionsApi.delete(id);
+      setSessions(sessions.filter((s) => s.id !== id));
+      await swalConfig.success("Deleted!", "Session deleted successfully!");
+    } catch (error: any) {
+      console.error("Error deleting session:", error);
+      await swalConfig.error(
+        "Error Deleting Session",
+        error.message || "Failed to delete session"
+      );
+    }
+  };
+
+  const handleDeleteTranscript = async (id: number) => {
+    const result = await swalConfig.confirm(
+      "Delete Transcript?",
+      `Are you sure you want to delete this transcript? This action cannot be undone.`,
+      "Yes, delete it!"
+    );
+
+    if (!result.isConfirmed) return;
+
+    try {
+      console.log("Deleting transcript with id:", id);
+      const response = await transcriptsApi.delete(id);
+      console.log("Delete transcript response:", response);
+
+      setTranscripts((prev) => prev.filter((t) => t.id !== id));
+      await swalConfig.success("Deleted!", "Transcript deleted successfully!");
+    } catch (error: any) {
+      console.error("Error deleting transcript:", error);
+      await swalConfig.error(
+        "Error Deleting Transcript",
+        error.message || "Failed to delete transcript"
+      );
+    }
+  };
+
+  const handleDeleteReport = async (id: number) => {
+    const result = await swalConfig.confirm(
+      "Delete Report?",
+      `Are you sure you want to delete this report? This action cannot be undone.`,
+      "Yes, delete it!"
+    );
+
+    if (!result.isConfirmed) return;
+
+    try {
+      console.log("Deleting report with id:", id);
+      const response = await reportsApi.delete(id);
+      console.log("Delete report response:", response);
+
+      setReports((prev) => prev.filter((r) => r.id !== id));
+      await swalConfig.success("Deleted!", "Report deleted successfully!");
+    } catch (error: any) {
+      console.error("Error deleting report:", error);
+      await swalConfig.error(
+        "Error Deleting Report",
+        error.message || "Failed to delete report"
+      );
+    }
+  };
+
+  const handleApproveTranscript = async (id: number) => {
+    try {
+      await transcriptsApi.update(id, {
+        isApproved: true,
+      });
+      const response = await transcriptsApi.getAll();
+      const transcriptsData = (response.data || []).map((t: any) => ({
+        id: t.id,
+        sessionId: t.sessionId,
+        createdAt: t.createdAt || new Date().toISOString().split("T")[0],
+        status: t.isApproved ? ("Approved" as const) : ("Pending" as const),
+        isApproved: t.isApproved || false,
+        groupName: "Group",
+        date: new Date().toLocaleDateString("en-US", {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        }),
+        time: "TBD",
+        location: "TBD",
+        transcriptText: t.transcriptText || "",
+        audioFile: t.audioFilePath || "",
+      }));
+      setTranscripts(transcriptsData);
+      setSelectedTranscript(null);
+      await swalConfig.success("Success!", "Transcript approved successfully!");
+    } catch (error: any) {
+      await swalConfig.error(
+        "Error Approving Transcript",
+        error.message || "Failed to approve transcript"
+      );
+    }
+  };
+
+  const handleRejectTranscript = async (id: number) => {
+    try {
+      await transcriptsApi.update(id, {
+        isApproved: false,
+      });
+      const response = await transcriptsApi.getAll();
+      const transcriptsData = (response.data || []).map((t: any) => ({
+        id: t.id,
+        sessionId: t.sessionId,
+        createdAt: t.createdAt || new Date().toISOString().split("T")[0],
+        status: "Rejected" as const,
+        isApproved: false,
+        groupName: "Group",
+        date: new Date().toLocaleDateString("en-US", {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        }),
+        time: "TBD",
+        location: "TBD",
+        transcriptText: t.transcriptText || "",
+        audioFile: t.audioFilePath || "",
+      }));
+      setTranscripts(transcriptsData);
+      setSelectedTranscript(null);
+      await swalConfig.success("Rejected", "Transcript rejected successfully!");
+    } catch (error: any) {
+      await swalConfig.error(
+        "Error Rejecting Transcript",
+        error.message || "Failed to reject transcript"
+      );
+    }
+  };
+
+  const handleDownloadReport = async (filePath: string) => {
     // simulate download
-    alert(`Simulating download: ${filePath}`);
+    await swalConfig.info(
+      "Download Started",
+      `Simulating download: ${filePath}`
+    );
   };
 
   // Render helpers (UI only)
@@ -428,14 +837,14 @@ export default function DataManagementPage() {
           className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-gradient-to-r from-purple-600 to-blue-500 text-white text-sm"
           onClick={() => setIsAddCouncilModalOpen(true)}
         >
-          <AddIcon /> Add Council
+          <Plus className="w-4 h-4" /> Add Council
         </button>
       </div>
 
       <div className="flex items-center mb-4">
         <div className="relative w-72">
           <div className="absolute left-3 top-2">
-            <SearchIcon />
+            <Search className="w-4 h-4 text-gray-400" />
           </div>
           <input
             className="w-full pl-10 pr-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-200 outline-none"
@@ -444,59 +853,68 @@ export default function DataManagementPage() {
         </div>
       </div>
 
-      <div className="overflow-auto">
-        <table className="w-full text-sm border-collapse">
-          <thead>
-            <tr className="text-left text-gray-600 text-xs uppercase">
-              <th className="px-3 py-2">ID</th>
-              <th className="px-3 py-2">Description</th>
-              <th className="px-3 py-2">Created</th>
-              <th className="px-3 py-2">Status</th>
-              <th className="px-3 py-2 text-center">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {councils.map((c) => (
-              <tr key={c.id} className="border-t hover:bg-gray-50">
-                <td className="px-3 py-2">{c.id}</td>
-                <td className="px-3 py-2">{c.description}</td>
-                <td className="px-3 py-2">{c.createdDate}</td>
-                <td className="px-3 py-2">
-                  <span
-                    className={`px-2 py-1 rounded-full text-xs ${
-                      c.status === "Active"
-                        ? "bg-green-100 text-green-700"
-                        : "bg-gray-100 text-gray-600"
-                    }`}
-                  >
-                    {c.status}
-                  </span>
-                </td>
-                <td className="px-3 py-2 text-center">
-                  <div className="inline-flex gap-2">
-                    <button
-                      className="p-2 rounded-md hover:bg-gray-100"
-                      onClick={() => {
-                        setEditingCouncil(c);
-                        setIsEditCouncilModalOpen(true);
-                      }}
-                      title="Edit"
-                    >
-                      <EditIcon />
-                    </button>
-                    <button
-                      className="p-2 rounded-md hover:bg-gray-100"
-                      title="Delete"
-                    >
-                      <DeleteIcon />
-                    </button>
-                  </div>
-                </td>
+      {loading ? (
+        <div className="text-center py-8 text-gray-500">
+          Loading councils...
+        </div>
+      ) : (
+        <div className="overflow-auto">
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr className="text-left text-gray-600 text-xs uppercase">
+                <th className="px-3 py-2">ID</th>
+                <th className="px-3 py-2">Name</th>
+                <th className="px-3 py-2">Description</th>
+                <th className="px-3 py-2">Created</th>
+                <th className="px-3 py-2">Status</th>
+                <th className="px-3 py-2 text-center">Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {councils.map((c) => (
+                <tr key={c.id} className="border-t hover:bg-gray-50">
+                  <td className="px-3 py-2">{c.id}</td>
+                  <td className="px-3 py-2">{c.name}</td>
+                  <td className="px-3 py-2">{c.description}</td>
+                  <td className="px-3 py-2">{c.createdDate}</td>
+                  <td className="px-3 py-2">
+                    <span
+                      className={`px-2 py-1 rounded-full text-xs ${
+                        c.status === "Active"
+                          ? "bg-green-100 text-green-700"
+                          : "bg-gray-100 text-gray-600"
+                      }`}
+                    >
+                      {c.status}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    <div className="inline-flex gap-2">
+                      <button
+                        className="p-2 rounded-md hover:bg-gray-100"
+                        onClick={() => {
+                          setEditingCouncil(c);
+                          setIsEditCouncilModalOpen(true);
+                        }}
+                        title="Edit"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button
+                        className="p-2 rounded-md hover:bg-gray-100"
+                        onClick={() => handleDeleteCouncil(c.id)}
+                        title="Delete"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 
@@ -511,7 +929,7 @@ export default function DataManagementPage() {
             className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-gradient-to-r from-purple-600 to-blue-500 text-white text-sm"
             onClick={() => setIsAddGroupModalOpen(true)}
           >
-            <AddIcon /> Add Group
+            <Plus className="w-4 h-4" /> Add Group
           </button>
         </div>
       </div>
@@ -519,7 +937,7 @@ export default function DataManagementPage() {
       <div className="mb-4">
         <div className="relative w-96">
           <div className="absolute left-3 top-2">
-            <SearchIcon />
+            <Search className="w-4 h-4 text-gray-400" />
           </div>
           <input
             className="w-full pl-10 pr-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-200 outline-none"
@@ -528,61 +946,66 @@ export default function DataManagementPage() {
         </div>
       </div>
 
-      <div className="overflow-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-gray-600 text-xs uppercase">
-              <th className="px-3 py-2">ID</th>
-              <th className="px-3 py-2">Topic (EN)</th>
-              <th className="px-3 py-2">Topic (VN)</th>
-              <th className="px-3 py-2">Semester</th>
-              <th className="px-3 py-2">Status</th>
-              <th className="px-3 py-2 text-center">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {groups.map((g) => (
-              <tr key={g.id} className="border-t hover:bg-gray-50">
-                <td className="px-3 py-2">{g.id}</td>
-                <td className="px-3 py-2">{g.topicEN}</td>
-                <td className="px-3 py-2">{g.topicVN}</td>
-                <td className="px-3 py-2">{g.semester}</td>
-                <td className="px-3 py-2">
-                  <span
-                    className={`px-2 py-1 rounded-full text-xs ${
-                      g.status === "Active"
-                        ? "bg-blue-50 text-blue-700"
-                        : "bg-gray-100 text-gray-600"
-                    }`}
-                  >
-                    {g.status}
-                  </span>
-                </td>
-                <td className="px-3 py-2 text-center">
-                  <div className="inline-flex gap-2">
-                    <button
-                      className="p-2 rounded-md hover:bg-gray-100"
-                      onClick={() => {
-                        setEditingGroup(g);
-                        setIsEditGroupModalOpen(true);
-                      }}
-                      title="Edit"
-                    >
-                      <EditIcon />
-                    </button>
-                    <button
-                      className="p-2 rounded-md hover:bg-gray-100"
-                      title="Delete"
-                    >
-                      <DeleteIcon />
-                    </button>
-                  </div>
-                </td>
+      {loading ? (
+        <div className="text-center py-8 text-gray-500">Loading groups...</div>
+      ) : (
+        <div className="overflow-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-gray-600 text-xs uppercase">
+                <th className="px-3 py-2">ID</th>
+                <th className="px-3 py-2">Topic (EN)</th>
+                <th className="px-3 py-2">Topic (VN)</th>
+                <th className="px-3 py-2">Semester</th>
+                <th className="px-3 py-2">Status</th>
+                <th className="px-3 py-2 text-center">Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {groups.map((g) => (
+                <tr key={g.id} className="border-t hover:bg-gray-50">
+                  <td className="px-3 py-2">{g.id}</td>
+                  <td className="px-3 py-2">{g.topicEN}</td>
+                  <td className="px-3 py-2">{g.topicVN}</td>
+                  <td className="px-3 py-2">{g.semester}</td>
+                  <td className="px-3 py-2">
+                    <span
+                      className={`px-2 py-1 rounded-full text-xs ${
+                        g.status === "Active"
+                          ? "bg-blue-50 text-blue-700"
+                          : "bg-gray-100 text-gray-600"
+                      }`}
+                    >
+                      {g.status}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    <div className="inline-flex gap-2">
+                      <button
+                        className="p-2 rounded-md hover:bg-gray-100"
+                        onClick={() => {
+                          setEditingGroup(g);
+                          setIsEditGroupModalOpen(true);
+                        }}
+                        title="Edit"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button
+                        className="p-2 rounded-md hover:bg-gray-100"
+                        onClick={() => handleDeleteGroup(g.id)}
+                        title="Delete"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 
@@ -597,7 +1020,7 @@ export default function DataManagementPage() {
             className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-gradient-to-r from-purple-600 to-blue-500 text-white text-sm"
             onClick={() => setIsAddStudentModalOpen(true)}
           >
-            <AddIcon /> Add Student
+            <Plus className="w-4 h-4" /> Add Student
           </button>
         </div>
       </div>
@@ -605,7 +1028,7 @@ export default function DataManagementPage() {
       <div className="mb-4">
         <div className="relative w-96">
           <div className="absolute left-3 top-2">
-            <SearchIcon />
+            <Search className="w-4 h-4 text-gray-400" />
           </div>
           <input
             className="w-full pl-10 pr-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-200 outline-none"
@@ -614,57 +1037,68 @@ export default function DataManagementPage() {
         </div>
       </div>
 
-      <div className="overflow-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-gray-600 text-xs uppercase">
-              <th className="px-3 py-2">ID</th>
-              <th className="px-3 py-2">User ID</th>
-              <th className="px-3 py-2">Group ID</th>
-              <th className="px-3 py-2">DOB</th>
-              <th className="px-3 py-2">Gender</th>
-              <th className="px-3 py-2">Role</th>
-              <th className="px-3 py-2 text-center">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {students.map((s) => (
-              <tr key={s.id} className="border-t hover:bg-gray-50">
-                <td className="px-3 py-2">{s.id}</td>
-                <td className="px-3 py-2">{s.userId}</td>
-                <td className="px-3 py-2">{s.groupId}</td>
-                <td className="px-3 py-2">{s.dob}</td>
-                <td className="px-3 py-2">{s.gender}</td>
-                <td className="px-3 py-2">
-                  <span className="px-2 py-1 rounded-full text-xs bg-gray-100 text-gray-700">
-                    {s.role}
-                  </span>
-                </td>
-                <td className="px-3 py-2 text-center">
-                  <div className="inline-flex gap-2">
-                    <button
-                      className="p-2 rounded-md hover:bg-gray-100"
-                      onClick={() => {
-                        setEditingStudent(s);
-                        setIsEditStudentModalOpen(true);
-                      }}
-                      title="Edit"
-                    >
-                      <EditIcon />
-                    </button>
-                    <button
-                      className="p-2 rounded-md hover:bg-gray-100"
-                      title="Delete"
-                    >
-                      <DeleteIcon />
-                    </button>
-                  </div>
-                </td>
+      {loading ? (
+        <div className="text-center py-8 text-gray-500">
+          Loading students...
+        </div>
+      ) : (
+        <div className="overflow-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-gray-600 text-xs uppercase">
+                <th className="px-3 py-2">ID</th>
+                <th className="px-3 py-2">Name</th>
+                <th className="px-3 py-2">DOB</th>
+                <th className="px-3 py-2">Gender</th>
+                <th className="px-3 py-2">Role</th>
+                <th className="px-3 py-2 text-center">Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {students.map((s) => (
+                <tr key={s.id} className="border-t hover:bg-gray-50">
+                  <td className="px-3 py-2">{s.id}</td>
+                  <td className="px-3 py-2">{s.userId}</td>
+                  <td className="px-3 py-2">{s.dob}</td>
+                  <td className="px-3 py-2">{s.gender}</td>
+                  <td className="px-3 py-2">
+                    <span className="px-2 py-1 rounded-full text-xs bg-gray-100 text-gray-700">
+                      {s.role}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    <div className="inline-flex gap-2">
+                      <button
+                        className="p-2 rounded-md hover:bg-gray-100"
+                        onClick={() => {
+                          setEditingStudent(s);
+                          setIsEditStudentModalOpen(true);
+                        }}
+                        title="Edit"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button
+                        className="p-2 rounded-md hover:bg-gray-100"
+                        onClick={async () => {
+                          // Note: Students delete functionality needs student API ID, not display ID
+                          await swalConfig.info(
+                            "Feature in Development",
+                            "Student deletion will be implemented once API ID mapping is fixed."
+                          );
+                        }}
+                        title="Delete"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 
@@ -676,57 +1110,64 @@ export default function DataManagementPage() {
           Defense Session Management
         </h2>
       </div>
-      <div className="overflow-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-gray-600 text-xs uppercase">
-              <th className="px-3 py-2">ID</th>
-              <th className="px-3 py-2">Group ID</th>
-              <th className="px-3 py-2">Location</th>
-              <th className="px-3 py-2">Date</th>
-              <th className="px-3 py-2">Time</th>
-              <th className="px-3 py-2">Status</th>
-              <th className="px-3 py-2 text-center">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sessions.map((s) => (
-              <tr key={s.id} className="border-t hover:bg-gray-50">
-                <td className="px-3 py-2">{s.id}</td>
-                <td className="px-3 py-2">{s.groupId}</td>
-                <td className="px-3 py-2">{s.location}</td>
-                <td className="px-3 py-2">{s.date}</td>
-                <td className="px-3 py-2">{s.time}</td>
-                <td className="px-3 py-2">
-                  <span className="px-2 py-1 rounded-full text-xs bg-yellow-50 text-yellow-700">
-                    {s.status}
-                  </span>
-                </td>
-                <td className="px-3 py-2 text-center">
-                  <div className="inline-flex gap-2">
-                    <button
-                      className="p-2 rounded-md hover:bg-gray-100"
-                      onClick={() => {
-                        setEditingSession(s);
-                        setIsEditSessionModalOpen(true);
-                      }}
-                      title="Edit"
-                    >
-                      <EditIcon />
-                    </button>
-                    <button
-                      className="p-2 rounded-md hover:bg-gray-100"
-                      title="Delete"
-                    >
-                      <DeleteIcon />
-                    </button>
-                  </div>
-                </td>
+      {loading ? (
+        <div className="text-center py-8 text-gray-500">
+          Loading sessions...
+        </div>
+      ) : (
+        <div className="overflow-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-gray-600 text-xs uppercase">
+                <th className="px-3 py-2">ID</th>
+                <th className="px-3 py-2">Group ID</th>
+                <th className="px-3 py-2">Location</th>
+                <th className="px-3 py-2">Date</th>
+                <th className="px-3 py-2">Time</th>
+                <th className="px-3 py-2">Status</th>
+                <th className="px-3 py-2 text-center">Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {sessions.map((s) => (
+                <tr key={s.id} className="border-t hover:bg-gray-50">
+                  <td className="px-3 py-2">{s.id}</td>
+                  <td className="px-3 py-2">{s.groupId}</td>
+                  <td className="px-3 py-2">{s.location}</td>
+                  <td className="px-3 py-2">{s.date}</td>
+                  <td className="px-3 py-2">{s.time}</td>
+                  <td className="px-3 py-2">
+                    <span className="px-2 py-1 rounded-full text-xs bg-yellow-50 text-yellow-700">
+                      {s.status}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    <div className="inline-flex gap-2">
+                      <button
+                        className="p-2 rounded-md hover:bg-gray-100"
+                        onClick={() => {
+                          setEditingSession(s);
+                          setIsEditSessionModalOpen(true);
+                        }}
+                        title="Edit"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button
+                        className="p-2 rounded-md hover:bg-gray-100"
+                        onClick={() => handleDeleteSession(s.id)}
+                        title="Delete"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 
@@ -741,51 +1182,75 @@ export default function DataManagementPage() {
         Transcripts are automatically generated from defense sessions. You can
         view and approve them here.
       </p>
-      <div className="overflow-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-gray-600 text-xs uppercase">
-              <th className="px-3 py-2">ID</th>
-              <th className="px-3 py-2">Session ID</th>
-              <th className="px-3 py-2">Created</th>
-              <th className="px-3 py-2">Status</th>
-              <th className="px-3 py-2">Approved</th>
-              <th className="px-3 py-2 text-center">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {transcripts.map((t) => (
-              <tr key={t.id} className="border-t hover:bg-gray-50">
-                <td className="px-3 py-2">{t.id}</td>
-                <td className="px-3 py-2">{t.sessionId}</td>
-                <td className="px-3 py-2">{t.createdAt}</td>
-                <td className="px-3 py-2">
-                  <span
-                    className={`px-2 py-1 rounded-full text-xs ${
-                      t.status === "Pending"
-                        ? "bg-yellow-50 text-yellow-700"
-                        : t.status === "Approved"
-                        ? "bg-green-50 text-green-700"
-                        : "bg-red-50 text-red-700"
-                    }`}
-                  >
-                    {t.status}
-                  </span>
-                </td>
-                <td className="px-3 py-2">{t.isApproved ? "Yes" : "No"}</td>
-                <td className="px-3 py-2 text-center">
-                  <button
-                    className="px-3 py-1 rounded-md bg-blue-600 text-white text-sm"
-                    onClick={() => setSelectedTranscript(t)}
-                  >
-                    View
-                  </button>
-                </td>
+      {loading ? (
+        <div className="text-center py-8 text-gray-500">
+          Loading transcripts...
+        </div>
+      ) : (
+        <div className="overflow-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-gray-600 text-xs uppercase">
+                <th className="px-3 py-2">ID</th>
+                <th className="px-3 py-2">Session Name</th>
+                <th className="px-3 py-2">Created</th>
+                <th className="px-3 py-2">Status</th>
+                <th className="px-3 py-2">Approved</th>
+                <th className="px-3 py-2 text-center">Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {transcripts.map((t) => {
+                // Find session name by sessionId
+                const session = sessions.find((s) => s.id === t.sessionId);
+                const sessionName = session
+                  ? `${session.groupId} - ${session.date} ${session.time}`
+                  : `Session ${t.sessionId}`;
+
+                return (
+                  <tr key={t.id} className="border-t hover:bg-gray-50">
+                    <td className="px-3 py-2">{t.id}</td>
+                    <td className="px-3 py-2">{sessionName}</td>
+                    <td className="px-3 py-2">{t.createdAt}</td>
+                    <td className="px-3 py-2">
+                      <span
+                        className={`px-2 py-1 rounded-full text-xs ${
+                          t.status === "Pending"
+                            ? "bg-yellow-50 text-yellow-700"
+                            : t.status === "Approved"
+                            ? "bg-green-50 text-green-700"
+                            : "bg-red-50 text-red-700"
+                        }`}
+                      >
+                        {t.status}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2">{t.isApproved ? "Yes" : "No"}</td>
+                    <td className="px-3 py-2 text-center">
+                      <div className="inline-flex gap-2">
+                        <button
+                          className="p-2 rounded-md hover:bg-gray-100"
+                          onClick={() => setSelectedTranscript(t)}
+                          title="View"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button
+                          className="p-2 rounded-md hover:bg-gray-100"
+                          onClick={() => handleDeleteTranscript(t.id)}
+                          title="Delete"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 
@@ -800,45 +1265,66 @@ export default function DataManagementPage() {
         Reports are generated after defense sessions. You can download and view
         them here.
       </p>
-      <div className="overflow-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-gray-600 text-xs uppercase">
-              <th className="px-3 py-2">ID</th>
-              <th className="px-3 py-2">Session ID</th>
-              <th className="px-3 py-2">Generated</th>
-              <th className="px-3 py-2">Summary</th>
-              <th className="px-3 py-2 text-center">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {reports.map((r) => (
-              <tr key={r.id} className="border-t hover:bg-gray-50">
-                <td className="px-3 py-2">{r.id}</td>
-                <td className="px-3 py-2">{r.sessionId}</td>
-                <td className="px-3 py-2">{r.generatedDate}</td>
-                <td className="px-3 py-2">{r.summary}</td>
-                <td className="px-3 py-2 text-center">
-                  <div className="inline-flex gap-2">
-                    <button
-                      className="px-3 py-1 rounded-md bg-blue-600 text-white text-sm"
-                      onClick={() => setSelectedReport(r)}
-                    >
-                      View
-                    </button>
-                    <button
-                      className="px-3 py-1 rounded-md border text-sm"
-                      onClick={() => handleDownloadReport(r.filePath)}
-                    >
-                      Download
-                    </button>
-                  </div>
-                </td>
+      {loading ? (
+        <div className="text-center py-8 text-gray-500">Loading reports...</div>
+      ) : (
+        <div className="overflow-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-gray-600 text-xs uppercase">
+                <th className="px-3 py-2">ID</th>
+                <th className="px-3 py-2">Session Name</th>
+                <th className="px-3 py-2">Generated</th>
+                <th className="px-3 py-2">Summary</th>
+                <th className="px-3 py-2 text-center">Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {reports.map((r) => {
+                // Find session name by sessionId
+                const session = sessions.find((s) => s.id === r.sessionId);
+                const sessionName = session
+                  ? `${session.groupId} - ${session.date} ${session.time}`
+                  : `Session ${r.sessionId}`;
+
+                return (
+                  <tr key={r.id} className="border-t hover:bg-gray-50">
+                    <td className="px-3 py-2">{r.id}</td>
+                    <td className="px-3 py-2">{sessionName}</td>
+                    <td className="px-3 py-2">{r.generatedDate}</td>
+                    <td className="px-3 py-2">{r.summary}</td>
+                    <td className="px-3 py-2 text-center">
+                      <div className="inline-flex gap-2">
+                        <button
+                          className="p-2 rounded-md hover:bg-gray-100"
+                          onClick={() => setSelectedReport(r)}
+                          title="View"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button
+                          className="p-2 rounded-md hover:bg-gray-100"
+                          onClick={() => handleDownloadReport(r.filePath)}
+                          title="Download"
+                        >
+                          <Download className="w-4 h-4" />
+                        </button>
+                        <button
+                          className="p-2 rounded-md hover:bg-gray-100"
+                          onClick={() => handleDeleteReport(r.id)}
+                          title="Delete"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 
@@ -927,7 +1413,17 @@ export default function DataManagementPage() {
           setEditingStudent(null);
         }}
         onSubmit={handleEditStudent}
-        studentData={editingStudent}
+        studentData={
+          editingStudent
+            ? {
+                ...editingStudent,
+                groupId:
+                  typeof editingStudent.groupId === "string"
+                    ? 0
+                    : editingStudent.groupId,
+              }
+            : null
+        }
       />
       <EditSessionModal
         isOpen={isEditSessionModalOpen}
