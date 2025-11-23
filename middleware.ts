@@ -6,29 +6,30 @@ export function middleware(req: NextRequest) {
   const role = req.cookies.get("role")?.value;
   const path = req.nextUrl.pathname;
 
-  // Nếu chưa login mà vào các route private → redirect /login
-  if (
-    !token &&
-    (path.startsWith("/administrator") ||
-      path.startsWith("/chair") ||
-      path.startsWith("/secretary") ||
-      path.startsWith("/moderator") ||
-      path.startsWith("/member"))
-  ) {
+  const protectedRoutes = [
+    "/administrator",
+    "/chair",
+    "/secretary",
+    "/moderator",
+    "/member",
+  ];
+
+  // Chặn truy cập khi chưa login
+  if (!token && protectedRoutes.some((p) => path.startsWith(p))) {
     return NextResponse.redirect(new URL("/login", req.url));
   }
 
-  // Nếu đã login → redirect từ / hoặc /login theo role
+  // Nếu login rồi → redirect vào role page
   if (token && (path === "/" || path === "/login")) {
-    const redirectMap: Record<string, string> = {
+    const map: Record<string, string> = {
       administrator: "/administrator",
       chair: "/chair",
       secretary: "/secretary",
       moderator: "/moderator",
       member: "/member",
     };
-    const target = redirectMap[role || ""] || "/";
-    return NextResponse.redirect(new URL(target, req.url));
+    const dest = map[role || "member"];
+    return NextResponse.redirect(new URL(dest, req.url));
   }
 
   return NextResponse.next();
