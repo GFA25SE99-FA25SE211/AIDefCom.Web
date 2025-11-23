@@ -2,14 +2,22 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { GoogleLogin } from "@react-oauth/google";
+import { Eye, EyeOff } from "lucide-react";
+import { jwtDecode } from "jwt-decode";
 
 export default function LoginPage() {
   const router = useRouter();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
+  // ============================
+  // EMAIL LOGIN
+  // ============================
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -20,129 +28,194 @@ export default function LoginPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
-        credentials: "include", // ✅ cần để nhận cookie từ API
+        credentials: "include",
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.message || "Invalid credentials");
-        setLoading(false);
+        setError("Invalid Email or Password");
         return;
       }
 
-      // ✅ Redirect theo role
-      if (data.role === "administrator") router.push("/administrator");
-      else if (data.role === "chair") router.push("/chair");
-      else if (data.role === "secretary") router.push("/secretary");
-      else if (data.role === "moderator") router.push("/moderator");
-      else if (data.role === "member") router.push("/member");
-      else router.push("/");
-    } catch (err) {
-      console.error(err);
-      setError("An error occurred. Please try again.");
+      // FE chỉ dùng role trả về từ API route
+      redirectByRole(data.role, router);
+    } catch {
+      setError("Invalid Email or Password");
     } finally {
       setLoading(false);
     }
   };
 
+  // ============================
+  // GOOGLE LOGIN
+  // ============================
+  const handleGoogleSuccess = async (response: any) => {
+    try {
+      const googleToken = response.credential;
+
+      const res = await fetch("/api/auth/login/google", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: googleToken }),
+        credentials: "include",
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.message || "Google login failed");
+        return;
+      }
+
+      redirectByRole(data.role, router);
+    } catch {
+      setError("Google login failed");
+    }
+  };
+
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-[#F3F6FB] p-4">
-      {/* Logo + Title */}
-      <div className="text-center mb-8">
-        <img src="/favicon-new.ico" alt="logo" className="w-20 mx-auto mb-3" />
-        <h1 className="text-2xl font-semibold">AIDefCom</h1>
-        <p className="text-sm text-gray-600">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-[#F5F7FB] py-10 px-4">
+      {/* Logo */}
+      <div className="text-center mb-10">
+        <img
+          src="/favicon-new.ico"
+          alt="logo"
+          className="w-24 mx-auto mb-4 drop-shadow-md"
+        />
+        <h1 className="text-3xl font-semibold text-gray-800">AIDefCom</h1>
+        <p className="text-base text-gray-600 mt-2">
           AI Defense Committee Management System
         </p>
       </div>
 
-      {/* Form Card */}
-      <form
-        onSubmit={handleSubmit}
-        className="bg-white w-full max-w-md px-8 py-6 rounded-2xl shadow-lg"
-      >
-        <h2 className="text-center text-lg font-semibold">Sign In</h2>
-        <p className="text-center text-sm text-gray-500 mb-5">
+      {/* Card */}
+      <div className="bg-white w-full max-w-md rounded-2xl shadow-lg border border-gray-100 px-10 py-8 transition-all">
+        <h2 className="text-center text-xl font-semibold text-gray-800">
+          Sign In
+        </h2>
+
+        <p className="text-center text-sm text-gray-500 mb-6 mt-2">
           Access the Defense Committee Management System
         </p>
 
-        {/* Sign in with Google */}
-        <button
-          type="button"
-          className="w-full flex items-center justify-center gap-2 border border-gray-300 rounded-lg py-2 hover:bg-gray-50 transition"
-        >
-          <img src="/google.png" className="w-5" alt="google" />
-          <span>Sign in with Google</span>
-        </button>
+        {/* GOOGLE LOGIN */}
+        <div className="flex justify-center mb-5">
+          <GoogleLogin
+            onSuccess={handleGoogleSuccess}
+            onError={() => setError("Google login failed")}
+            shape="pill"
+            size="large"
+          />
+        </div>
 
         {/* Divider */}
-        <div className="relative my-6">
-          <div className="absolute inset-0 border-t border-gray-200"></div>
-          <span className="relative px-3 text-xs text-gray-500 bg-white">
-            OR CONTINUE WITH
-          </span>
+        <div className="flex items-center my-6">
+          <div className="flex-grow border-t border-gray-200"></div>
+          <span className="mx-4 text-xs text-gray-500">OR CONTINUE WITH</span>
+          <div className="flex-grow border-t border-gray-200"></div>
         </div>
 
-        {/* Email */}
-        <label className="block mb-3 text-sm">
-          Email
-          <input
-            type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="your.email@example.com"
-          />
-        </label>
+        {/* FORM */}
+        <form onSubmit={handleSubmit} className="space-y-5">
+          {/* Email */}
+          <div>
+            <label className="text-sm font-medium text-gray-700">Email</label>
+            <input
+              type="email"
+              required
+              className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              placeholder="Enter your email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </div>
 
-        {/* Password */}
-        <label className="block mb-3 text-sm">
-          Password
-          <input
-            type="password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Enter your password"
-          />
-        </label>
+          {/* Password */}
+          <div>
+            <label className="text-sm font-medium text-gray-700">
+              Password
+            </label>
 
-        {/* Remember + Forgot */}
-        <div className="flex items-center justify-between text-sm mb-4">
-          <label className="flex items-center gap-2">
-            <input type="checkbox" className="h-4 w-4" />
-            Remember me
-          </label>
-          <a className="text-blue-600 hover:underline" href="#">
-            Forgot password?
-          </a>
-        </div>
+            <div className="relative">
+              <input
+                type={showPassword ? "text" : "password"}
+                required
+                className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 pr-10 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                placeholder="Enter your password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
 
-        {/* Error message */}
-        {error && (
-          <p className="text-red-600 text-sm text-center mb-3">{error}</p>
-        )}
+              <button
+                type="button"
+                className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 hover:text-gray-700"
+                onClick={() => setShowPassword(!showPassword)}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
+          </div>
 
-        {/* Login Button */}
-        <button
-          type="submit"
-          disabled={loading}
-          className={`w-full py-2 rounded-lg text-white font-medium transition ${
-            loading
-              ? "bg-gray-400 cursor-not-allowed"
-              : "bg-gradient-to-r from-purple-600 to-blue-500 hover:opacity-90"
-          }`}
-        >
-          {loading ? "Logging in..." : "Login"}
-        </button>
-      </form>
+          {/* Error */}
+          {error && (
+            <p className="text-sm text-red-600 text-center mt-1">{error}</p>
+          )}
+
+          {/* Submit Button */}
+          <button
+            type="submit"
+            disabled={loading}
+            className={`w-full py-2.5 rounded-lg text-white font-medium transition shadow ${
+              loading
+                ? "bg-gray-400 cursor-not-allowed"
+                : "bg-gradient-to-r from-blue-600 to-indigo-500 hover:opacity-95"
+            }`}
+          >
+            {loading ? "Logging in..." : "Login"}
+          </button>
+        </form>
+      </div>
 
       <p className="text-xs text-gray-400 mt-6">
         © 2025 AIDefCom · Smart Graduation Defense
       </p>
     </div>
   );
+}
+
+// ============================
+// JWT ROLE EXTRACTOR
+// ============================
+function extractRole(token: string) {
+  const decoded: any = jwtDecode(token);
+
+  return (
+    decoded["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"] ||
+    "member"
+  );
+}
+
+// ============================
+// REDIRECT
+// ============================
+function redirectByRole(role: string, router: any) {
+  const r = role?.toLowerCase();
+
+  switch (r) {
+    case "administrator":
+      router.push("/administrator");
+      break;
+    case "chair":
+      router.push("/chair");
+      break;
+    case "secretary":
+      router.push("/secretary");
+      break;
+    case "moderator":
+      router.push("/moderator");
+      break;
+    default:
+      router.push("/member");
+  }
 }
