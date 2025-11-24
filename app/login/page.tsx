@@ -23,6 +23,8 @@ export default function LoginPage() {
     setLoading(true);
     setError("");
 
+
+
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
@@ -125,7 +127,7 @@ export default function LoginPage() {
               type="email"
               required
               className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              placeholder="Enter your mail"
+              placeholder="Enter your email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
@@ -155,6 +157,15 @@ export default function LoginPage() {
                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
             </div>
+          </div>
+          
+          <div className="flex justify-end">
+            <a
+              href="/forgot-password"
+              className="text-xs font-medium text-blue-600 hover:text-blue-500"
+            >
+              Forgot password?
+            </a>
           </div>
 
           {/* Error */}
@@ -203,7 +214,7 @@ function redirectByRole(role: string, router: any) {
   const r = role?.toLowerCase();
 
   switch (r) {
-    case "administrator":
+    case "admin":
       router.push("/administrator");
       break;
     case "chair":

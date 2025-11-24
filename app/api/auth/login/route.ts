@@ -5,8 +5,33 @@ export async function POST(req: Request) {
   try {
     const { email, password } = await req.json();
 
+    // ============================
+// HARDCODED CHAIR ACCOUNT
+// ============================
+if (email === "chair@fpt.edu.vn" && password === "123456") {
+  const role = "chair";
+
+  const res = NextResponse.json({ role });
+
+  // Cookie giống backend
+  res.cookies.set("token", "dummy-token-chair", {
+    httpOnly: true,
+    path: "/",
+  });
+
+  res.cookies.set("role", role, {
+    httpOnly: true,
+    path: "/",
+  });
+
+  return res;
+}
+
+
+    const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "https://aidefcomapi.azurewebsites.net";
+
     const backendRes = await fetch(
-      "https://aidefcomapi.azurewebsites.net/api/auth/login",
+      `${API_BASE_URL}/api/auth/login`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
