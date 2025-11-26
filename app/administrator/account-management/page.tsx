@@ -491,18 +491,61 @@ export default function AccountManagementPage() {
     }
 
     try {
+      // Validate semester and major IDs
+      const semesterId = Number(studentUploadParams.semesterId);
+      const majorId = Number(studentUploadParams.majorId);
+      
+      if (!semesterId || !majorId || isNaN(semesterId) || isNaN(majorId)) {
+        swalConfig.error(
+          "Invalid Selection",
+          "Please select valid Semester and Major before uploading."
+        );
+        event.target.value = "";
+        return;
+      }
+
+      // Validate file type
+      const fileExtension = file.name.split('.').pop()?.toLowerCase();
+      if (fileExtension !== 'xlsx' && fileExtension !== 'xls') {
+        swalConfig.error(
+          "Invalid File Type",
+          "Please upload an Excel file (.xlsx or .xls)"
+        );
+        event.target.value = "";
+        return;
+      }
+
       await studentsApi.importStudentGroups({
-        semesterId: Number(studentUploadParams.semesterId),
-        majorId: Number(studentUploadParams.majorId),
+        semesterId,
+        majorId,
         file,
       });
-      swalConfig.success("Upload Complete", "Student-group data uploaded!");
+      
+      // Refresh users list after successful upload
+      const usersResponse = await authApi.getAllUsers();
+      setUsers(mapUsersFromApi(usersResponse.data || []));
+      
+      swalConfig.success("Upload Complete", "Student-group data uploaded successfully!");
       closeUploadModal();
     } catch (error: any) {
       console.error("Error uploading student-group file:", error);
+      
+      // Extract detailed error message
+      let errorMessage = error.message || "Unable to upload student-group file.";
+      
+      // If error has errorData, try to get more details
+      if (error.errorData) {
+        if (error.errorData.details) {
+          errorMessage += `\n\n${error.errorData.details}`;
+        }
+        if (error.errorData.data && typeof error.errorData.data === 'string') {
+          errorMessage += `\n\n${error.errorData.data}`;
+        }
+      }
+      
       swalConfig.error(
         "Upload Failed",
-        error.message || "Unable to upload student-group file."
+        errorMessage
       );
     } finally {
       event.target.value = "";

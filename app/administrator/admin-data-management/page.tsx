@@ -868,6 +868,28 @@ export default function AdminDataManagementPage() {
     }
   };
 
+  const handleDeleteGroup = async (id: string) => {
+    const result = await swalConfig.confirm(
+      "Delete Group?",
+      `Are you sure you want to delete this group?`,
+      "Yes, delete it!"
+    );
+
+    if (result.isConfirmed) {
+      try {
+        await groupsApi.delete(id);
+        setGroups(groups.filter((g) => g.id !== id));
+        await swalConfig.success("Deleted!", "Group deleted successfully!");
+      } catch (error: any) {
+        console.error("Error deleting group:", error);
+        await swalConfig.error(
+          "Error Deleting Group",
+          error.message || "Failed to delete group"
+        );
+      }
+    }
+  };
+
   /* ============ Renderers ============ */
   const renderHeader = (title: string, onAdd?: () => void) => (
     <div className="flex items-center justify-between mb-4">
@@ -1109,9 +1131,7 @@ export default function AdminDataManagementPage() {
                   <button
                     className="btn-subtle text-red-600 hover:bg-red-50"
                     title="Delete Group"
-                    onClick={() => {
-                      /* Add delete functionality later */
-                    }}
+                    onClick={() => handleDeleteGroup(g.id)}
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
