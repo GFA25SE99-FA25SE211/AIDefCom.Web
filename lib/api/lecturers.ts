@@ -5,6 +5,7 @@ import type { ImportResultDto } from '@/lib/models';
 export const lecturersApi = {
   importLecturers: async (file: File) => {
     const formData = new FormData();
+    // ASP.NET Core parameter binding: parameter name is 'file', so field name should be 'file'
     formData.append('file', file);
     return apiClient.postFormData<ImportResultDto>('/api/lecturers/import', formData);
   },

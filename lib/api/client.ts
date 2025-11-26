@@ -167,6 +167,7 @@ class ApiClient {
     if (token && typeof headers === 'object' && headers !== null) {
       (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
     }
+    // Note: Do NOT set Content-Type header - browser will automatically set it with boundary for FormData
 
     try {
       const response = await fetch(url, {
@@ -176,14 +177,64 @@ class ApiClient {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+        // Try to get detailed error information
+        let errorData: any = {};
+        let errorText = '';
+        try {
+          errorText = await response.text();
+          if (errorText) {
+            try {
+              errorData = JSON.parse(errorText);
+            } catch (e) {
+              errorData = { message: errorText };
+            }
+          }
+        } catch (e) {
+          errorData = { message: `HTTP error! status: ${response.status}` };
+        }
+        
+        // Build comprehensive error message
+        let errorMessage = errorData.message || errorData.Message || errorData.title || errorText || `HTTP error! status: ${response.status}`;
+        
+        // Add details if available
+        if (errorData.details) {
+          errorMessage += `\n\nDetails: ${errorData.details}`;
+        }
+        
+        // Add data field if it contains error info
+        if (errorData.data && typeof errorData.data === 'string') {
+          errorMessage += `\n\nAdditional info: ${errorData.data}`;
+        }
+        
+        // Common database errors - provide helpful messages
+        if (errorMessage.includes('saving the entity changes')) {
+          errorMessage = 'Database error: ' + errorMessage + 
+            '\n\nPossible causes:\n' +
+            '- Invalid Semester ID or Major ID\n' +
+            '- Duplicate data (student/group already exists)\n' +
+            '- Missing required fields in Excel file\n' +
+            '- Foreign key constraint violation';
+        }
+        
+        console.error(`API FormData Error [${endpoint}]:`, {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorData,
+          url,
+          fullResponse: errorText,
+        });
+        
+        // Create error object with full details
+        const error = new Error(errorMessage);
+        (error as any).errorData = errorData;
+        (error as any).status = response.status;
+        throw error;
       }
 
       const data = await response.json();
       return data;
     } catch (error) {
-      console.error(`API Error [${endpoint}]:`, error);
+      console.error(`API FormData Error [${endpoint}]:`, error);
       throw error;
     }
   }

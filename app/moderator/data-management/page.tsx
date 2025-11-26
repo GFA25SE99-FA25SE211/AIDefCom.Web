@@ -153,10 +153,6 @@ export default function DataManagementPage() {
   const [councilImportMajorId, setCouncilImportMajorId] = useState("");
   const councilFileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const [isGroupImportModalOpen, setIsGroupImportModalOpen] = useState(false);
-  const [groupImportSemesterId, setGroupImportSemesterId] = useState("");
-  const [groupImportMajorId, setGroupImportMajorId] = useState("");
-  const groupFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [isStudentImportModalOpen, setIsStudentImportModalOpen] =
     useState(false);
@@ -266,13 +262,6 @@ export default function DataManagementPage() {
 
       setCouncilImportMajorId(
         (prev) => prev || (majorsList.length ? String(majorsList[0].id) : "")
-      );
-      setGroupImportMajorId(
-        (prev) => prev || (majorsList.length ? String(majorsList[0].id) : "")
-      );
-      setGroupImportSemesterId(
-        (prev) =>
-          prev || (semestersList.length ? String(semestersList[0].id) : "")
       );
 
       // Transform councils
@@ -547,77 +536,6 @@ export default function DataManagementPage() {
     }
   };
 
-  const handleOpenGroupImport = () => {
-    if (!majors.length || !semesters.length) {
-      swalConfig.error(
-        "Missing Data",
-        "Please ensure majors and semesters exist before importing groups."
-      );
-      return;
-    }
-    setGroupImportMajorId((prev) => prev || String(majors[0].id));
-    setGroupImportSemesterId((prev) => prev || String(semesters[0].id));
-    setIsGroupImportModalOpen(true);
-  };
-
-  const handleGroupDownloadTemplate = async () => {
-    try {
-      await studentsApi.downloadStudentGroupTemplate();
-      await swalConfig.success(
-        "Template Downloaded",
-        "Student-Group template has been downloaded successfully."
-      );
-    } catch (error: any) {
-      console.error("Download template error:", error);
-      await swalConfig.error(
-        "Download Failed",
-        error.message || "Unable to download student-group template."
-      );
-    }
-  };
-
-  const handleGroupFileChange = async (
-    event: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    if (!groupImportMajorId || !groupImportSemesterId) {
-      await swalConfig.error(
-        "Missing Information",
-        "Please choose both semester and major before importing."
-      );
-      event.target.value = "";
-      return;
-    }
-
-    try {
-      const result = await studentsApi.importStudentGroups({
-        semesterId: Number(groupImportSemesterId),
-        majorId: Number(groupImportMajorId),
-        file,
-      });
-      const data = result?.data || result;
-      const message =
-        data?.message ||
-        `Successfully imported. Groups: ${
-          data?.createdGroupIds?.length || 0
-        }, Students: ${data?.createdStudentIds?.length || 0}`;
-      await swalConfig.success("Import Complete", message);
-      await fetchData();
-      setIsGroupImportModalOpen(false);
-      setGroupImportMajorId("");
-      setGroupImportSemesterId("");
-    } catch (error: any) {
-      console.error("Import group error:", error);
-      await swalConfig.error(
-        "Import Failed",
-        error.message || "Unable to import groups."
-      );
-    } finally {
-      event.target.value = "";
-    }
-  };
 
   const handleAddStudent = async (data: {
     userId: string;
@@ -1469,18 +1387,6 @@ export default function DataManagementPage() {
         </h2>
         <div className="flex items-center gap-2">
           <button
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-md border border-green-500 text-sm font-medium text-green-600 hover:bg-green-50"
-            onClick={handleGroupDownloadTemplate}
-          >
-            <Download className="w-4 h-4" /> Template
-          </button>
-          <button
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-md border border-purple-500 text-sm font-medium text-purple-600 hover:bg-purple-50"
-            onClick={handleOpenGroupImport}
-          >
-            <Upload className="w-4 h-4" /> Import File
-          </button>
-          <button
             className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-gradient-to-r from-purple-600 to-blue-500 text-white text-sm"
             onClick={() => setIsAddGroupModalOpen(true)}
           >
@@ -2074,13 +1980,6 @@ export default function DataManagementPage() {
         onChange={handleCouncilFileChange}
       />
       <input
-        ref={groupFileInputRef}
-        type="file"
-        accept=".xlsx,.xls"
-        className="hidden"
-        onChange={handleGroupFileChange}
-      />
-      <input
         ref={studentFileInputRef}
         type="file"
         accept=".xlsx,.xls"
@@ -2143,79 +2042,6 @@ export default function DataManagementPage() {
         </div>
       )}
 
-      {/* Group import modal */}
-      {isGroupImportModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
-            <div className="mb-4 flex items-start justify-between">
-              <div>
-                <div className="flex items-center gap-2 text-lg font-semibold text-gray-900">
-                  <Upload className="w-5 h-5 text-purple-500" />
-                  Import Groups / Students
-                </div>
-                <p className="text-sm text-gray-500">
-                  Choose semester & major, then upload the student-group file.
-                </p>
-              </div>
-              <button
-                className="rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-                onClick={() => setIsGroupImportModalOpen(false)}
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <label className="text-sm font-medium text-gray-700">
-                  Semester
-                </label>
-                <select
-                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200"
-                  value={groupImportSemesterId}
-                  onChange={(e) => setGroupImportSemesterId(e.target.value)}
-                >
-                  {semesters.length === 0 && (
-                    <option value="">No semesters available</option>
-                  )}
-                  {semesters.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-700">
-                  Major
-                </label>
-                <select
-                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200"
-                  value={groupImportMajorId}
-                  onChange={(e) => setGroupImportMajorId(e.target.value)}
-                >
-                  {majors.length === 0 && (
-                    <option value="">No majors available</option>
-                  )}
-                  {majors.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <button
-                className="inline-flex items-center gap-2 px-3 py-2 rounded-md border border-purple-500 text-sm font-medium text-purple-600 hover:bg-purple-50 w-full justify-center"
-                onClick={() => groupFileInputRef.current?.click()}
-                disabled={!groupImportMajorId || !groupImportSemesterId}
-              >
-                <Upload className="w-4 h-4" /> Choose File
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Student import modal */}
       {isStudentImportModalOpen && (
