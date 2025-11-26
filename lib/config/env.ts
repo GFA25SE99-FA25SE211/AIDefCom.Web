@@ -4,10 +4,9 @@
 export const env = {
   // API Configuration
   // Backend runs on:
-  // - HTTP: http://localhost:5015 (profile "http")
   // - HTTPS: https://localhost:7143 (profile "https")
   // Default to HTTP for development
-  apiUrl: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5015',
+  apiUrl: process.env.NEXT_PUBLIC_API_URL || 'https://aidefcomapi.azurewebsites.net',
   
   // App Configuration
   appName: process.env.NEXT_PUBLIC_APP_NAME || 'AIDefCom',

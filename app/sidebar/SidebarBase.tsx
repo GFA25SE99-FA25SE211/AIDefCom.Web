@@ -15,13 +15,33 @@ export default function SidebarBase({ role, links }: SidebarBaseProps) {
   const router = useRouter();
 
   // Kiểm tra route active
+  
   const isActive = (href: string) => {
-    if (href === "/chair" && pathname === "/chair") return true;
-    if (href === "/secretary" && pathname === "/secretary") return true;
-    if (href === "/administrator" && pathname === "/administrator") return true;
-    if (href === "/moderator" && pathname === "/moderator") return true;
-    if (href === "/member" && pathname === "/member") return true;
-    return pathname.startsWith(href);
+    
+    if (pathname === href) return true;
+
+    
+    if (pathname.startsWith(href)) {
+      
+      const isSubPath = pathname.startsWith(href + "/") || href === "/"; 
+      
+      if (isSubPath) {
+        
+        const betterMatch = links.find(
+          (link) => 
+            link.href !== href && 
+            pathname.startsWith(link.href) && 
+            link.href.length > href.length
+        );
+        
+        
+        if (betterMatch) return false;
+        
+        return true;
+      }
+    }
+
+    return false;
   };
 
   // Xử lý logout

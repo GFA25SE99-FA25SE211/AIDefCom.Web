@@ -10,7 +10,11 @@ export interface ScoreDto {
   studentName?: string;
   sessionId: number;
   comment?: string;
+<<<<<<< HEAD
   createdAt: string;
+=======
+  createdAt?: string;
+>>>>>>> bfff009a91c3fee4ec4401d5cb1162270064f665
 }
 
 export interface ScoreCreateDto {
@@ -26,4 +30,3 @@ export interface ScoreUpdateDto {
   value: number;
   comment?: string;
 }
-

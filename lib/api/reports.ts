@@ -33,5 +33,17 @@ export const reportsApi = {
   restore: async (id: number) => {
     return apiClient.put(`/api/reports/${id}/restore`, {});
   },
+
+  getByLecturerId: async (lecturerId: string) => {
+    return apiClient.get<ReportDto[]>(`/api/reports/lecturer/${lecturerId}`);
+  },
+
+  approve: async (id: number) => {
+    return apiClient.put(`/api/reports/${id}/approve`, {});
+  },
+
+  reject: async (id: number) => {
+    return apiClient.put(`/api/reports/${id}/reject`, {});
+  },
 };
 

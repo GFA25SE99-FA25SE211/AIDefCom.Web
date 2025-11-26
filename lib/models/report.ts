@@ -5,6 +5,8 @@ export interface ReportDto {
   summary?: string;
   filePath?: string;
   generatedDate?: string;
+  status?: string;
+  summaryText?: string;
 }
 
 export interface ReportCreateDto {

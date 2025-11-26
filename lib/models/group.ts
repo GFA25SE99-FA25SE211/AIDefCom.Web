@@ -11,6 +11,7 @@ export interface GroupDto {
   majorId?: number;
   majorName?: string;
   status?: string;
+  totalScore?: number | null;
 }
 
 export interface GroupCreateDto {

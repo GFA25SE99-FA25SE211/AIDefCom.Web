@@ -7,7 +7,11 @@ export interface DefenseSessionDto {
   startTime: string;   // HH:MM:SS format
   endTime: string;     // HH:MM:SS format
   status: string;      // "Scheduled" | "Completed" etc.
+<<<<<<< HEAD
   councilId: number;
+=======
+  councilId?: number;
+>>>>>>> bfff009a91c3fee4ec4401d5cb1162270064f665
   createdAt: string;   // ISO date string
 }
 
