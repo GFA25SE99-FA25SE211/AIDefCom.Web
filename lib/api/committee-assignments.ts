@@ -10,7 +10,7 @@ export const committeeAssignmentsApi = {
     return apiClient.get<CommitteeAssignmentDto[]>('/api/committee-assignments');
   },
 
-  getById: async (id: number) => {
+  getById: async (id: number | string) => {
     return apiClient.get<CommitteeAssignmentDto>(`/api/committee-assignments/${id}`);
   },
 
@@ -30,11 +30,11 @@ export const committeeAssignmentsApi = {
     return apiClient.post<CommitteeAssignmentDto>('/api/committee-assignments', data);
   },
 
-  update: async (id: number, data: CommitteeAssignmentUpdateDto) => {
+  update: async (id: number | string, data: CommitteeAssignmentUpdateDto) => {
     return apiClient.put(`/api/committee-assignments/${id}`, data);
   },
 
-  delete: async (id: number) => {
+  delete: async (id: number | string) => {
     return apiClient.delete(`/api/committee-assignments/${id}`);
   },
 };

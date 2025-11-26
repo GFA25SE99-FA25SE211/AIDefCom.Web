@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import AdminSidebar from "../dashboard/components/AdminSidebar";
 import CreateAccountModal, {
   AccountFormData as CreateAccountData,
@@ -8,31 +8,121 @@ import CreateAccountModal, {
 import EditAccountModal, {
   AccountEditFormData,
 } from "../dashboard/components/EditAccountModal";
-import { Plus, Users, Search, Pencil, Trash2 } from "lucide-react";
+import {
+  Plus,
+  Users,
+  Search,
+  Pencil,
+  Trash2,
+  Upload,
+  Download,
+  GraduationCap,
+  UserRound,
+  X,
+  ArrowLeft,
+} from "lucide-react";
 import { authApi } from "@/lib/api/auth";
+import { studentsApi } from "@/lib/api/students";
+import { lecturersApi } from "@/lib/api/lecturers";
+import { semestersApi } from "@/lib/api/semesters";
+import { majorsApi } from "@/lib/api/majors";
 import { swalConfig } from "@/lib/utils/sweetAlert";
+import type { SemesterDto, MajorDto } from "@/lib/models";
 
 // --- Types ---
 interface UserAccount {
   id: string;
   name: string;
   email: string;
-  role: string;
+  roles: string[];
+  primaryRole: string;
   status: "Active" | "Inactive";
   createdDate: string;
 }
 
+const ROLE_FALLBACK = "Student";
+const ROLE_ALIASES: Record<string, string> = {
+  admin: "Administrator",
+  administrator: "Administrator",
+  moderator: "Moderator",
+  chair: "Chair",
+  member: "Member",
+  secretary: "Secretary",
+  student: "Student",
+  lecturer: "Lecturer",
+  "no role": "No Role",
+};
+
 const allRoles = [
   "All Roles",
   "Administrator",
+  "Lecturer",
   "Moderator",
   "Chair",
   "Member",
   "Secretary",
   "Student",
+  "No Role",
 ];
 
 const PAGE_SIZE = 8;
+
+const normalizeRoles = (rawRoles: unknown): string[] => {
+  if (!rawRoles) return [];
+  if (Array.isArray(rawRoles)) {
+    return rawRoles
+      .filter((role): role is string => typeof role === "string")
+      .map((role) => role.trim())
+      .map((role) => ROLE_ALIASES[role.toLowerCase()] || role)
+      .filter(Boolean);
+  }
+  if (typeof rawRoles === "string") {
+    return rawRoles
+      .split(",")
+      .map((role) => role.trim())
+      .map((role) => ROLE_ALIASES[role.toLowerCase()] || role)
+      .filter(Boolean);
+  }
+  return [];
+};
+
+const mapUserFromApi = (user: any): UserAccount => {
+  const rawRoles =
+    user?.roles ??
+    user?.Roles ??
+    user?.role ??
+    user?.Role ??
+    (user?.role ? [user.role] : undefined);
+  const normalizedRoles = normalizeRoles(rawRoles);
+  const roles = normalizedRoles.length ? normalizedRoles : [ROLE_FALLBACK];
+  const primaryRole = roles[0];
+  const createdSource =
+    user?.createdDate ??
+    user?.CreatedDate ??
+    user?.createdAt ??
+    user?.CreatedAt;
+  const createdDate = createdSource
+    ? new Date(createdSource).toLocaleDateString("en-GB")
+    : new Date().toLocaleDateString("en-GB");
+
+  return {
+    id: user?.id || user?.Id || "",
+    name:
+      user?.fullName ||
+      user?.FullName ||
+      user?.email ||
+      user?.Email ||
+      "Unknown",
+    email: user?.email || user?.Email || "",
+    roles,
+    primaryRole,
+    status: user?.isDelete ? "Inactive" : "Active",
+    createdDate,
+  };
+};
+
+const mapUsersFromApi = (apiUsers: any[] = []): UserAccount[] =>
+  apiUsers.map(mapUserFromApi);
 
 export default function AccountManagementPage() {
   const [users, setUsers] = useState<UserAccount[]>([]);
@@ -44,6 +134,18 @@ export default function AccountManagementPage() {
   const [loading, setLoading] = useState(true);
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [uploadStep, setUploadStep] = useState<null | "student" | "lecturer">(null);
+  const [studentUploadParams, setStudentUploadParams] = useState({
+    semesterId: "",
+    majorId: "",
+  });
+  const [semesters, setSemesters] = useState<SemesterDto[]>([]);
+  const [majors, setMajors] = useState<MajorDto[]>([]);
+  const [uploadMetaLoading, setUploadMetaLoading] = useState(false);
+  const studentFileInputRef = useRef<HTMLInputElement | null>(null);
+  const lecturerFileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     const fetchUsers = async () => {
@@ -58,20 +160,7 @@ export default function AccountManagementPage() {
           return;
         }
 
-        const apiUsers = (response.data || []).map((user: any) => ({
-          id: user.id || user.Id || "",
-          name:
-            user.fullName ||
-            user.FullName ||
-            user.email ||
-            user.Email ||
-            "Unknown",
-          email: user.email || user.Email || "",
-          role: user.roles?.[0] || user.Roles?.[0] || "Student",
-          status: "Active" as const,
-          createdDate: new Date().toLocaleDateString("en-GB"),
-        }));
-        setUsers(apiUsers);
+        setUsers(mapUsersFromApi(response.data));
       } catch (error: any) {
         console.error("Error fetching users:", error);
         // Show user-friendly error message
@@ -90,23 +179,58 @@ export default function AccountManagementPage() {
     fetchUsers();
   }, []);
 
+  useEffect(() => {
+    const fetchUploadMeta = async () => {
+      try {
+        setUploadMetaLoading(true);
+        const [semestersRes, majorsRes] = await Promise.all([
+          semestersApi.getAll().catch(() => ({ data: [] })),
+          majorsApi.getAll().catch(() => ({ data: [] })),
+        ]);
+        const semesterList = semestersRes.data || [];
+        const majorList = majorsRes.data || [];
+        setSemesters(semesterList);
+        setMajors(majorList);
+        setStudentUploadParams((prev) => ({
+          semesterId:
+            prev.semesterId ||
+            (semesterList.length ? String(semesterList[0].id) : ""),
+          majorId:
+            prev.majorId || (majorList.length ? String(majorList[0].id) : ""),
+        }));
+      } catch (error) {
+        console.error("Error loading upload metadata:", error);
+      } finally {
+        setUploadMetaLoading(false);
+      }
+    };
+
+    fetchUploadMeta();
+  }, []);
+
   const roleSummary = useMemo(() => {
     const counts: { [key: string]: number } = {
       Total: users.length,
-      Admin: 0,
+      Administrator: 0,
+      Lecturer: 0,
       Moderator: 0,
       Chair: 0,
       Member: 0,
       Secretary: 0,
       Student: 0,
+      "No Role": 0,
     };
     users.forEach((user) => {
-      if (user.role === "Administrator") counts.Admin++;
-      else if (user.role === "Moderator") counts.Moderator++;
-      else if (user.role === "Chair") counts.Chair++;
-      else if (user.role === "Member") counts.Member++;
-      else if (user.role === "Secretary") counts.Secretary++;
-      else if (user.role === "Student") counts.Student++;
+      user.roles.forEach((role) => {
+        if (role === "Administrator") counts.Administrator++;
+        else if (role === "Lecturer") counts.Lecturer++;
+        else if (role === "Moderator") counts.Moderator++;
+        else if (role === "Chair") counts.Chair++;
+        else if (role === "Member") counts.Member++;
+        else if (role === "Secretary") counts.Secretary++;
+        else if (role === "Student") counts.Student++;
+        else if (role === "No Role") counts["No Role"]++;
+      });
     });
     return counts;
   }, [users]);
@@ -118,7 +242,7 @@ export default function AccountManagementPage() {
         user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         user.email.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesRole =
-        selectedRole === "All Roles" || user.role === selectedRole;
+        selectedRole === "All Roles" || user.roles.includes(selectedRole);
       return matchesSearch && matchesRole;
     });
   }, [users, searchTerm, selectedRole]);
@@ -184,20 +308,7 @@ export default function AccountManagementPage() {
 
       // Refresh users list
       const usersResponse = await authApi.getAllUsers();
-      const apiUsers = (usersResponse.data || []).map((user: any) => ({
-        id: user.id || user.Id || "",
-        name:
-          user.fullName ||
-          user.FullName ||
-          user.email ||
-          user.Email ||
-          "Unknown",
-        email: user.email || user.Email || "",
-        role: user.roles?.[0] || user.Roles?.[0] || "Student",
-        status: "Active" as const,
-        createdDate: new Date().toLocaleDateString("en-GB"),
-      }));
-      setUsers(apiUsers);
+      setUsers(mapUsersFromApi(usersResponse.data || []));
       setIsCreateModalOpen(false);
       swalConfig.success("Success!", "Account created successfully!");
     } catch (error: any) {
@@ -230,22 +341,22 @@ export default function AccountManagementPage() {
     data: AccountEditFormData
   ) => {
     try {
-      // Update role if changed
-      if (data.role) {
+      await authApi.updateAccount(String(id), {
+        fullName: data.fullName,
+        email: data.email,
+      });
+
+      if (
+        data.role &&
+        editingUser &&
+        data.role !== editingUser.primaryRole
+      ) {
         await authApi.assignRole(data.email, data.role);
       }
 
       // Refresh users list
       const response = await authApi.getAllUsers();
-      const apiUsers = (response.data || []).map((user: any) => ({
-        id: user.id,
-        name: user.fullName || user.email,
-        email: user.email,
-        role: user.roles?.[0] || "Student",
-        status: "Active" as const,
-        createdDate: new Date().toLocaleDateString("en-GB"),
-      }));
-      setUsers(apiUsers);
+      setUsers(mapUsersFromApi(response.data || []));
       setIsEditModalOpen(false);
       setEditingUser(null);
       swalConfig.success("Success!", "Account updated successfully!");
@@ -313,6 +424,112 @@ export default function AccountManagementPage() {
     }
   };
 
+  const handleDownloadStudentTemplate = async () => {
+    try {
+      await studentsApi.downloadStudentGroupTemplate();
+      setIsDownloadModalOpen(false);
+    } catch (error: any) {
+      console.error("Error downloading student-group template:", error);
+      swalConfig.error(
+        "Download Failed",
+        error.message || "Unable to download student-group template."
+      );
+    }
+  };
+
+  const handleDownloadLecturerTemplate = async () => {
+    try {
+      await lecturersApi.downloadTemplate();
+      setIsDownloadModalOpen(false);
+    } catch (error: any) {
+      console.error("Error downloading lecturer template:", error);
+      swalConfig.error(
+        "Download Failed",
+        error.message || "Unable to download lecturer template."
+      );
+    }
+  };
+
+  const closeUploadModal = () => {
+    setIsUploadModalOpen(false);
+    setUploadStep(null);
+    setStudentUploadParams({ semesterId: "", majorId: "" });
+  };
+
+  const handleStudentUploadClick = () => {
+    if (!semesters.length || !majors.length) {
+      swalConfig.error(
+        "Data Not Ready",
+        "Semester or major data is unavailable. Please try again later."
+      );
+      return;
+    }
+    setStudentUploadParams((prev) => ({
+      semesterId: prev.semesterId || String(semesters[0].id),
+      majorId: prev.majorId || String(majors[0].id),
+    }));
+    setUploadStep("student");
+  };
+
+  const handleLecturerUploadClick = () => {
+    setUploadStep("lecturer");
+  };
+
+  const handleStudentUploadFileChange = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!studentUploadParams.semesterId || !studentUploadParams.majorId) {
+      swalConfig.error(
+        "Missing Information",
+        "Please provide Semester ID and Major ID before uploading."
+      );
+      event.target.value = "";
+      return;
+    }
+
+    try {
+      await studentsApi.importStudentGroups({
+        semesterId: Number(studentUploadParams.semesterId),
+        majorId: Number(studentUploadParams.majorId),
+        file,
+      });
+      swalConfig.success("Upload Complete", "Student-group data uploaded!");
+      closeUploadModal();
+    } catch (error: any) {
+      console.error("Error uploading student-group file:", error);
+      swalConfig.error(
+        "Upload Failed",
+        error.message || "Unable to upload student-group file."
+      );
+    } finally {
+      event.target.value = "";
+    }
+  };
+
+  const handleLecturerUploadFileChange = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      await lecturersApi.importLecturers(file);
+      swalConfig.success("Upload Complete", "Lecturer data uploaded!");
+      closeUploadModal();
+    } catch (error: any) {
+      console.error("Error uploading lecturer file:", error);
+      swalConfig.error(
+        "Upload Failed",
+        error.message || "Unable to upload lecturer file."
+      );
+    } finally {
+      event.target.value = "";
+    }
+  };
+
   const openEditModal = (user: UserAccount) => {
     setEditingUser(user);
     setIsEditModalOpen(true);
@@ -329,13 +546,34 @@ export default function AccountManagementPage() {
             Manage user accounts and permissions
           </p>
         </div>
-        <button
-          className="btn-gradient flex items-center gap-2"
-          onClick={() => setIsCreateModalOpen(true)}
-        >
-          <Plus className="w-4 h-4" />
-          Create Account
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            className="flex items-center gap-2 rounded-full border border-green-500 px-4 py-2 text-sm font-medium text-green-600 transition hover:bg-green-50"
+            onClick={() => setIsDownloadModalOpen(true)}
+            type="button"
+          >
+            <Download className="w-4 h-4" />
+            Download Template
+          </button>
+          <button
+            className="flex items-center gap-2 rounded-full border border-purple-500 px-4 py-2 text-sm font-medium text-purple-600 transition hover:bg-purple-50"
+            onClick={() => {
+              setIsUploadModalOpen(true);
+              setUploadStep(null);
+            }}
+            type="button"
+          >
+            <Upload className="w-4 h-4" />
+            Upload File
+          </button>
+          <button
+            className="btn-gradient flex items-center gap-2"
+            onClick={() => setIsCreateModalOpen(true)}
+          >
+            <Plus className="w-4 h-4" />
+            Create Account
+          </button>
+        </div>
       </header>
 
       {/* Account Summary */}
@@ -402,7 +640,9 @@ export default function AccountManagementPage() {
                   <td>{user.name}</td>
                   <td>{user.email}</td>
                   <td>
-                    <span className="badge badge-info">{user.role}</span>
+                    <span className="badge badge-info">
+                      {user.roles.join(", ")}
+                    </span>
                   </td>
                   <td>
                     <span
@@ -479,7 +719,6 @@ export default function AccountManagementPage() {
       <footer className="page-footer">
         © 2025 AIDefCom - Smart Graduation Defense
       </footer>
-      <button className="help-btn">?</button>
 
       {/* Modals */}
       <CreateAccountModal
@@ -496,6 +735,228 @@ export default function AccountManagementPage() {
         onSubmit={handleEditAccount}
         accountData={editingUser}
       />
+
+      {isDownloadModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="mb-4 flex items-start justify-between">
+              <div>
+                <div className="flex items-center gap-2 text-lg font-semibold text-gray-900">
+                  <Download className="w-5 h-5 text-green-500" />
+                  Download Template
+                </div>
+                <p className="text-sm text-gray-500">
+                  Select the type of template to download
+                </p>
+              </div>
+              <button
+                className="rounded-full p-1 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
+                onClick={() => setIsDownloadModalOpen(false)}
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="space-y-3">
+              <button
+                type="button"
+                onClick={handleDownloadStudentTemplate}
+                className="flex w-full items-center justify-between rounded-2xl bg-gradient-to-r from-purple-600 to-[#7c3aed] px-5 py-4 text-white"
+              >
+                <span className="flex items-center gap-2 text-sm font-semibold">
+                  <GraduationCap className="w-4 h-4" />
+                  Student-Group Template
+                </span>
+                <Download className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={handleDownloadLecturerTemplate}
+                className="flex w-full items-center justify-between rounded-2xl bg-gradient-to-r from-blue-500 to-cyan-500 px-5 py-4 text-white"
+              >
+                <span className="flex items-center gap-2 text-sm font-semibold">
+                  <UserRound className="w-4 h-4" />
+                  Lecturer Template
+                </span>
+                <Download className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isUploadModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="mb-4 flex items-start justify-between">
+              <div>
+                <div className="flex items-center gap-2 text-lg font-semibold text-gray-900">
+                  <Upload className="w-5 h-5 text-purple-500" />
+                  Upload File
+                </div>
+                <p className="text-sm text-gray-500">
+                  Select the type of data to upload
+                </p>
+              </div>
+              <button
+                className="rounded-full p-1 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
+                onClick={closeUploadModal}
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {uploadStep === null && (
+              <div className="space-y-3">
+                <button
+                  type="button"
+                  onClick={handleStudentUploadClick}
+                  className="flex w-full items-center justify-between rounded-2xl bg-gradient-to-r from-purple-600 to-[#7c3aed] px-5 py-4 text-white"
+                >
+                  <span className="flex items-center gap-2 text-sm font-semibold">
+                    <GraduationCap className="w-4 h-4" />
+                    Upload Student-Group File
+                  </span>
+                  <Upload className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={handleLecturerUploadClick}
+                  className="flex w-full items-center justify-between rounded-2xl bg-gradient-to-r from-blue-500 to-cyan-500 px-5 py-4 text-white"
+                >
+                  <span className="flex items-center gap-2 text-sm font-semibold">
+                    <UserRound className="w-4 h-4" />
+                    Upload Lecturer File
+                  </span>
+                  <Upload className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
+            {uploadStep === "student" && (
+              <div className="space-y-4">
+                <button
+                  type="button"
+                  className="flex items-center gap-2 text-sm text-gray-500 transition hover:text-gray-700"
+                  onClick={() => setUploadStep(null)}
+                >
+                  <ArrowLeft className="w-4 h-4" /> Back
+                </button>
+                <div className="space-y-3 rounded-2xl bg-gray-50 p-4">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">
+                      Semester
+                    </label>
+                    <select
+                      value={studentUploadParams.semesterId}
+                      onChange={(e) =>
+                        setStudentUploadParams((prev) => ({
+                          ...prev,
+                          semesterId: e.target.value,
+                        }))
+                      }
+                      disabled={!semesters.length || uploadMetaLoading}
+                      className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 disabled:bg-gray-100"
+                    >
+                      {semesters.length === 0 && (
+                        <option value="">No semester data</option>
+                      )}
+                      {semesters.map((semester) => (
+                        <option key={semester.id} value={semester.id}>
+                          {semester.semesterName} ({semester.year})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">
+                      Major
+                    </label>
+                    <select
+                      value={studentUploadParams.majorId}
+                      onChange={(e) =>
+                        setStudentUploadParams((prev) => ({
+                          ...prev,
+                          majorId: e.target.value,
+                        }))
+                      }
+                      disabled={!majors.length || uploadMetaLoading}
+                      className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 disabled:bg-gray-100"
+                    >
+                      {majors.length === 0 && (
+                        <option value="">No major data</option>
+                      )}
+                      {majors.map((major) => (
+                        <option key={major.id} value={major.id}>
+                          {major.majorName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => studentFileInputRef.current?.click()}
+                  className="flex w-full items-center justify-between rounded-2xl bg-gradient-to-r from-purple-600 to-[#7c3aed] px-5 py-4 text-white disabled:opacity-50"
+                  disabled={
+                    !studentUploadParams.semesterId ||
+                    !studentUploadParams.majorId ||
+                    uploadMetaLoading ||
+                    !semesters.length ||
+                    !majors.length
+                  }
+                >
+                  <span className="flex items-center gap-2 text-sm font-semibold">
+                    <GraduationCap className="w-4 h-4" />
+                    Choose Student-Group File
+                  </span>
+                  <Upload className="w-4 h-4" />
+                </button>
+                <input
+                  ref={studentFileInputRef}
+                  type="file"
+                  accept=".xlsx,.xls"
+                  className="hidden"
+                  onChange={handleStudentUploadFileChange}
+                />
+              </div>
+            )}
+
+            {uploadStep === "lecturer" && (
+              <div className="space-y-4">
+                <button
+                  type="button"
+                  className="flex items-center gap-2 text-sm text-gray-500 transition hover:text-gray-700"
+                  onClick={() => setUploadStep(null)}
+                >
+                  <ArrowLeft className="w-4 h-4" /> Back
+                </button>
+                <p className="rounded-2xl bg-blue-50 px-4 py-3 text-sm text-blue-700">
+                  Upload an Excel file that contains lecturer information in the
+                  provided template format.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => lecturerFileInputRef.current?.click()}
+                  className="flex w-full items-center justify-between rounded-2xl bg-gradient-to-r from-blue-500 to-cyan-500 px-5 py-4 text-white"
+                >
+                  <span className="flex items-center gap-2 text-sm font-semibold">
+                    <UserRound className="w-4 h-4" />
+                    Choose Lecturer File
+                  </span>
+                  <Upload className="w-4 h-4" />
+                </button>
+                <input
+                  ref={lecturerFileInputRef}
+                  type="file"
+                  accept=".xlsx,.xls"
+                  className="hidden"
+                  onChange={handleLecturerUploadFileChange}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </main>
   );
 }

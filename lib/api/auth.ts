@@ -3,6 +3,7 @@ import type {
   LoginDto,
   CreateAccountDto,
   UserDto,
+  UpdateAccountDto,
 } from '@/lib/models';
 
 export const authApi = {
@@ -24,6 +25,10 @@ export const authApi = {
 
   assignRole: async (email: string, role: string) => {
     return apiClient.put('/api/auth/roles/assign', { email, role });
+  },
+
+  updateAccount: async (id: string, data: UpdateAccountDto) => {
+    return apiClient.put<UserDto>(`/api/auth/users/${id}`, data);
   },
 
   softDeleteAccount: async (email: string) => {

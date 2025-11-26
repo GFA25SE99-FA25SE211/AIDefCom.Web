@@ -14,19 +14,28 @@ interface AddTaskModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (data: AddTaskData) => void;
+  userOptions?: { id: string; name: string }[];
 }
 
 const AddTaskModal: React.FC<AddTaskModalProps> = ({
   isOpen,
   onClose,
   onSubmit,
+  userOptions = [],
 }) => {
   const [title, setTitle] = useState("Review defense session reports");
   const [description, setDescription] = useState("Task description...");
   const [assignedTo, setAssignedTo] = useState("");
   const [status, setStatus] = useState<"Pending" | "Completed" | "">("");
+  ("");
 
-  const assignees = ["Secretary", "Moderator", "Chair", "Member"];
+  const assignees =
+    userOptions.length > 0
+      ? userOptions.map((u) => ({ id: u.id, name: u.name }))
+      : [
+          { id: "chair", name: "Chair (No users found)" },
+          { id: "secretary", name: "Secretary (No users found)" },
+        ];
   const statuses = ["Pending", "Completed"];
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -113,8 +122,8 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({
                 Select assignee
               </option>
               {assignees.map((a) => (
-                <option key={a} value={a}>
-                  {a}
+                <option key={a.id} value={a.id}>
+                  {a.name}
                 </option>
               ))}
             </select>

@@ -14,14 +14,20 @@ export interface GroupDto {
 }
 
 export interface GroupCreateDto {
-  groupName: string;
-  projectTitle?: string;
+  projectCode: string;
+  topicTitle_EN: string;
+  topicTitle_VN: string;
   semesterId: number;
+  majorId: number;
+  status: string;
 }
 
 export interface GroupUpdateDto {
-  groupName: string;
-  projectTitle?: string;
+  projectCode: string;
+  topicTitle_EN: string;
+  topicTitle_VN: string;
   semesterId: number;
+  majorId: number;
+  status: string;
 }
 

@@ -3,10 +3,12 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { Languages, ArrowLeft, Save } from "lucide-react";
+import { ArrowLeft, Save } from "lucide-react";
 import { groupsApi } from "@/lib/api/groups";
 import { studentsApi } from "@/lib/api/students";
 import { rubricsApi } from "@/lib/api/rubrics";
+import { scoresApi, type ScoreReadDto } from "@/lib/api/scores";
+import { defenseSessionsApi } from "@/lib/api/defense-sessions";
 import type { GroupDto, StudentDto } from "@/lib/models";
 
 // --- (Code Icons giữ nguyên) ---
@@ -128,20 +130,30 @@ export default function ViewScorePage() {
   const [notesVisibility, setNotesVisibility] = useState<NotesVisibility>({});
   const [loading, setLoading] = useState(true);
   const [rubrics, setRubrics] = useState<any[]>([]);
+  const [sessionId, setSessionId] = useState<number | null>(null);
 
   useEffect(() => {
     const fetchGroupData = async () => {
       try {
         setLoading(true);
-        const [groupRes, studentsRes, rubricsRes] = await Promise.all([
-          groupsApi.getById(groupId).catch(() => ({ data: null })),
-          studentsApi.getByGroupId(groupId).catch(() => ({ data: [] })),
-          rubricsApi.getAll().catch(() => ({ data: [] })),
-        ]);
+        const [groupRes, studentsRes, rubricsRes, sessionsRes] =
+          await Promise.all([
+            groupsApi.getById(groupId).catch(() => ({ data: null })),
+            studentsApi.getByGroupId(groupId).catch(() => ({ data: [] })),
+            rubricsApi.getAll().catch(() => ({ data: [] })),
+            defenseSessionsApi.getAll().catch(() => ({ data: [] })),
+          ]);
 
         const group = groupRes.data;
         const students = studentsRes.data || [];
+        const sessions = sessionsRes.data || [];
         setRubrics(rubricsRes.data || []);
+
+        // Find session for this group
+        const groupSession = sessions.find((s: any) => s.groupId === groupId);
+        if (groupSession) {
+          setSessionId(groupSession.id);
+        }
 
         if (group) {
           const displayName =
@@ -156,16 +168,55 @@ export default function ViewScorePage() {
             group.topicTitle_VN ||
             "No project title";
 
+          // Load existing scores for each student
+          const studentsWithScores = await Promise.all(
+            students.map(async (s: StudentDto, index: number) => {
+              const scoresRes = await scoresApi
+                .getByStudentId(s.id)
+                .catch(() => ({ data: [] }));
+              const existingScores = scoresRes.data || [];
+
+              // Filter scores for current session if available
+              const sessionScores = groupSession
+                ? existingScores.filter(
+                    (score: ScoreReadDto) => score.sessionId === groupSession.id
+                  )
+                : [];
+
+              // Create scores array based on rubrics
+              const scoresArray = new Array(rubricsRes.data?.length || 5).fill(
+                0
+              );
+
+              // Map existing scores to rubrics
+              sessionScores.forEach((score: ScoreReadDto) => {
+                const rubricIndex = (rubricsRes.data || []).findIndex(
+                  (r: any) => r.id === score.rubricId
+                );
+                if (rubricIndex >= 0) {
+                  scoresArray[rubricIndex] = score.value;
+                }
+              });
+
+              // Get note from scores (first score with comment) or empty
+              const noteFromScore = sessionScores.find(
+                (score: ScoreReadDto) => score.comment
+              );
+
+              return {
+                id: s.id,
+                name: s.fullName || s.userName || "Unknown",
+                role: index === 0 ? "Team Leader" : "Developer",
+                scores: scoresArray,
+                note: noteFromScore?.comment || "",
+              };
+            })
+          );
+
           const groupData: GroupData = {
             name: displayName,
             project: projectTitle,
-            students: students.map((s: StudentDto, index: number) => ({
-              id: s.id,
-              name: s.fullName || s.userName || "Unknown",
-              role: index === 0 ? "Team Leader" : "Developer",
-              scores: new Array(rubrics.length || 5).fill(0),
-              note: "",
-            })),
+            students: studentsWithScores,
           };
           setGroupData(groupData);
           setStudentScores(groupData.students);
@@ -244,7 +295,9 @@ export default function ViewScorePage() {
               <h1 className="text-xl font-semibold text-gray-800">
                 {groupData?.name || "Loading..."}
               </h1>
-              <p className="text-sm text-gray-500 mt-1">{groupData?.project || ""}</p>
+              <p className="text-sm text-gray-500 mt-1">
+                {groupData?.project || ""}
+              </p>
             </div>
 
             {/* Right section */}
@@ -257,11 +310,6 @@ export default function ViewScorePage() {
                 <ArrowLeft className="w-4 h-4" />
                 <span>Back to list</span>
               </Link>
-
-              <button className="flex items-center gap-2 mt-4 md:mt-0 px-3 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-blue-500 text-white text-sm font-medium shadow-sm hover:opacity-90 transition">
-                <Languages className="w-4 h-4" />
-                <span>Tiếng Việt</span>
-              </button>
             </div>
           </div>
         </div>
@@ -272,160 +320,150 @@ export default function ViewScorePage() {
           <div className="flex items-center justify-between mb-6">
             <div>
               <h2 className="text-lg font-semibold text-gray-800">
-                Individual Grading
+                View Individual Scores
               </h2>
               <p className="text-sm text-gray-500 mt-1">
-                Grade each member individually
+                View each member's grading results
               </p>
             </div>
 
             {/* Nút hành động phải */}
             <div className="flex items-center gap-3 flex-wrap justify-end">
-              {/* Cancel */}
-              <button
-                onClick={handleCancel}
+              {/* Back to list */}
+              <Link
+                href="/member/groups-to-grade"
                 className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 text-gray-700 text-sm font-medium shadow-sm hover:bg-gray-100 transition"
               >
-                Cancel
-              </button>
-
-              {/* Save All Scores */}
-              <button
-                onClick={handleSave}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-blue-500 text-white text-sm font-medium shadow-sm hover:opacity-90 transition"
-              >
-                <Save className="w-4 h-4" />
-                <span>Save All Scores</span>
-              </button>
+                <ArrowLeft className="w-4 h-4" />
+                <span>Back to List</span>
+              </Link>
             </div>
           </div>
 
           {loading ? (
-            <div className="text-center py-8 text-gray-500">Loading group data...</div>
+            <div className="text-center py-8 text-gray-500">
+              Loading group data...
+            </div>
           ) : (
             <>
-          {/* Responsive table container */}
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-gray-600">
-                  <th className="py-2 pr-4">Student</th>
-                      {(rubrics.length > 0 ? rubrics.map((r: any) => r.rubricName) : criteria).map((name) => (
-                    <th key={name} className="py-2 px-3">
-                      <div className="flex flex-col">
-                        <span className="font-medium">{name}</span>
-                        <span className="text-xs text-gray-400">(Max: 10)</span>
-                      </div>
-                    </th>
-                  ))}
-                  <th className="py-2 px-3">Average</th>
-                  <th className="py-2 px-3">Actions</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {studentScores.map((student: StudentScore, studentIndex) => (
-                  <React.Fragment key={student.id}>
-                    <tr className="border-t">
-                      <td className="py-4 pr-4 align-top w-64">
-                        <div className="flex flex-col">
-                          <Link
-                            href={`/member/student-history/${student.id}`}
-                            className="text-sm font-medium text-gray-800 hover:underline"
-                          >
-                            {student.name}
-                          </Link>
-                          <span className="text-xs text-gray-500 mt-1">
-                            ID: {student.id}
-                          </span>
-                          <span className="text-xs text-gray-500">
-                            {student.role}
-                          </span>
-                        </div>
-                      </td>
-
-                      {student.scores.map((score: number, criterionIndex) => (
-                        <td
-                          key={criterionIndex}
-                          className="py-3 px-3 align-top"
-                        >
-                          <input
-                            type="number"
-                            step="0.1"
-                            min="0"
-                            max="10"
-                            className="score-input w-20 rounded-md border px-2 py-1 text-sm"
-                            value={score.toFixed(1)}
-                            onChange={(e) =>
-                              handleScoreChange(
-                                studentIndex,
-                                criterionIndex,
-                                e.target.value
-                              )
-                            }
-                          />
-                        </td>
+              {/* Responsive table container */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-gray-600">
+                      <th className="py-2 pr-4">Student</th>
+                      {(rubrics.length > 0
+                        ? rubrics.map((r: any) => r.rubricName)
+                        : criteria
+                      ).map((name) => (
+                        <th key={name} className="py-2 px-3">
+                          <div className="flex flex-col">
+                            <span className="font-medium">{name}</span>
+                            <span className="text-xs text-gray-400">
+                              (Max: 10)
+                            </span>
+                          </div>
+                        </th>
                       ))}
-
-                      <td className="py-3 px-3 align-top">
-                        <span className="inline-block bg-blue-50 text-blue-700 text-sm px-2 py-1 rounded-md">
-                          {calculateAverage(student.scores)}
-                        </span>
-                      </td>
-
-                      <td className="py-3 px-3 align-top">
-                        <button
-                          className="text-sm text-violet-600 border px-3 py-1 rounded-md hover:bg-violet-50"
-                          onClick={() => toggleNoteVisibility(student.id)}
-                        >
-                          Notes
-                        </button>
-                      </td>
+                      <th className="py-2 px-3">Average</th>
+                      <th className="py-2 px-3">Actions</th>
                     </tr>
+                  </thead>
 
-                    {notesVisibility[student.id] && (
-                      <tr>
-                        <td colSpan={8} className="py-3">
-                          <div className="bg-gray-50 border rounded-md p-3">
-                            <textarea
-                              className="w-full p-3 rounded-md bg-white border text-sm"
-                              placeholder={`Add notes for ${student.name}...`}
-                              value={student.note}
-                              onChange={(e) =>
-                                handleNoteChange(studentIndex, e.target.value)
-                              }
-                            />
-                            <div className="text-right mt-2">
+                  <tbody>
+                    {studentScores.map(
+                      (student: StudentScore, studentIndex) => (
+                        <React.Fragment key={student.id}>
+                          <tr className="border-t">
+                            <td className="py-4 pr-4 align-top w-64">
+                              <div className="flex flex-col">
+                                <Link
+                                  href={`/member/student-history/${student.id}`}
+                                  className="text-sm font-medium text-gray-800 hover:underline"
+                                >
+                                  {student.name}
+                                </Link>
+                                <span className="text-xs text-gray-500 mt-1">
+                                  ID: {student.id}
+                                </span>
+                                <span className="text-xs text-gray-500">
+                                  {student.role}
+                                </span>
+                              </div>
+                            </td>
+
+                            {student.scores.map(
+                              (score: number, criterionIndex) => (
+                                <td
+                                  key={criterionIndex}
+                                  className="py-3 px-3 align-top"
+                                >
+                                  <input
+                                    type="number"
+                                    step="0.1"
+                                    min="0"
+                                    max="10"
+                                    readOnly
+                                    className="score-input w-20 rounded-md border px-2 py-1 text-sm bg-gray-50 cursor-not-allowed"
+                                    value={score.toFixed(1)}
+                                  />
+                                </td>
+                              )
+                            )}
+
+                            <td className="py-3 px-3 align-top">
+                              <span className="inline-block bg-blue-50 text-blue-700 text-sm px-2 py-1 rounded-md">
+                                {calculateAverage(student.scores)}
+                              </span>
+                            </td>
+
+                            <td className="py-3 px-3 align-top">
                               <button
-                                className="text-sm text-gray-600 hover:underline"
+                                className="text-sm text-violet-600 border px-3 py-1 rounded-md hover:bg-violet-50"
                                 onClick={() => toggleNoteVisibility(student.id)}
                               >
-                                Hide
+                                Notes
                               </button>
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
+                            </td>
+                          </tr>
+
+                          {notesVisibility[student.id] && (
+                            <tr>
+                              <td colSpan={8} className="py-3">
+                                <div className="bg-gray-50 border rounded-md p-3">
+                                  <textarea
+                                    className="w-full p-3 rounded-md bg-gray-50 border text-sm cursor-not-allowed"
+                                    placeholder={`Notes for ${student.name}...`}
+                                    value={student.note}
+                                    readOnly
+                                  />
+                                  <div className="text-right mt-2">
+                                    <button
+                                      className="text-sm text-gray-600 hover:underline"
+                                      onClick={() =>
+                                        toggleNoteVisibility(student.id)
+                                      }
+                                    >
+                                      Hide
+                                    </button>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      )
                     )}
-                  </React.Fragment>
-                ))}
-              </tbody>
-            </table>
-          </div>
-              </>
-            )}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </div>
 
         <footer className="page-footer text-center text-sm text-gray-500 mt-6">
           © 2025 AIDefCom - Smart Graduation Defense
         </footer>
-
-        <button
-          className="help-btn fixed bottom-6 right-6 w-10 h-10 rounded-full bg-gradient-to-r from-purple-600 to-blue-500 text-white flex items-center justify-center shadow-lg"
-          aria-label="Help"
-        >
-          ?
-        </button>
       </main>
     </>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Modal from "../../../moderator/create-sessions/components/Modal";
 import { CalendarPlus } from "lucide-react";
 
@@ -12,16 +12,23 @@ interface AddSemesterData {
   majorID: string;
 }
 
+interface MajorOption {
+  id: string;
+  name: string;
+}
+
 interface AddSemesterModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (data: AddSemesterData) => void;
+  majorOptions?: MajorOption[];
 }
 
 const AddSemesterModal: React.FC<AddSemesterModalProps> = ({
   isOpen,
   onClose,
   onSubmit,
+  majorOptions = [],
 }) => {
   const [name, setName] = useState("");
   const [year, setYear] = useState(new Date().getFullYear());
@@ -29,7 +36,11 @@ const AddSemesterModal: React.FC<AddSemesterModalProps> = ({
   const [endDate, setEndDate] = useState("");
   const [majorID, setMajorID] = useState("");
 
-  const majorOptions = ["CS001", "SE001", "BA001"];
+  useEffect(() => {
+    if (majorOptions.length > 0 && !majorID) {
+      setMajorID(majorOptions[0].id);
+    }
+  }, [majorOptions, majorID]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -123,11 +134,17 @@ const AddSemesterModal: React.FC<AddSemesterModalProps> = ({
             <option value="" disabled>
               Select Major
             </option>
-            {majorOptions.map((m) => (
-              <option key={m} value={m}>
-                {m}
+            {majorOptions.length > 0 ? (
+              majorOptions.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name || m.id}
+                </option>
+              ))
+            ) : (
+              <option value="" disabled>
+                No majors available
               </option>
-            ))}
+            )}
           </select>
         </div>
       </form>

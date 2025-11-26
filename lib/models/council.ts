@@ -10,12 +10,14 @@ export interface CouncilDto {
 }
 
 export interface CouncilCreateDto {
-  councilName: string;
+  majorId: number;
   description?: string;
+  isActive?: boolean;
 }
 
 export interface CouncilUpdateDto {
-  councilName: string;
+  majorId: number;
   description?: string;
+  isActive?: boolean;
 }
 

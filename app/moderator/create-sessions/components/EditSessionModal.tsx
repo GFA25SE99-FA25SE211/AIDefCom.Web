@@ -58,7 +58,8 @@ interface Session {
   location: string;
   date: string;
   time: string;
-  status: "Scheduled" | "Completed";
+  status: "Scheduled" | "InProgress" | "Completed";
+  councilId: number;
 }
 
 interface EditSessionModalProps {
@@ -72,6 +73,7 @@ interface EditSessionModalProps {
       date: string;
       time: string;
       status: string;
+      councilId: number;
     }
   ) => void;
   sessionData: Session | null;
@@ -109,7 +111,14 @@ const EditSessionModal: React.FC<EditSessionModalProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!sessionData) return;
-    onSubmit(sessionData.id, { groupId, location, date, time, status });
+    onSubmit(sessionData.id, {
+      groupId,
+      location,
+      date,
+      time,
+      status,
+      councilId: sessionData.councilId,
+    });
   };
 
   const footer = (
@@ -146,6 +155,18 @@ const EditSessionModal: React.FC<EditSessionModalProps> = ({
         onSubmit={handleSubmit}
         className="space-y-5"
       >
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Session ID
+          </label>
+          <input
+            type="text"
+            value={sessionData.id}
+            disabled
+            className="w-full border rounded-md px-3 py-2 text-sm bg-gray-100 text-gray-500 cursor-not-allowed"
+          />
+        </div>
+
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Group ID
@@ -219,6 +240,7 @@ const EditSessionModal: React.FC<EditSessionModalProps> = ({
             className="w-full border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 outline-none"
           >
             <option value="Scheduled">Scheduled</option>
+            <option value="InProgress">In Progress</option>
             <option value="Completed">Completed</option>
           </select>
         </div>

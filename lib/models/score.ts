@@ -1,21 +1,29 @@
-// Score Models
+// Score Models  
 export interface ScoreDto {
   id: number;
-  studentId: string;
+  value: number;
   rubricId: number;
-  score: number;
-  defenseSessionId: number;
-  lecturerId?: string;
+  rubricName?: string;
+  evaluatorId: string;
+  evaluatorName?: string;
+  studentId: string;
+  studentName?: string;
+  sessionId: number;
+  comment?: string;
+  createdAt: string;
 }
 
 export interface ScoreCreateDto {
-  studentId: string;
+  value: number;
   rubricId: number;
-  score: number;
-  defenseSessionId: number;
+  evaluatorId: string;
+  studentId: string;
+  sessionId: number;
+  comment?: string;
 }
 
 export interface ScoreUpdateDto {
-  score: number;
+  value: number;
+  comment?: string;
 }
 

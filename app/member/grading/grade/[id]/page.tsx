@@ -3,12 +3,17 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { Languages, ArrowLeft, Save } from "lucide-react";
+import { ArrowLeft, Save } from "lucide-react";
 import { groupsApi } from "@/lib/api/groups";
 import { studentsApi } from "@/lib/api/students";
 import { memberNotesApi } from "@/lib/api/member-notes";
 import { rubricsApi } from "@/lib/api/rubrics";
-import type { GroupDto, StudentDto } from "@/lib/models";
+import { scoresApi, type ScoreReadDto } from "@/lib/api/scores";
+import { defenseSessionsApi } from "@/lib/api/defense-sessions";
+import { swalConfig } from "@/lib/utils/sweetAlert";
+import { authUtils } from "@/lib/utils/auth";
+import Swal from "sweetalert2";
+import type { GroupDto, StudentDto, ScoreCreateDto } from "@/lib/models";
 
 interface StudentScore {
   id: string;
@@ -16,6 +21,7 @@ interface StudentScore {
   role: string;
   scores: number[];
   note: string;
+  existingScoreIds: number[]; // Track existing score IDs for updates
 }
 
 interface GroupData {
@@ -38,6 +44,7 @@ const allGroupsData: AllGroupsData = {
         role: "Team Leader",
         scores: [0, 0, 0, 0, 0],
         note: "",
+        existingScoreIds: [0, 0, 0, 0, 0],
       },
       {
         id: "SV005",
@@ -45,6 +52,7 @@ const allGroupsData: AllGroupsData = {
         role: "Developer",
         scores: [0, 0, 0, 0, 0],
         note: "",
+        existingScoreIds: [0, 0, 0, 0, 0],
       },
     ],
   },
@@ -58,6 +66,7 @@ const allGroupsData: AllGroupsData = {
         role: "Developer",
         scores: [0, 0, 0, 0, 0],
         note: "",
+        existingScoreIds: [0, 0, 0, 0, 0],
       },
       {
         id: "SV007",
@@ -65,6 +74,7 @@ const allGroupsData: AllGroupsData = {
         role: "Developer",
         scores: [0, 0, 0, 0, 0],
         note: "",
+        existingScoreIds: [0, 0, 0, 0, 0],
       },
     ],
   },
@@ -78,6 +88,7 @@ const allGroupsData: AllGroupsData = {
         role: "Developer",
         scores: [0, 0, 0, 0, 0],
         note: "",
+        existingScoreIds: [0, 0, 0, 0, 0],
       },
       {
         id: "SV009",
@@ -85,6 +96,7 @@ const allGroupsData: AllGroupsData = {
         role: "Developer",
         scores: [0, 0, 0, 0, 0],
         note: "",
+        existingScoreIds: [0, 0, 0, 0, 0],
       },
     ],
   },
@@ -98,6 +110,7 @@ const allGroupsData: AllGroupsData = {
         role: "Developer",
         scores: [0, 0, 0, 0, 0],
         note: "",
+        existingScoreIds: [0, 0, 0, 0, 0],
       },
       {
         id: "SV014",
@@ -105,6 +118,7 @@ const allGroupsData: AllGroupsData = {
         role: "Developer",
         scores: [0, 0, 0, 0, 0],
         note: "",
+        existingScoreIds: [0, 0, 0, 0, 0],
       },
     ],
   },
@@ -126,21 +140,47 @@ export default function GradeGroupPage() {
   const [studentScores, setStudentScores] = useState<StudentScore[]>([]);
   const [notesVisibility, setNotesVisibility] = useState<NotesVisibility>({});
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [rubrics, setRubrics] = useState<any[]>([]);
+  const [sessionId, setSessionId] = useState<number | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string>("");
 
   useEffect(() => {
     const fetchGroupData = async () => {
       try {
         setLoading(true);
-        const [groupRes, studentsRes, rubricsRes] = await Promise.all([
-          groupsApi.getById(groupId).catch(() => ({ data: null })),
-          studentsApi.getByGroupId(groupId).catch(() => ({ data: [] })),
-          rubricsApi.getAll().catch(() => ({ data: [] })),
-        ]);
+        const [groupRes, studentsRes, rubricsRes, sessionsRes] =
+          await Promise.all([
+            groupsApi.getById(groupId).catch(() => ({ data: null })),
+            studentsApi.getByGroupId(groupId).catch(() => ({ data: [] })),
+            rubricsApi.getAll().catch(() => ({ data: [] })),
+            defenseSessionsApi.getAll().catch(() => ({ data: [] })),
+          ]);
 
         const group = groupRes.data;
         const students = studentsRes.data || [];
+        const sessions = sessionsRes.data || [];
         setRubrics(rubricsRes.data || []);
+
+        // Find session for this group
+        const groupSession = sessions.find((s: any) => s.groupId === groupId);
+        if (groupSession) {
+          setSessionId(groupSession.id);
+        }
+
+        // Get current user ID from auth token
+        const userInfo = authUtils.getCurrentUserInfo();
+        let userId = userInfo.userId;
+
+        // Fallback for testing - use a valid lecturer ID if no auth
+        if (!userId) {
+          console.warn(
+            "No authenticated user found, using fallback lecturer ID for testing"
+          );
+          userId = "0EB5D9FB-4389-45B7-A7AE-23AFBAF461CE"; // PGS.TS Lê Văn Chiến
+        }
+
+        setCurrentUserId(userId);
 
         if (group) {
           const displayName =
@@ -155,16 +195,53 @@ export default function GradeGroupPage() {
             group.topicTitle_VN ||
             "No project title";
 
+          // Load existing scores for each student
+          const studentsWithScores = await Promise.all(
+            students.map(async (s: StudentDto, index: number) => {
+              const scoresRes = await scoresApi
+                .getByStudentId(s.id)
+                .catch(() => ({ data: [] }));
+              const existingScores = scoresRes.data || [];
+
+              // Filter scores for current session if available
+              const sessionScores = groupSession
+                ? existingScores.filter(
+                    (score: ScoreReadDto) => score.sessionId === groupSession.id
+                  )
+                : [];
+
+              // Create scores array based on rubrics
+              const scoresArray = new Array(rubricsRes.data?.length || 5).fill(
+                0
+              );
+              const scoreIds = new Array(rubricsRes.data?.length || 5).fill(0);
+
+              // Map existing scores to rubrics
+              sessionScores.forEach((score: ScoreReadDto) => {
+                const rubricIndex = (rubricsRes.data || []).findIndex(
+                  (r: any) => r.id === score.rubricId
+                );
+                if (rubricIndex >= 0) {
+                  scoresArray[rubricIndex] = score.value;
+                  scoreIds[rubricIndex] = score.id;
+                }
+              });
+
+              return {
+                id: s.id,
+                name: s.fullName || s.userName || "Unknown",
+                role: index === 0 ? "Team Leader" : "Developer",
+                scores: scoresArray,
+                note: "",
+                existingScoreIds: scoreIds,
+              };
+            })
+          );
+
           const groupData: GroupData = {
             name: displayName,
             project: projectTitle,
-            students: students.map((s: StudentDto, index: number) => ({
-              id: s.id,
-              name: s.fullName || s.userName || "Unknown",
-              role: index === 0 ? "Team Leader" : "Developer",
-              scores: new Array(rubrics.length || 5).fill(0),
-              note: "",
-            })),
+            students: studentsWithScores,
           };
           setGroupData(groupData);
           setStudentScores(groupData.students);
@@ -196,10 +273,29 @@ export default function GradeGroupPage() {
     value: string
   ) => {
     const newScores = [...studentScores];
+
+    // Allow empty input for easier editing
+    if (value === "") {
+      newScores[studentIndex].scores[criterionIndex] = 0;
+      setStudentScores(newScores);
+      return;
+    }
+
+    // Parse and validate the score
     let newScore = parseFloat(value);
-    if (isNaN(newScore)) newScore = 0;
-    if (newScore > 10) newScore = 10;
-    if (newScore < 0) newScore = 0;
+
+    // Allow intermediate values while typing (don't auto-constrain during input)
+    if (isNaN(newScore)) {
+      newScore = 0;
+    }
+
+    // Only apply constraints when the value seems complete
+    // This allows users to type "1" before typing "10" for example
+    if (value.length > 0 && !value.endsWith(".")) {
+      if (newScore > 10) newScore = 10;
+      if (newScore < 0) newScore = 0;
+    }
+
     newScores[studentIndex].scores[criterionIndex] = newScore;
     setStudentScores(newScores);
   };
@@ -214,27 +310,77 @@ export default function GradeGroupPage() {
     setNotesVisibility((prev) => ({ ...prev, [studentId]: !prev[studentId] }));
 
   const handleSave = async () => {
+    if (!sessionId) {
+      swalConfig.error("Error", "No defense session found for this group");
+      return;
+    }
+
     try {
-      // TODO: Save scores to API when score API is available
-      // For now, save notes
+      setSaving(true);
+      const loadingSwal = swalConfig.loading(
+        "Saving scores...",
+        "Please wait while we save your scores and notes."
+      );
+
+      // Save scores for each student
       for (const student of studentScores) {
+        for (let i = 0; i < student.scores.length; i++) {
+          const score = student.scores[i];
+          const existingScoreId = student.existingScoreIds[i];
+          const rubric = rubrics[i];
+
+          if (!rubric) continue;
+
+          if (existingScoreId && existingScoreId > 0) {
+            // Update existing score
+            await scoresApi.update(existingScoreId, {
+              value: score,
+              comment: student.note || undefined,
+            });
+          } else if (score > 0) {
+            // Create new score
+            const newScore: ScoreCreateDto = {
+              value: score,
+              rubricId: rubric.id,
+              evaluatorId: currentUserId,
+              studentId: student.id,
+              sessionId: sessionId,
+              comment: student.note || undefined,
+            };
+            await scoresApi.create(newScore);
+          }
+        }
+
+        // Save notes separately if needed
         if (student.note && groupData) {
           try {
             await memberNotesApi.create({
-              userId: "", // TODO: Get current user ID
+              userId: currentUserId,
               groupId: groupId,
               content: student.note,
             });
           } catch (error) {
-            console.error(`Error saving note for student ${student.id}:`, error);
+            console.error(
+              `Error saving note for student ${student.id}:`,
+              error
+            );
           }
         }
       }
-      alert("Scores and notes saved successfully!");
+
+      Swal.close();
+      await swalConfig.success(
+        "Success",
+        "Scores and notes saved successfully!"
+      );
       router.push("/member/groups-to-grade");
     } catch (error: any) {
       console.error("Error saving scores:", error);
-      alert(`Error: ${error.message || "Failed to save scores"}`);
+      // Close loading dialog if it exists
+      Swal.close();
+      swalConfig.error("Error", error.message || "Failed to save scores");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -251,7 +397,9 @@ export default function GradeGroupPage() {
               <h1 className="text-xl font-semibold text-gray-800">
                 {groupData?.name || "Loading..."}
               </h1>
-              <p className="text-sm text-gray-500 mt-1">{groupData?.project || ""}</p>
+              <p className="text-sm text-gray-500 mt-1">
+                {groupData?.project || ""}
+              </p>
             </div>
 
             {/* Right section */}
@@ -266,10 +414,6 @@ export default function GradeGroupPage() {
               </Link>
 
               {/* Language */}
-              <button className="flex items-center gap-2 mt-4 md:mt-0 px-3 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-blue-500 text-white text-sm font-medium shadow-sm hover:opacity-90 transition">
-                <Languages className="w-4 h-4" />
-                <span>Tiếng Việt</span>
-              </button>
             </div>
           </div>
         </div>
@@ -282,7 +426,7 @@ export default function GradeGroupPage() {
                 Individual Grading
               </h2>
               <p className="text-sm text-gray-500 mt-1">
-                Grade each member individually
+                Grade each member individually • Use Tab/Enter to navigate
               </p>
             </div>
 
@@ -296,16 +440,19 @@ export default function GradeGroupPage() {
 
               <button
                 onClick={handleSave}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-blue-500 text-white text-sm font-medium shadow-sm hover:opacity-90 transition"
+                disabled={saving}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-blue-500 text-white text-sm font-medium shadow-sm hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Save className="w-4 h-4" />
-                <span>Save All Scores</span>
+                <span>{saving ? "Saving..." : "Save All Scores"}</span>
               </button>
             </div>
           </div>
 
           {loading ? (
-            <div className="text-center py-8 text-gray-500">Loading group data...</div>
+            <div className="text-center py-8 text-gray-500">
+              Loading group data...
+            </div>
           ) : (
             <>
               {/* Table */}
@@ -314,13 +461,18 @@ export default function GradeGroupPage() {
                   <thead>
                     <tr className="text-left text-gray-600">
                       <th className="py-2 pr-4">Student</th>
-                      {(rubrics.length > 0 ? rubrics.map((r: any) => r.rubricName) : criteria).map((name) => (
-                    <th key={name} className="py-2 px-3">
-                      <div className="flex flex-col">
-                        <span className="font-medium">{name}</span>
-                        <span className="text-xs text-gray-400">(Max: 10)</span>
-                      </div>
-                    </th>
+                      {(rubrics.length > 0
+                        ? rubrics.map((r: any) => r.rubricName)
+                        : criteria
+                      ).map((name) => (
+                        <th key={name} className="py-2 px-3">
+                          <div className="flex flex-col">
+                            <span className="font-medium">{name}</span>
+                            <span className="text-xs text-gray-400">
+                              (Max: 10)
+                            </span>
+                          </div>
+                        </th>
                       ))}
                       <th className="py-2 px-3">Average</th>
                       <th className="py-2 px-3">Actions</th>
@@ -329,89 +481,173 @@ export default function GradeGroupPage() {
 
                   <tbody>
                     {studentScores.map((student, studentIndex) => (
-                  <React.Fragment key={student.id}>
-                    <tr className="border-t">
-                      <td className="py-4 pr-4 align-top w-64">
-                        <div className="flex flex-col">
-                          <Link
-                            href={`/member/student-history/${student.id}`}
-                            className="text-sm font-medium text-gray-800 hover:underline"
-                          >
-                            {student.name}
-                          </Link>
-                          <span className="text-xs text-gray-500 mt-1">
-                            ID: {student.id}
-                          </span>
-                          <span className="text-xs text-gray-500">
-                            {student.role}
-                          </span>
-                        </div>
-                      </td>
+                      <React.Fragment key={student.id}>
+                        <tr className="border-t">
+                          <td className="py-4 pr-4 align-top w-64">
+                            <div className="flex flex-col">
+                              <Link
+                                href={`/member/student-history/${student.id}`}
+                                className="text-sm font-medium text-gray-800 hover:underline"
+                              >
+                                {student.name}
+                              </Link>
+                              <span className="text-xs text-gray-500 mt-1">
+                                ID: {student.id}
+                              </span>
+                              <span className="text-xs text-gray-500">
+                                {student.role}
+                              </span>
+                            </div>
+                          </td>
 
-                      {student.scores.map((score, criterionIndex) => (
-                        <td
-                          key={criterionIndex}
-                          className="py-3 px-3 align-top"
-                        >
-                          <input
-                            type="number"
-                            step="0.1"
-                            min="0"
-                            max="10"
-                            className="w-20 rounded-md border px-2 py-1 text-sm"
-                            value={score.toFixed(1)}
-                            onChange={(e) =>
-                              handleScoreChange(
-                                studentIndex,
-                                criterionIndex,
-                                e.target.value
-                              )
-                            }
-                          />
-                        </td>
-                      ))}
+                          {student.scores.map((score, criterionIndex) => (
+                            <td
+                              key={criterionIndex}
+                              className="py-3 px-3 align-top"
+                            >
+                              <input
+                                type="number"
+                                step="0.1"
+                                min="0"
+                                max="10"
+                                placeholder="0"
+                                className="w-20 rounded-md border px-2 py-1 text-sm text-center focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors"
+                                value={score === 0 ? "" : score.toString()}
+                                onChange={(e) =>
+                                  handleScoreChange(
+                                    studentIndex,
+                                    criterionIndex,
+                                    e.target.value
+                                  )
+                                }
+                                onBlur={(e) => {
+                                  // Apply final validation on blur
+                                  const value = parseFloat(e.target.value) || 0;
+                                  if (value > 10 || value < 0) {
+                                    const finalValue = Math.max(
+                                      0,
+                                      Math.min(10, value)
+                                    );
+                                    handleScoreChange(
+                                      studentIndex,
+                                      criterionIndex,
+                                      finalValue.toString()
+                                    );
+                                  }
+                                }}
+                                onFocus={(e) => {
+                                  // Select all text on focus for easy replacement
+                                  e.target.select();
+                                }}
+                                onKeyDown={(e) => {
+                                  // Allow quick score entry with number keys
+                                  if (e.key >= "0" && e.key <= "9") {
+                                    // If current value is 0, replace it
+                                    if (score === 0) {
+                                      e.preventDefault();
+                                      handleScoreChange(
+                                        studentIndex,
+                                        criterionIndex,
+                                        e.key
+                                      );
+                                    }
+                                  }
+                                  // Allow Enter to move to next input
+                                  if (e.key === "Enter") {
+                                    const inputs = document.querySelectorAll(
+                                      'input[type="number"]'
+                                    );
+                                    const currentIndex = Array.from(
+                                      inputs
+                                    ).indexOf(e.target as HTMLInputElement);
+                                    const nextInput = inputs[
+                                      currentIndex + 1
+                                    ] as HTMLInputElement;
+                                    if (nextInput) {
+                                      nextInput.focus();
+                                      nextInput.select();
+                                    }
+                                  }
+                                }}
+                              />
+                            </td>
+                          ))}
 
-                      <td className="py-3 px-3 align-top">
-                        <span className="inline-block bg-blue-50 text-blue-700 text-sm px-2 py-1 rounded-md">
-                          {calculateAverage(student.scores)}
-                        </span>
-                      </td>
+                          <td className="py-3 px-3 align-top">
+                            <span className="inline-block bg-blue-50 text-blue-700 text-sm px-2 py-1 rounded-md">
+                              {calculateAverage(student.scores)}
+                            </span>
+                          </td>
 
-                      <td className="py-3 px-3 align-top">
-                        <button
-                          className="text-sm text-violet-600 border px-3 py-1 rounded-md hover:bg-violet-50"
-                          onClick={() => toggleNoteVisibility(student.id)}
-                        >
-                          Notes
-                        </button>
-                      </td>
-                    </tr>
-
-                    {notesVisibility[student.id] && (
-                      <tr>
-                        <td colSpan={8} className="py-3">
-                          <div className="bg-gray-50 border rounded-md p-3">
-                            <textarea
-                              className="w-full p-3 rounded-md bg-white border text-sm"
-                              placeholder={`Add notes for ${student.name}...`}
-                              value={student.note}
-                              onChange={(e) =>
-                                handleNoteChange(studentIndex, e.target.value)
-                              }
-                            />
-                            <div className="text-right mt-2">
+                          <td className="py-3 px-3 align-top">
+                            <div className="flex flex-col gap-2">
                               <button
-                                className="text-sm text-gray-600 hover:underline"
+                                className="text-sm text-violet-600 border px-3 py-1 rounded-md hover:bg-violet-50"
                                 onClick={() => toggleNoteVisibility(student.id)}
                               >
-                                Hide
+                                Notes
                               </button>
+
+                              {/* Quick Set All Scores */}
+                              <div className="flex flex-col gap-1">
+                                <span className="text-xs text-gray-500">
+                                  Set All:
+                                </span>
+                                <div className="flex gap-1">
+                                  {[7, 8, 9].map((score) => (
+                                    <button
+                                      key={score}
+                                      type="button"
+                                      onClick={() => {
+                                        const newScores = [...studentScores];
+                                        newScores[studentIndex].scores =
+                                          newScores[studentIndex].scores.map(
+                                            () => score
+                                          );
+                                        setStudentScores(newScores);
+                                      }}
+                                      className="px-1.5 py-0.5 text-xs rounded border bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100 transition-colors"
+                                      title={`Set all scores to ${score}`}
+                                    >
+                                      {score}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
                             </div>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </React.Fragment>
+                          </td>
+                        </tr>
+
+                        {notesVisibility[student.id] && (
+                          <tr>
+                            <td colSpan={8} className="py-3">
+                              <div className="bg-gray-50 border rounded-md p-3">
+                                <textarea
+                                  className="w-full p-3 rounded-md bg-white border text-sm"
+                                  placeholder={`Add notes for ${student.name}...`}
+                                  value={student.note}
+                                  onChange={(e) =>
+                                    handleNoteChange(
+                                      studentIndex,
+                                      e.target.value
+                                    )
+                                  }
+                                />
+                                <div className="text-right mt-2">
+                                  <button
+                                    className="text-sm text-gray-600 hover:underline"
+                                    onClick={() =>
+                                      toggleNoteVisibility(student.id)
+                                    }
+                                  >
+                                    Hide
+                                  </button>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
                     ))}
                   </tbody>
                 </table>
@@ -423,10 +659,6 @@ export default function GradeGroupPage() {
         <footer className="page-footer text-center text-sm text-gray-500 mt-6">
           © 2025 AIDefCom - Smart Graduation Defense
         </footer>
-
-        <button className="help-btn fixed bottom-6 right-6 w-10 h-10 rounded-full bg-gradient-to-r from-purple-600 to-blue-500 text-white flex items-center justify-center shadow-lg">
-          ?
-        </button>
       </main>
     </>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Modal from "./Modal";
 
 // Icon Save
@@ -38,6 +38,11 @@ const CalendarIcon = () => (
   </svg>
 );
 
+interface GroupOption {
+  id: string;
+  name: string;
+}
+
 interface AddStudentModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -48,12 +53,14 @@ interface AddStudentModalProps {
     gender: string;
     role: string;
   }) => void;
+  groupOptions: GroupOption[];
 }
 
 const AddStudentModal: React.FC<AddStudentModalProps> = ({
   isOpen,
   onClose,
   onSubmit,
+  groupOptions = [],
 }) => {
   const [userId, setUserId] = useState("");
   const [groupId, setGroupId] = useState("");
@@ -64,6 +71,7 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSubmit({ userId, groupId, dob, gender, role });
+    // Reset form
     setUserId("");
     setGroupId("");
     setDob("");
@@ -100,10 +108,10 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
       footerContent={footer}
     >
       <form id="add-student-form" onSubmit={handleSubmit} className="space-y-4">
-        {/* User ID */}
+        {/* Student Name */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            User ID
+            Student Name
           </label>
           <input
             type="text"
@@ -111,21 +119,30 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
             onChange={(e) => setUserId(e.target.value)}
             required
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+            placeholder="Enter student's full name"
           />
         </div>
 
         {/* Group ID */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Group ID
+            Group
           </label>
-          <input
-            type="text"
+          <select
             value={groupId}
             onChange={(e) => setGroupId(e.target.value)}
             required
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-          />
+          >
+            <option value="" disabled>
+              Select a group
+            </option>
+            {groupOptions.map((group) => (
+              <option key={group.id} value={group.id}>
+                {group.name}
+              </option>
+            ))}
+          </select>
         </div>
 
         {/* Date of Birth */}

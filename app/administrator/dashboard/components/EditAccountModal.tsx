@@ -8,7 +8,8 @@ interface UserAccount {
   id: number | string;
   name: string;
   email: string;
-  role: string;
+  primaryRole: string;
+  roles?: string[];
   status: string;
   createdDate: string;
 }
@@ -40,7 +41,7 @@ const EditAccountModal: React.FC<EditAccountModalProps> = ({
     if (accountData) {
       setFullName(accountData.name);
       setEmail(accountData.email);
-      setRole(accountData.role);
+      setRole(accountData.primaryRole || accountData.roles?.[0] || "");
     } else {
       setFullName("");
       setEmail("");

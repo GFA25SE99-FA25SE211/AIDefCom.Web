@@ -28,27 +28,34 @@ interface AddGroupModalProps {
     topicEN: string;
     topicVN: string;
     semesterId: string;
+    majorId: string;
     status: string;
   }) => void;
+  majorOptions?: { id: number; name: string }[];
+  semesterOptions?: { id: number; name: string }[];
 }
 
 const AddGroupModal: React.FC<AddGroupModalProps> = ({
   isOpen,
   onClose,
   onSubmit,
+  majorOptions = [],
+  semesterOptions = [],
 }) => {
   const [topicEN, setTopicEN] = useState("");
   const [topicVN, setTopicVN] = useState("");
   const [semesterId, setSemesterId] = useState("");
-  const [status, setStatus] = useState("");
+  const [majorId, setMajorId] = useState("");
+  const [status, setStatus] = useState("Active");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit({ topicEN, topicVN, semesterId, status });
+    onSubmit({ topicEN, topicVN, semesterId, majorId, status });
     setTopicEN("");
     setTopicVN("");
     setSemesterId("");
-    setStatus("");
+    setMajorId("");
+    setStatus("Active");
   };
 
   const footer = (
@@ -108,15 +115,40 @@ const AddGroupModal: React.FC<AddGroupModalProps> = ({
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Semester ID
+            Semester <span className="text-red-500">*</span>
           </label>
-          <input
-            type="text"
+          <select
             value={semesterId}
             onChange={(e) => setSemesterId(e.target.value)}
             required
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-          />
+          >
+            <option value="">Select a semester</option>
+            {semesterOptions.map((semester) => (
+              <option key={semester.id} value={semester.id}>
+                {semester.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Major <span className="text-red-500">*</span>
+          </label>
+          <select
+            value={majorId}
+            onChange={(e) => setMajorId(e.target.value)}
+            required
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+          >
+            <option value="">Select a major</option>
+            {majorOptions.map((major) => (
+              <option key={major.id} value={major.id}>
+                {major.name}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div>

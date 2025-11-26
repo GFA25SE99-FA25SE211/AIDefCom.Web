@@ -25,6 +25,8 @@ interface Group {
   topicEN: string;
   topicVN: string;
   semester: string;
+  semesterId: number;
+  majorId: number;
   status: string;
 }
 
@@ -37,10 +39,13 @@ interface EditGroupModalProps {
       topicEN: string;
       topicVN: string;
       semesterId: string;
+      majorId: string;
       status: string;
     }
   ) => void;
   groupData: Group | null;
+  majorOptions?: { id: number; name: string }[];
+  semesterOptions?: { id: number; name: string }[];
 }
 
 const EditGroupModal: React.FC<EditGroupModalProps> = ({
@@ -48,30 +53,35 @@ const EditGroupModal: React.FC<EditGroupModalProps> = ({
   onClose,
   onSubmit,
   groupData,
+  majorOptions = [],
+  semesterOptions = [],
 }) => {
   const [topicEN, setTopicEN] = useState("");
   const [topicVN, setTopicVN] = useState("");
   const [semesterId, setSemesterId] = useState("");
+  const [majorId, setMajorId] = useState("");
   const [status, setStatus] = useState("");
 
   useEffect(() => {
     if (groupData) {
       setTopicEN(groupData.topicEN);
       setTopicVN(groupData.topicVN);
-      setSemesterId(groupData.semester);
+      setSemesterId(String(groupData.semesterId));
+      setMajorId(String(groupData.majorId));
       setStatus(groupData.status);
     } else {
       setTopicEN("");
       setTopicVN("");
       setSemesterId("");
+      setMajorId("");
       setStatus("");
     }
-  }, [groupData]);
+  }, [groupData, majorOptions, semesterOptions]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!groupData) return;
-    onSubmit(groupData.id, { topicEN, topicVN, semesterId, status });
+    onSubmit(groupData.id, { topicEN, topicVN, semesterId, majorId, status });
   };
 
   const footer = (
@@ -106,7 +116,19 @@ const EditGroupModal: React.FC<EditGroupModalProps> = ({
       <form id="edit-group-form" onSubmit={handleSubmit} className="space-y-5">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Topic Title (English)
+            Group ID
+          </label>
+          <input
+            type="text"
+            value={groupData.id}
+            disabled
+            className="w-full border rounded-md px-3 py-2 text-sm bg-gray-100 text-gray-500 cursor-not-allowed"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Topic Title (English) <span className="text-red-500">*</span>
           </label>
           <input
             type="text"
@@ -132,15 +154,40 @@ const EditGroupModal: React.FC<EditGroupModalProps> = ({
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Semester ID
+            Semester <span className="text-red-500">*</span>
           </label>
-          <input
-            type="text"
+          <select
             value={semesterId}
             onChange={(e) => setSemesterId(e.target.value)}
             required
             className="w-full border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 outline-none"
-          />
+          >
+            <option value="">Select a semester</option>
+            {semesterOptions.map((semester) => (
+              <option key={semester.id} value={semester.id}>
+                {semester.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Major <span className="text-red-500">*</span>
+          </label>
+          <select
+            value={majorId}
+            onChange={(e) => setMajorId(e.target.value)}
+            required
+            className="w-full border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 outline-none"
+          >
+            <option value="">Select a major</option>
+            {majorOptions.map((major) => (
+              <option key={major.id} value={major.id}>
+                {major.name}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div>

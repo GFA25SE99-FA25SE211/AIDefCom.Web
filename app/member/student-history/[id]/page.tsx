@@ -318,13 +318,6 @@ export default function StudentHistoryDetailPage() {
         <footer className="text-center text-sm text-gray-500 mt-10 mb-4">
           © 2025 AIDefCom - Smart Graduation Defense
         </footer>
-
-        <button
-          className="help-btn fixed bottom-6 right-6 w-10 h-10 rounded-full bg-gradient-to-r from-purple-600 to-blue-500 text-white flex items-center justify-center shadow-lg"
-          aria-label="Help"
-        >
-          ?
-        </button>
       </main>
     </>
   );

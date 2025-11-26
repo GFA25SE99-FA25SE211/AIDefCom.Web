@@ -6,6 +6,7 @@ import { majorsApi } from "@/lib/api/majors";
 import { semestersApi } from "@/lib/api/semesters";
 import { rubricsApi } from "@/lib/api/rubrics";
 import { projectTasksApi } from "@/lib/api/project-tasks";
+import { groupsApi } from "@/lib/api/groups";
 import { committeeAssignmentsApi } from "@/lib/api/committee-assignments";
 import { councilsApi } from "@/lib/api/councils";
 import { authApi } from "@/lib/api/auth";
@@ -15,6 +16,7 @@ import type {
   SemesterDto,
   RubricDto,
   ProjectTaskDto,
+  GroupDto,
   CommitteeAssignmentDto,
   CouncilDto,
   UserDto,
@@ -27,15 +29,26 @@ import AddSemesterModal from "../dashboard/components/AddSemesterModal";
 import EditSemesterModal from "../dashboard/components/EditSemesterModal";
 import AddMajorModal from "../dashboard/components/AddMajorModal";
 import EditMajorModal from "../dashboard/components/EditMajorModal";
+
+// Format date function to display only date without time
+const formatDateOnly = (dateString: string) => {
+  if (!dateString) return "";
+  const date = new Date(dateString);
+  return date.toLocaleDateString("vi-VN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+};
 import AddRubricModal from "../dashboard/components/AddRubricModal";
 import EditRubricModal from "../dashboard/components/EditRubricModal";
 import EditAssignmentModal from "../dashboard/components/EditAssignmentModal";
+import EditGroupModal from "../../moderator/create-sessions/components/EditGroupModal";
 
 import {
   ClipboardList,
   Calendar,
   GraduationCap,
-  ListChecks,
   BookOpen,
   StickyNote,
   Users,
@@ -54,13 +67,6 @@ interface Task {
   assignedTo: string;
   status: "Pending" | "Completed" | "Inprogress";
 }
-interface Score {
-  id: number;
-  studentID: string;
-  rubricID: string;
-  score: number;
-  sessionID: number;
-}
 interface Note {
   id: number;
   committeeAssignmentId: string;
@@ -74,10 +80,34 @@ type AdminTabKey =
   | "tasks"
   | "semesters"
   | "majors"
-  | "scores"
+  | "groups"
   | "rubrics"
   | "notes"
   | "assignments";
+
+const formatDateInputValue = (value?: string) => {
+  if (!value) return "";
+  if (value.includes("T")) {
+    return value.split("T")[0];
+  }
+  return value;
+};
+
+const normalizeDateForApi = (value?: string) => {
+  if (!value) return "";
+  if (value.includes("T")) return value;
+  const parts = value.split("-");
+  if (parts.length === 3) {
+    const [year, month, day] = parts;
+    const padded = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+    return `${padded}T00:00:00`;
+  }
+  const date = new Date(value);
+  if (!Number.isNaN(date.getTime())) {
+    return date.toISOString();
+  }
+  return value;
+};
 
 /* ======================== TABS ======================== */
 const adminTabs: {
@@ -88,7 +118,7 @@ const adminTabs: {
   { key: "tasks", label: "Tasks", icon: ClipboardList },
   { key: "semesters", label: "Semesters", icon: Calendar },
   { key: "majors", label: "Majors", icon: GraduationCap },
-  { key: "scores", label: "Scores", icon: ListChecks },
+  { key: "groups", label: "Groups", icon: Users },
   { key: "rubrics", label: "Rubrics", icon: BookOpen },
   { key: "notes", label: "Notes", icon: StickyNote },
   { key: "assignments", label: "Assignments", icon: Users },
@@ -113,11 +143,13 @@ export default function AdminDataManagementPage() {
   const [editingRubric, setEditingRubric] = useState<RubricDto | null>(null);
   const [editingAssignment, setEditingAssignment] =
     useState<CommitteeAssignmentDto | null>(null);
+  const [editingGroup, setEditingGroup] = useState<GroupDto | null>(null);
 
   /* ============ State data ============ */
   const [tasks, setTasks] = useState<Task[]>([]);
   const [semesters, setSemesters] = useState<SemesterDto[]>([]);
   const [majors, setMajors] = useState<MajorDto[]>([]);
+  const [groups, setGroups] = useState<GroupDto[]>([]);
   const [councils, setCouncils] = useState<CouncilDto[]>([
     {
       id: 18,
@@ -144,7 +176,6 @@ export default function AdminDataManagementPage() {
       isActive: true,
     },
   ]);
-  const [scores] = useState<Score[]>([]);
   const [rubrics, setRubrics] = useState<RubricDto[]>([]);
   const [notes] = useState<Note[]>([
     {
@@ -217,6 +248,7 @@ export default function AdminDataManagementPage() {
           semestersRes,
           rubricsRes,
           tasksRes,
+          groupsRes,
           assignmentsRes,
           councilsRes,
           usersRes,
@@ -225,6 +257,7 @@ export default function AdminDataManagementPage() {
           semestersApi.getAll().catch(() => ({ data: [] })),
           rubricsApi.getAll().catch(() => ({ data: [] })),
           projectTasksApi.getAll().catch(() => ({ data: [] })),
+          groupsApi.getAll(false).catch(() => ({ data: [] })), // includeDeleted=false
           committeeAssignmentsApi.getAll().catch(() => ({ data: [] })),
           councilsApi.getAll(false).catch(() => ({ data: [] })),
           authApi.getAllUsers().catch(() => ({ data: [] })),
@@ -233,6 +266,7 @@ export default function AdminDataManagementPage() {
         setMajors(majorsRes.data || []);
         setSemesters(semestersRes.data || []);
         setRubrics(rubricsRes.data || []);
+        setGroups(groupsRes.data || []);
         setCouncils(councilsRes.data || []);
         setAssignments(assignmentsRes.data || []);
         setUsers(usersRes.data || []);
@@ -302,6 +336,21 @@ export default function AdminDataManagementPage() {
     () => getFilteredData(majors, ["majorName", "description"], searchQuery),
     [majors, searchQuery]
   );
+  const filteredGroups = useMemo(
+    () =>
+      getFilteredData(
+        groups,
+        [
+          "projectCode",
+          "topicTitle_EN",
+          "topicTitle_VN",
+          "semesterName",
+          "majorName",
+        ],
+        searchQuery
+      ),
+    [groups, searchQuery]
+  );
   const filteredRubrics = useMemo(
     () => getFilteredData(rubrics, ["rubricName", "description"], searchQuery),
     [rubrics, searchQuery]
@@ -352,16 +401,45 @@ export default function AdminDataManagementPage() {
   };
 
   const handleEditTask = async (
-    id: number,
-    data: Omit<Task, "id" | "assignedBy">
+    id: number | string,
+    data: Omit<Task, "id" | "assignedBy" | "assignedTo">
   ) => {
     try {
-      await projectTasksApi.update(id, {
+      console.log("Edit task data:", data);
+      console.log("Edit task id:", id);
+
+      if (!data.title || !data.status) {
+        await swalConfig.error(
+          "Invalid Task",
+          "Title and status are required."
+        );
+        return;
+      }
+
+      // Get both assignedBy and assignedTo from original task data since they're not editable
+      const originalTask = tasks.find((t) => t.id === Number(id));
+
+      // Map frontend status to backend expected format
+      let backendStatus: string = data.status;
+      if (data.status === "Inprogress") {
+        backendStatus = "InProgress"; // API might expect this format
+      }
+
+      const updatePayload = {
         title: data.title,
         description: data.description,
-        assignedToId: data.assignedTo,
-        status: data.status,
-      });
+        assignedById:
+          originalTask?.assignedBy || "18D005EB-D9DB-4C84-9AD3-459C209708FE", // Keep original assignedBy
+        assignedToId:
+          originalTask?.assignedTo || "18D005EB-D9DB-4C84-9AD3-459C209708FE", // Keep original assignedTo
+        rubricId: 1, // Default rubric ID - you may want to make this configurable
+        status: backendStatus,
+      };
+
+      console.log("Update payload:", updatePayload);
+
+      await projectTasksApi.update(Number(id), updatePayload);
+
       const response = await projectTasksApi.getAll();
       const transformedTasks = (response.data || []).map(
         (t: ProjectTaskDto) => ({
@@ -382,10 +460,22 @@ export default function AdminDataManagementPage() {
       await swalConfig.success("Success!", "Task updated successfully!");
     } catch (error: any) {
       console.error("Error updating task:", error);
-      await swalConfig.error(
-        "Error Updating Task",
-        error.message || "Failed to update task"
-      );
+      console.error("Full error object:", JSON.stringify(error, null, 2));
+
+      let errorMessage = error.message || "Failed to update task";
+
+      // Check for more detailed error info
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.response?.data?.details) {
+        errorMessage = error.response.data.details;
+      }
+      if (error.message?.includes("500")) {
+        errorMessage =
+          "Server error while updating the task. Please verify the task exists and try again.";
+      }
+
+      await swalConfig.error("Error Updating Task", errorMessage);
     }
   };
 
@@ -413,12 +503,27 @@ export default function AdminDataManagementPage() {
 
   const handleAddSemester = async (data: any) => {
     try {
+      const parsedYear = Number(data.year);
+      const parsedMajorId = Number(data.majorID);
+
+      if (
+        !data.name ||
+        Number.isNaN(parsedYear) ||
+        Number.isNaN(parsedMajorId)
+      ) {
+        await swalConfig.error(
+          "Invalid Data",
+          "Please provide valid semester name, year, and major."
+        );
+        return;
+      }
+
       const semesterDto = {
         semesterName: data.name,
-        year: parseInt(data.year),
-        startDate: data.startDate,
-        endDate: data.endDate,
-        majorId: parseInt(data.majorID),
+        year: parsedYear,
+        startDate: normalizeDateForApi(data.startDate),
+        endDate: normalizeDateForApi(data.endDate),
+        majorId: parsedMajorId,
       };
 
       await semestersApi.create(semesterDto);
@@ -449,12 +554,30 @@ export default function AdminDataManagementPage() {
 
   const handleEditSemester = async (id: number, data: any) => {
     try {
+      const parsedYear = Number(data.year);
+      const parsedMajorId = data.majorID ? Number(data.majorID) : null;
+
+      console.log("Semester edit data:", { data, parsedYear, parsedMajorId });
+
+      if (
+        !data.name ||
+        Number.isNaN(parsedYear) ||
+        !data.majorID ||
+        Number.isNaN(parsedMajorId)
+      ) {
+        await swalConfig.error(
+          "Invalid Data",
+          "Please provide valid semester name, year, and major."
+        );
+        return;
+      }
+
       const semesterDto = {
         semesterName: data.name,
-        year: parseInt(data.year),
-        startDate: data.startDate,
-        endDate: data.endDate,
-        majorId: parseInt(data.majorID),
+        year: parsedYear,
+        startDate: normalizeDateForApi(data.startDate),
+        endDate: normalizeDateForApi(data.endDate),
+        majorId: parsedMajorId!,
       };
 
       await semestersApi.update(id, semesterDto);
@@ -616,9 +739,13 @@ export default function AdminDataManagementPage() {
         return;
       }
 
-      const result = await committeeAssignmentsApi.update(parseInt(id), {
-        lecturerId: data.lecturerId,
-        councilId: parseInt(data.councilId),
+      const councilId = data.councilId
+        ? parseInt(data.councilId, 10)
+        : originalAssignment.councilId;
+
+      const result = await committeeAssignmentsApi.update(id, {
+        lecturerId: data.lecturerId || originalAssignment.lecturerId,
+        councilId,
         defenseSessionId: originalAssignment.defenseSessionId,
         role: data.role,
       });
@@ -647,6 +774,47 @@ export default function AdminDataManagementPage() {
     }
   };
 
+  const handleEditGroup = async (
+    id: string,
+    data: {
+      topicEN: string;
+      topicVN: string;
+      semesterId: string;
+      majorId: string;
+      status: string;
+    }
+  ) => {
+    try {
+      // Get the current group to preserve projectCode
+      const currentGroup = groups.find((g) => g.id === id);
+      if (!currentGroup) {
+        await swalConfig.error("Error", "Group not found");
+        return;
+      }
+
+      await groupsApi.update(id, {
+        projectCode: currentGroup.projectCode || `PRJ-${id.slice(0, 8)}`,
+        topicTitle_EN: data.topicEN,
+        topicTitle_VN: data.topicVN,
+        semesterId: parseInt(data.semesterId),
+        majorId: parseInt(data.majorId),
+        status: data.status,
+      });
+
+      // Refresh groups data
+      const response = await groupsApi.getAll(false);
+      setGroups(response.data || []);
+
+      setEditingGroup(null);
+      await swalConfig.success("Success!", "Group updated successfully!");
+    } catch (error: any) {
+      await swalConfig.error(
+        "Error Editing Group",
+        error.message || "Failed to edit group"
+      );
+    }
+  };
+
   const handleDeleteRubric = async (id: number) => {
     const result = await swalConfig.confirm(
       "Delete Rubric?",
@@ -669,17 +837,20 @@ export default function AdminDataManagementPage() {
     }
   };
 
-  const handleDeleteAssignment = async (id: number) => {
+  const handleDeleteAssignment = async (id: number | string) => {
+    const assignmentId = String(id);
     const result = await swalConfig.confirm(
       "Delete Assignment?",
-      `Are you sure you want to delete assignment with ID: ${id}?`,
+      `Are you sure you want to delete assignment with ID: ${assignmentId}?`,
       "Yes, delete it!"
     );
 
     if (result.isConfirmed) {
       try {
-        await committeeAssignmentsApi.delete(id);
-        setAssignments(assignments.filter((a) => a.id !== id));
+        await committeeAssignmentsApi.delete(assignmentId);
+        setAssignments((prev) =>
+          prev.filter((a) => String(a.id) !== assignmentId)
+        );
         await swalConfig.success(
           "Deleted!",
           "Assignment deleted successfully!"
@@ -726,8 +897,10 @@ export default function AdminDataManagementPage() {
       <table className="table-base w-full">
         <thead>
           <tr>
-            {headers.map((h) => (
-              <th key={h}>{h}</th>
+            {headers.map((h, index) => (
+              <th key={h} className={h === "Actions" ? "text-center" : ""}>
+                {h}
+              </th>
             ))}
           </tr>
         </thead>
@@ -745,7 +918,7 @@ export default function AdminDataManagementPage() {
             System Data Management
           </h1>
           <p className="text-gray-500 text-sm">
-            Manage tasks, semesters, majors, scores, rubrics, and system data
+            Manage tasks, semesters, majors, rubrics, and system data
           </p>
         </div>
       </header>
@@ -802,8 +975,8 @@ export default function AdminDataManagementPage() {
                   {t.status}
                 </span>
               </td>
-              <td className="text-right">
-                <div className="flex gap-2 justify-end">
+              <td className="text-center align-middle">
+                <div className="flex gap-2 justify-center items-center">
                   <button
                     className="btn-subtle"
                     onClick={() => setEditingTask(t)}
@@ -834,10 +1007,10 @@ export default function AdminDataManagementPage() {
               <td>{s.id}</td>
               <td>{s.semesterName}</td>
               <td>{s.year}</td>
-              <td>{s.startDate}</td>
-              <td>{s.endDate}</td>
-              <td className="text-right">
-                <div className="flex gap-2 justify-end">
+              <td>{formatDateOnly(s.startDate)}</td>
+              <td>{formatDateOnly(s.endDate)}</td>
+              <td className="text-center align-middle">
+                <div className="flex gap-2 justify-center items-center">
                   <button
                     className="btn-subtle"
                     onClick={() => setEditingSemester(s)}
@@ -866,8 +1039,8 @@ export default function AdminDataManagementPage() {
               <td>{m.id}</td>
               <td>{m.majorName}</td>
               <td>{m.description || "N/A"}</td>
-              <td className="text-right">
-                <div className="flex gap-2 justify-end">
+              <td className="text-center align-middle">
+                <div className="flex gap-2 justify-center items-center">
                   <button
                     className="btn-subtle"
                     onClick={() => setEditingMajor(m)}
@@ -886,17 +1059,61 @@ export default function AdminDataManagementPage() {
           ))
         )}
 
-      {activeTab === "scores" &&
-        renderHeader("Score Management") &&
+      {activeTab === "groups" &&
+        renderHeader("Groups Management", () => {
+          /* Add group modal later */
+        }) &&
+        renderSearch("Search groups...") &&
         renderTable(
-          ["ID", "Student Name", "Rubric ID", "Score", "Session ID"],
-          scores.map((s) => (
-            <tr key={s.id}>
-              <td>{s.id}</td>
-              <td>{userMap.get(s.studentID) || s.studentID}</td>
-              <td>{s.rubricID}</td>
-              <td>{s.score}</td>
-              <td>{s.sessionID}</td>
+          [
+            "Project Code",
+            "Title (EN)",
+            "Title (VN)",
+            "Semester",
+            "Major",
+            "Status",
+            "Actions",
+          ],
+          filteredGroups.map((g) => (
+            <tr key={g.id}>
+              <td>{g.projectCode || "N/A"}</td>
+              <td className="max-w-48 truncate">{g.topicTitle_EN || "N/A"}</td>
+              <td className="max-w-48 truncate">{g.topicTitle_VN || "N/A"}</td>
+              <td>{g.semesterName || "N/A"}</td>
+              <td>{g.majorName || "N/A"}</td>
+              <td>
+                <span
+                  className={`px-2 py-1 rounded-full text-xs ${
+                    g.status === "Active"
+                      ? "bg-green-100 text-green-700"
+                      : "bg-gray-100 text-gray-700"
+                  }`}
+                >
+                  {g.status || "Unknown"}
+                </span>
+              </td>
+              <td className="text-center align-middle">
+                <div className="flex gap-2 justify-center items-center">
+                  <button
+                    className="btn-subtle"
+                    title="Edit Group"
+                    onClick={() => {
+                      setEditingGroup(g);
+                    }}
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                  <button
+                    className="btn-subtle text-red-600 hover:bg-red-50"
+                    title="Delete Group"
+                    onClick={() => {
+                      /* Add delete functionality later */
+                    }}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </td>
             </tr>
           ))
         )}
@@ -913,8 +1130,8 @@ export default function AdminDataManagementPage() {
               <td>{r.id}</td>
               <td>{r.rubricName}</td>
               <td>{r.description || "N/A"}</td>
-              <td className="text-right">
-                <div className="flex gap-2 justify-end">
+              <td className="text-center align-middle">
+                <div className="flex gap-2 justify-center items-center">
                   <button
                     className="btn-subtle"
                     onClick={() => setEditingRubric(r)}
@@ -951,7 +1168,7 @@ export default function AdminDataManagementPage() {
       {activeTab === "assignments" &&
         renderHeader("Committee Assignments") &&
         renderTable(
-          ["ID", "Lecturer", "Council Name", "Role", "Actions"],
+          ["ID", "Lecturer", "Council Name", "Role"],
           filteredAssignments.map((a) => (
             <tr key={a.id}>
               <td>{a.id}</td>
@@ -962,24 +1179,6 @@ export default function AdminDataManagementPage() {
               </td>
               <td>{councilMap.get(a.councilId) || `Council ${a.councilId}`}</td>
               <td>{(a as any).roleName || a.role}</td>
-              <td className="text-right">
-                <div className="flex gap-2 justify-end items-center">
-                  <button
-                    className="btn-subtle"
-                    onClick={() => setEditingAssignment(a)}
-                    title="Edit"
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </button>
-                  <button
-                    className="btn-subtle text-red-600 hover:bg-red-50"
-                    onClick={() => handleDeleteAssignment(a.id)}
-                    title="Delete"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </td>
             </tr>
           ))
         )}
@@ -989,15 +1188,31 @@ export default function AdminDataManagementPage() {
       </footer>
 
       {/* --- Modals --- */}
+      {/* Task assignment is now available to users with Chair, Secretary, or Lecturer roles */}
       <AddTaskModal
         isOpen={isAddTaskModalOpen}
         onClose={() => setIsAddTaskModalOpen(false)}
         onSubmit={handleAddTask}
+        userOptions={users
+          .filter((u) => {
+            console.log("User:", u.fullName, "Role:", u.role);
+            return (
+              u.role &&
+              (u.role === "Chair" ||
+                u.role === "Secretary" ||
+                u.role === "Lecturer")
+            );
+          })
+          .map((u) => ({ id: u.id, name: u.fullName }))}
       />
       <AddSemesterModal
         isOpen={isAddSemesterModalOpen}
         onClose={() => setIsAddSemesterModalOpen(false)}
         onSubmit={handleAddSemester}
+        majorOptions={majors.map((m) => ({
+          id: String(m.id),
+          name: m.majorName || `Major ${m.id}`,
+        }))}
       />
       <AddMajorModal
         isOpen={isAddMajorModalOpen}
@@ -1015,6 +1230,17 @@ export default function AdminDataManagementPage() {
           onClose={() => setEditingTask(null)}
           onSubmit={handleEditTask}
           taskData={editingTask}
+          userOptions={users
+            .filter((u) => {
+              console.log("Edit - User:", u.fullName, "Role:", u.role);
+              return (
+                u.role &&
+                (u.role === "Chair" ||
+                  u.role === "Secretary" ||
+                  u.role === "Lecturer")
+              );
+            })
+            .map((u) => ({ id: u.id, name: u.fullName }))}
         />
       )}
       {editingSemester && (
@@ -1028,8 +1254,14 @@ export default function AdminDataManagementPage() {
             year: editingSemester.year,
             startDate: editingSemester.startDate,
             endDate: editingSemester.endDate,
-            majorID: String(editingSemester.majorId),
+            majorID: editingSemester.majorId
+              ? String(editingSemester.majorId)
+              : "",
           }}
+          majorOptions={majors.map((m) => ({
+            id: String(m.id),
+            name: m.majorName || `Major ${m.id}`,
+          }))}
         />
       )}
       {editingMajor && (
@@ -1057,24 +1289,31 @@ export default function AdminDataManagementPage() {
           }}
         />
       )}
-      {editingAssignment && (
-        <EditAssignmentModal
+      {editingGroup && (
+        <EditGroupModal
           isOpen
-          onClose={() => setEditingAssignment(null)}
-          onSubmit={(id, data) => handleEditAssignment(id, data)}
-          assignmentData={{
-            id: String(editingAssignment.id),
-            lecturerId: String(editingAssignment.lecturerId),
-            councilId: String(editingAssignment.councilId),
-            role: editingAssignment.roleName || editingAssignment.role || "",
+          onClose={() => setEditingGroup(null)}
+          onSubmit={(id, data) => handleEditGroup(id, data)}
+          groupData={{
+            id: editingGroup.id || "",
+            topicEN: editingGroup.topicTitle_EN || "",
+            topicVN: editingGroup.topicTitle_VN || "",
+            semester: editingGroup.semesterName || "",
+            semesterId: editingGroup.semesterId || 0,
+            majorId: editingGroup.majorId || 0,
+            status: editingGroup.status || "Active",
           }}
-          lecturers={users}
-          councils={councils.map((c) => ({
-            id: String(c.id),
-            councilName: c.majorName || c.councilName || `Council ${c.id}`,
+          majorOptions={majors.map((m) => ({
+            id: m.id,
+            name: m.majorName || `Major ${m.id}`,
+          }))}
+          semesterOptions={semesters.map((s) => ({
+            id: s.id,
+            name: s.semesterName || `Semester ${s.id}`,
           }))}
         />
       )}
+      {/* Assignment actions temporarily disabled */}
     </main>
   );
 }

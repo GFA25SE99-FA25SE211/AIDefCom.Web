@@ -15,9 +15,12 @@ export interface StudentDto {
 export interface StudentCreateDto {
   studentCode: string;
   fullName: string;
+  userName?: string; // Add userName to match API expectations
   email?: string;
   phoneNumber?: string;
   groupId?: string;
+  dateOfBirth?: string;
+  gender?: string;
 }
 
 export interface StudentUpdateDto {
@@ -32,5 +35,11 @@ export interface ImportResultDto {
   successCount: number;
   failureCount: number;
   errors?: string[];
+}
+
+export interface StudentGroupImportResultDto extends ImportResultDto {
+  message?: string;
+  createdStudentIds?: string[];
+  createdGroupIds?: string[];
 }
 

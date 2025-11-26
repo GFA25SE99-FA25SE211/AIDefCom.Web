@@ -25,6 +25,7 @@ interface Council {
   description: string;
   createdDate: string;
   status: "Active" | "Inactive";
+  majorId?: number;
 }
 
 interface EditCouncilModalProps {
@@ -32,9 +33,10 @@ interface EditCouncilModalProps {
   onClose: () => void;
   onSubmit: (
     id: number,
-    data: { description: string; isActive: boolean }
+    data: { majorId: number; description: string; isActive: boolean }
   ) => void;
   councilData: Council | null;
+  majorOptions: Array<{ id: number; name: string }>;
 }
 
 const EditCouncilModal: React.FC<EditCouncilModalProps> = ({
@@ -42,15 +44,19 @@ const EditCouncilModal: React.FC<EditCouncilModalProps> = ({
   onClose,
   onSubmit,
   councilData,
+  majorOptions,
 }) => {
+  const [majorId, setMajorId] = useState("");
   const [description, setDescription] = useState("");
   const [isActive, setIsActive] = useState(true);
 
   useEffect(() => {
     if (councilData) {
+      setMajorId(councilData.majorId ? String(councilData.majorId) : "");
       setDescription(councilData.description);
       setIsActive(councilData.status === "Active");
     } else {
+      setMajorId("");
       setDescription("");
       setIsActive(true);
     }
@@ -58,8 +64,12 @@ const EditCouncilModal: React.FC<EditCouncilModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!councilData) return;
-    onSubmit(councilData.id, { description, isActive });
+    if (!councilData || !majorId) return;
+    onSubmit(councilData.id, {
+      majorId: parseInt(majorId, 10),
+      description,
+      isActive,
+    });
   };
 
   const footer = (
@@ -98,6 +108,37 @@ const EditCouncilModal: React.FC<EditCouncilModalProps> = ({
       >
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
+            Council ID
+          </label>
+          <input
+            type="text"
+            value={councilData.id}
+            disabled
+            className="w-full border rounded-md px-3 py-2 text-sm bg-gray-100 text-gray-500 cursor-not-allowed"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Major <span className="text-red-500">*</span>
+          </label>
+          <select
+            value={majorId}
+            onChange={(e) => setMajorId(e.target.value)}
+            required
+            className="w-full border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 outline-none"
+          >
+            <option value="">Select a major</option>
+            {majorOptions.map((major) => (
+              <option key={major.id} value={major.id}>
+                {major.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
             Description
           </label>
           <input
@@ -105,7 +146,6 @@ const EditCouncilModal: React.FC<EditCouncilModalProps> = ({
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             className="w-full border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 outline-none"
-            required
           />
         </div>
 

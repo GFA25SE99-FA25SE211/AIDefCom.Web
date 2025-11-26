@@ -1,4 +1,5 @@
 import { apiClient } from './client';
+import { env } from '@/lib/config';
 import type {
   DefenseSessionDto,
   DefenseSessionCreateDto,
@@ -32,6 +33,30 @@ export const defenseSessionsApi = {
 
   delete: async (id: number) => {
     return apiClient.delete(`/api/defense-sessions/${id}`);
+  },
+
+  downloadTemplate: async () => {
+    const response = await fetch(`${env.apiUrl}/api/defense-sessions/import/template`, {
+      method: 'GET',
+    });
+    if (!response.ok) {
+      throw new Error('Failed to download defense session template');
+    }
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `DefenseSessions_Template_${new Date().toISOString().split('T')[0]}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  },
+
+  importFromFile: async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return apiClient.postFormData('/api/defense-sessions/import', formData);
   },
 };
 

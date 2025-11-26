@@ -16,8 +16,12 @@ interface Task {
 interface EditTaskModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (id: number, data: Omit<Task, "id" | "assignedBy">) => void;
+  onSubmit: (
+    id: number,
+    data: Omit<Task, "id" | "assignedBy" | "assignedTo">
+  ) => void;
   taskData: Task | null;
+  userOptions?: { id: string; name: string }[];
 }
 
 const EditTaskModal: React.FC<EditTaskModalProps> = ({
@@ -25,9 +29,11 @@ const EditTaskModal: React.FC<EditTaskModalProps> = ({
   onClose,
   onSubmit,
   taskData,
+  userOptions = [],
 }) => {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [assignedBy, setAssignedBy] = useState("");
   const [assignedTo, setAssignedTo] = useState("");
   const [status, setStatus] = useState<"Pending" | "Completed" | "Inprogress">(
     "Pending"
@@ -37,11 +43,13 @@ const EditTaskModal: React.FC<EditTaskModalProps> = ({
     if (taskData) {
       setTitle(taskData.title);
       setDescription(taskData.description);
+      setAssignedBy(taskData.assignedBy);
       setAssignedTo(taskData.assignedTo);
       setStatus(taskData.status);
     } else {
       setTitle("");
       setDescription("");
+      setAssignedBy("");
       setAssignedTo("");
       setStatus("Pending");
     }
@@ -50,13 +58,31 @@ const EditTaskModal: React.FC<EditTaskModalProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!taskData) return;
-    onSubmit(taskData.id, { title, description, assignedTo, status });
+    onSubmit(taskData.id, {
+      title,
+      description,
+      status,
+    });
     onClose();
   };
 
   if (!taskData) return null;
 
-  const assignedToOptions = ["Secretary", "Moderator", "Admin", "Reviewer"];
+  // Get assigned by name from userOptions
+  const assignedByUser = userOptions.find((u) => u.id === taskData.assignedBy);
+  const assignedByDisplayName = assignedByUser?.name || taskData.assignedBy;
+
+  // Get assigned to name from userOptions
+  const assignedToUser = userOptions.find((u) => u.id === taskData.assignedTo);
+  const assignedToDisplayName = assignedToUser?.name || taskData.assignedTo;
+
+  const assignedToOptions =
+    userOptions.length > 0
+      ? userOptions.map((u) => ({ id: u.id, name: u.name }))
+      : [
+          { id: "chair", name: "Chair (No users found)" },
+          { id: "secretary", name: "Secretary (No users found)" },
+        ];
   const statusOptions: ("Pending" | "Completed" | "Inprogress")[] = [
     "Pending",
     "Inprogress",
@@ -114,7 +140,7 @@ const EditTaskModal: React.FC<EditTaskModalProps> = ({
             <input
               id="task-assigned-by"
               type="text"
-              value={taskData.assignedBy}
+              value={assignedByDisplayName}
               disabled
               className="bg-gray-50 cursor-not-allowed text-gray-600"
             />
@@ -122,21 +148,13 @@ const EditTaskModal: React.FC<EditTaskModalProps> = ({
 
           <div className="form-group flex-1">
             <label htmlFor="task-assigned-to">Assigned To</label>
-            <select
+            <input
               id="task-assigned-to"
-              value={assignedTo}
-              onChange={(e) => setAssignedTo(e.target.value)}
-              required
-            >
-              <option value="" disabled>
-                Select assignee
-              </option>
-              {assignedToOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
+              type="text"
+              value={assignedToDisplayName}
+              disabled
+              className="bg-gray-50 cursor-not-allowed text-gray-600"
+            />
           </div>
         </div>
 
