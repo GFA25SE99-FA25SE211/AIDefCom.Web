@@ -371,7 +371,10 @@ export default function AdminDataManagementPage() {
       await projectTasksApi.create({
         title: data.title,
         description: data.description,
+        assignedById: "admin-user-id", // TODO: Get from auth context
         assignedToId: data.assignedTo,
+        rubricId: 1, // TODO: Get from form or default rubric
+        status: "Pending", // Default status
       });
       const response = await projectTasksApi.getAll();
       const transformedTasks = (response.data || []).map(
