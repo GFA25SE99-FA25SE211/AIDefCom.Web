@@ -5,6 +5,7 @@ import type {
   StudentCreateDto,
   StudentUpdateDto,
   ImportResultDto,
+  StudentGroupImportResultDto,
 } from '@/lib/models';
 
 export const studentsApi = {
@@ -51,6 +52,40 @@ export const studentsApi = {
     a.click();
     window.URL.revokeObjectURL(url);
     document.body.removeChild(a);
+  },
+
+  downloadStudentGroupTemplate: async () => {
+    const response = await fetch(`${env.apiUrl}/api/students/import/student-group-template`, {
+      method: 'GET',
+    });
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Student_Group_Import_Template_${new Date().toISOString().split('T')[0]}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  },
+
+  importStudentGroups: async ({
+    semesterId,
+    majorId,
+    file,
+  }: {
+    semesterId: number;
+    majorId: number;
+    file: File;
+  }) => {
+    const formData = new FormData();
+    formData.append('SemesterId', String(semesterId));
+    formData.append('MajorId', String(majorId));
+    formData.append('File', file);
+    return apiClient.postFormData<StudentGroupImportResultDto>(
+      '/api/students/import/student-groups',
+      formData
+    );
   },
 };
 

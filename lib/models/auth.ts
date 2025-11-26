@@ -20,6 +20,14 @@ export interface UserDto {
   roles?: string[];
 }
 
+export interface UpdateAccountDto {
+  fullName: string;
+  email: string;
+  phoneNumber?: string;
+  newPassword?: string;
+  confirmNewPassword?: string;
+}
+
 export interface SetRoleRequestDto {
   email: string;
   role: string;

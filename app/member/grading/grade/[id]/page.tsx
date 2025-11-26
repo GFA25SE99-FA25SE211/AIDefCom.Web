@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { Languages, ArrowLeft, Save } from "lucide-react";
+import { ArrowLeft, Save } from "lucide-react";
 import { groupsApi } from "@/lib/api/groups";
 import { studentsApi } from "@/lib/api/students";
 import { memberNotesApi } from "@/lib/api/member-notes";
@@ -266,10 +266,6 @@ export default function GradeGroupPage() {
               </Link>
 
               {/* Language */}
-              <button className="flex items-center gap-2 mt-4 md:mt-0 px-3 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-blue-500 text-white text-sm font-medium shadow-sm hover:opacity-90 transition">
-                <Languages className="w-4 h-4" />
-                <span>Tiếng Việt</span>
-              </button>
             </div>
           </div>
         </div>
@@ -423,10 +419,6 @@ export default function GradeGroupPage() {
         <footer className="page-footer text-center text-sm text-gray-500 mt-6">
           © 2025 AIDefCom - Smart Graduation Defense
         </footer>
-
-        <button className="help-btn fixed bottom-6 right-6 w-10 h-10 rounded-full bg-gradient-to-r from-purple-600 to-blue-500 text-white flex items-center justify-center shadow-lg">
-          ?
-        </button>
       </main>
     </>
   );

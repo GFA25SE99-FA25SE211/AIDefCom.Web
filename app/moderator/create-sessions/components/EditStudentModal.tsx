@@ -59,6 +59,7 @@ interface EditStudentModalProps {
     }
   ) => void;
   studentData: Student | null;
+  groupOptions?: { id: string; name: string }[];
 }
 
 const EditStudentModal: React.FC<EditStudentModalProps> = ({
@@ -66,6 +67,7 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({
   onClose,
   onSubmit,
   studentData,
+  groupOptions = [],
 }) => {
   const [userId, setUserId] = useState("");
   const [groupId, setGroupId] = useState("");
@@ -147,22 +149,28 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({
           />
         </div>
 
-        {/* Group ID */}
+        {/* Group */}
         <div>
           <label
             htmlFor="editGroupId"
             className="block text-sm font-medium text-gray-700 mb-1"
           >
-            Group ID
+            Group <span className="text-red-500">*</span>
           </label>
-          <input
-            type="text"
+          <select
             id="editGroupId"
             value={groupId}
             onChange={(e) => setGroupId(e.target.value)}
             required
             className="w-full border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 outline-none"
-          />
+          >
+            <option value="">Select a group</option>
+            {groupOptions.map((group) => (
+              <option key={group.id} value={group.id}>
+                {group.name}
+              </option>
+            ))}
+          </select>
         </div>
 
         {/* Date of Birth */}

@@ -531,7 +531,6 @@ export default function AdminDashboardPage() {
       <footer className="page-footer">
         © 2025 AIDefCom - Smart Graduation Defense
       </footer>
-      <button className="help-btn">?</button>
     </main>
   );
 }

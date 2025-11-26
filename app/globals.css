@@ -1,3 +1,28 @@
+.custom-picker-input {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: textfield;
+  position: relative;
+  z-index: 1;
+}
+
+.custom-picker-input::-webkit-calendar-picker-indicator {
+  opacity: 0;
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+  z-index: 2;
+}
+
+.custom-picker-input::-webkit-clear-button,
+.custom-picker-input::-webkit-inner-spin-button {
+  display: none;
+  opacity: 0;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -91,12 +116,6 @@
 }
 .badge-warning {
   @apply bg-yellow-50 text-yellow-700;
-}
-
-/* ----------- HELP BUTTON ----------- */
-.help-btn {
-  @apply fixed bottom-6 right-6 w-10 h-10 rounded-full flex items-center justify-center 
-  bg-gradient-to-r from-purple-600 to-blue-500 text-white shadow-lg hover:opacity-90 transition;
 }
 
 /* ----------- SCROLLBAR STYLING ----------- */

@@ -59,6 +59,7 @@ interface Session {
   date: string;
   time: string;
   status: "Scheduled" | "Completed";
+  councilId: number;
 }
 
 interface EditSessionModalProps {
@@ -72,6 +73,7 @@ interface EditSessionModalProps {
       date: string;
       time: string;
       status: string;
+      councilId: number;
     }
   ) => void;
   sessionData: Session | null;
@@ -109,7 +111,14 @@ const EditSessionModal: React.FC<EditSessionModalProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!sessionData) return;
-    onSubmit(sessionData.id, { groupId, location, date, time, status });
+    onSubmit(sessionData.id, {
+      groupId,
+      location,
+      date,
+      time,
+      status,
+      councilId: sessionData.councilId,
+    });
   };
 
   const footer = (

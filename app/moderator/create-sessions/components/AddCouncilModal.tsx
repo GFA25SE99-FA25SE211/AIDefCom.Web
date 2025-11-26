@@ -23,20 +23,29 @@ const SaveIcon = () => (
 interface AddCouncilModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: { description: string; isActive: boolean }) => void;
+  onSubmit: (data: { majorId: number; description: string; isActive: boolean }) => void;
+  majorOptions: Array<{ id: number; name: string }>;
 }
 
 const AddCouncilModal: React.FC<AddCouncilModalProps> = ({
   isOpen,
   onClose,
   onSubmit,
+  majorOptions,
 }) => {
+  const [majorId, setMajorId] = useState("");
   const [description, setDescription] = useState("");
   const [isActive, setIsActive] = useState(true);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit({ description, isActive });
+    if (!majorId) return;
+    onSubmit({ 
+      majorId: parseInt(majorId, 10), 
+      description, 
+      isActive 
+    });
+    setMajorId("");
     setDescription("");
     setIsActive(true);
   };
@@ -72,6 +81,29 @@ const AddCouncilModal: React.FC<AddCouncilModalProps> = ({
       <form id="add-council-form" onSubmit={handleSubmit} className="space-y-5">
         <div>
           <label
+            htmlFor="councilMajor"
+            className="block text-sm font-medium text-gray-700 mb-1"
+          >
+            Major <span className="text-red-500">*</span>
+          </label>
+          <select
+            id="councilMajor"
+            value={majorId}
+            onChange={(e) => setMajorId(e.target.value)}
+            required
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+          >
+            <option value="">Select a major</option>
+            {majorOptions.map((major) => (
+              <option key={major.id} value={major.id}>
+                {major.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label
             htmlFor="councilDescription"
             className="block text-sm font-medium text-gray-700 mb-1"
           >
@@ -83,7 +115,6 @@ const AddCouncilModal: React.FC<AddCouncilModalProps> = ({
             placeholder="e.g. AI Defense Council - Fall 2025"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            required
             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
           />
         </div>

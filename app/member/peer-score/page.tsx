@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Languages, Users, Info } from "lucide-react";
+import { Users, Info } from "lucide-react";
 import { groupsApi } from "@/lib/api/groups";
 import { defenseSessionsApi } from "@/lib/api/defense-sessions";
 import { committeeAssignmentsApi } from "@/lib/api/committee-assignments";
@@ -211,13 +211,6 @@ const [scoreData, setScoreData] = useState<ScoreData[]>([]);
             </p>
           </div>
 
-          {/* Right side */}
-          <div className="flex justify-end mt-4 md:mt-0">
-            <button className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-blue-500 text-white text-sm font-medium shadow-sm hover:opacity-90 transition">
-              <Languages className="w-4 h-4" />
-              <span>Tiếng Việt</span>
-            </button>
-          </div>
         </header>
 
         <div className="note-box bg-white rounded-xl border border-gray-100 shadow-sm p-5 my-6 flex gap-4 items-center">
@@ -318,13 +311,6 @@ const [scoreData, setScoreData] = useState<ScoreData[]>([]);
         <footer className="page-footer text-center text-sm text-gray-500 mt-8">
           © 2025 AIDefCom - Smart Graduation Defense
         </footer>
-
-        <button
-          className="help-btn fixed bottom-6 right-6 w-10 h-10 rounded-full bg-gradient-to-r from-purple-600 to-blue-500 text-white flex items-center justify-center shadow-lg"
-          aria-label="Help"
-        >
-          ?
-        </button>
       </main>
     </>
   );

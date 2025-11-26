@@ -35,7 +35,6 @@ import {
   ClipboardList,
   Calendar,
   GraduationCap,
-  ListChecks,
   BookOpen,
   StickyNote,
   Users,
@@ -54,13 +53,6 @@ interface Task {
   assignedTo: string;
   status: "Pending" | "Completed" | "Inprogress";
 }
-interface Score {
-  id: number;
-  studentID: string;
-  rubricID: string;
-  score: number;
-  sessionID: number;
-}
 interface Note {
   id: number;
   committeeAssignmentId: string;
@@ -74,10 +66,33 @@ type AdminTabKey =
   | "tasks"
   | "semesters"
   | "majors"
-  | "scores"
   | "rubrics"
   | "notes"
   | "assignments";
+
+const formatDateInputValue = (value?: string) => {
+  if (!value) return "";
+  if (value.includes("T")) {
+    return value.split("T")[0];
+  }
+  return value;
+};
+
+const normalizeDateForApi = (value?: string) => {
+  if (!value) return "";
+  if (value.includes("T")) return value;
+  const parts = value.split("-");
+  if (parts.length === 3) {
+    const [year, month, day] = parts;
+    const padded = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+    return `${padded}T00:00:00`;
+  }
+  const date = new Date(value);
+  if (!Number.isNaN(date.getTime())) {
+    return date.toISOString();
+  }
+  return value;
+};
 
 /* ======================== TABS ======================== */
 const adminTabs: {
@@ -88,7 +103,6 @@ const adminTabs: {
   { key: "tasks", label: "Tasks", icon: ClipboardList },
   { key: "semesters", label: "Semesters", icon: Calendar },
   { key: "majors", label: "Majors", icon: GraduationCap },
-  { key: "scores", label: "Scores", icon: ListChecks },
   { key: "rubrics", label: "Rubrics", icon: BookOpen },
   { key: "notes", label: "Notes", icon: StickyNote },
   { key: "assignments", label: "Assignments", icon: Users },
@@ -144,7 +158,6 @@ export default function AdminDataManagementPage() {
       isActive: true,
     },
   ]);
-  const [scores] = useState<Score[]>([]);
   const [rubrics, setRubrics] = useState<RubricDto[]>([]);
   const [notes] = useState<Note[]>([
     {
@@ -352,16 +365,25 @@ export default function AdminDataManagementPage() {
   };
 
   const handleEditTask = async (
-    id: number,
+    id: number | string,
     data: Omit<Task, "id" | "assignedBy">
   ) => {
     try {
-      await projectTasksApi.update(id, {
+      if (!data.title || !data.assignedTo || !data.status) {
+        await swalConfig.error(
+          "Invalid Task",
+          "Title, assignee, and status are required."
+        );
+        return;
+      }
+
+      await projectTasksApi.update(Number(id), {
         title: data.title,
         description: data.description,
         assignedToId: data.assignedTo,
         status: data.status,
       });
+
       const response = await projectTasksApi.getAll();
       const transformedTasks = (response.data || []).map(
         (t: ProjectTaskDto) => ({
@@ -382,10 +404,14 @@ export default function AdminDataManagementPage() {
       await swalConfig.success("Success!", "Task updated successfully!");
     } catch (error: any) {
       console.error("Error updating task:", error);
-      await swalConfig.error(
-        "Error Updating Task",
-        error.message || "Failed to update task"
-      );
+
+      let errorMessage = error.message || "Failed to update task";
+      if (error.message?.includes("500")) {
+        errorMessage =
+          "Server error while updating the task. Please verify the task exists and try again.";
+      }
+
+      await swalConfig.error("Error Updating Task", errorMessage);
     }
   };
 
@@ -413,12 +439,23 @@ export default function AdminDataManagementPage() {
 
   const handleAddSemester = async (data: any) => {
     try {
+      const parsedYear = Number(data.year);
+      const parsedMajorId = Number(data.majorID);
+
+      if (!data.name || Number.isNaN(parsedYear) || Number.isNaN(parsedMajorId)) {
+        await swalConfig.error(
+          "Invalid Data",
+          "Please provide valid semester name, year, and major."
+        );
+        return;
+      }
+
       const semesterDto = {
         semesterName: data.name,
-        year: parseInt(data.year),
-        startDate: data.startDate,
-        endDate: data.endDate,
-        majorId: parseInt(data.majorID),
+        year: parsedYear,
+        startDate: normalizeDateForApi(data.startDate),
+        endDate: normalizeDateForApi(data.endDate),
+        majorId: parsedMajorId,
       };
 
       await semestersApi.create(semesterDto);
@@ -449,12 +486,23 @@ export default function AdminDataManagementPage() {
 
   const handleEditSemester = async (id: number, data: any) => {
     try {
+      const parsedYear = Number(data.year);
+      const parsedMajorId = Number(data.majorID);
+
+      if (!data.name || Number.isNaN(parsedYear) || Number.isNaN(parsedMajorId)) {
+        await swalConfig.error(
+          "Invalid Data",
+          "Please provide valid semester name, year, and major."
+        );
+        return;
+      }
+
       const semesterDto = {
         semesterName: data.name,
-        year: parseInt(data.year),
-        startDate: data.startDate,
-        endDate: data.endDate,
-        majorId: parseInt(data.majorID),
+        year: parsedYear,
+        startDate: normalizeDateForApi(data.startDate),
+        endDate: normalizeDateForApi(data.endDate),
+        majorId: parsedMajorId,
       };
 
       await semestersApi.update(id, semesterDto);
@@ -616,9 +664,13 @@ export default function AdminDataManagementPage() {
         return;
       }
 
-      const result = await committeeAssignmentsApi.update(parseInt(id), {
-        lecturerId: data.lecturerId,
-        councilId: parseInt(data.councilId),
+      const councilId = data.councilId
+        ? parseInt(data.councilId, 10)
+        : originalAssignment.councilId;
+
+      const result = await committeeAssignmentsApi.update(id, {
+        lecturerId: data.lecturerId || originalAssignment.lecturerId,
+        councilId,
         defenseSessionId: originalAssignment.defenseSessionId,
         role: data.role,
       });
@@ -669,17 +721,20 @@ export default function AdminDataManagementPage() {
     }
   };
 
-  const handleDeleteAssignment = async (id: number) => {
+  const handleDeleteAssignment = async (id: number | string) => {
+    const assignmentId = String(id);
     const result = await swalConfig.confirm(
       "Delete Assignment?",
-      `Are you sure you want to delete assignment with ID: ${id}?`,
+      `Are you sure you want to delete assignment with ID: ${assignmentId}?`,
       "Yes, delete it!"
     );
 
     if (result.isConfirmed) {
       try {
-        await committeeAssignmentsApi.delete(id);
-        setAssignments(assignments.filter((a) => a.id !== id));
+        await committeeAssignmentsApi.delete(assignmentId);
+        setAssignments((prev) =>
+          prev.filter((a) => String(a.id) !== assignmentId)
+        );
         await swalConfig.success(
           "Deleted!",
           "Assignment deleted successfully!"
@@ -745,7 +800,7 @@ export default function AdminDataManagementPage() {
             System Data Management
           </h1>
           <p className="text-gray-500 text-sm">
-            Manage tasks, semesters, majors, scores, rubrics, and system data
+      Manage tasks, semesters, majors, rubrics, and system data
           </p>
         </div>
       </header>
@@ -886,21 +941,6 @@ export default function AdminDataManagementPage() {
           ))
         )}
 
-      {activeTab === "scores" &&
-        renderHeader("Score Management") &&
-        renderTable(
-          ["ID", "Student Name", "Rubric ID", "Score", "Session ID"],
-          scores.map((s) => (
-            <tr key={s.id}>
-              <td>{s.id}</td>
-              <td>{userMap.get(s.studentID) || s.studentID}</td>
-              <td>{s.rubricID}</td>
-              <td>{s.score}</td>
-              <td>{s.sessionID}</td>
-            </tr>
-          ))
-        )}
-
       {activeTab === "rubrics" &&
         renderHeader("Rubric Management", () =>
           setIsAddRubricModalOpen(true)
@@ -951,7 +991,7 @@ export default function AdminDataManagementPage() {
       {activeTab === "assignments" &&
         renderHeader("Committee Assignments") &&
         renderTable(
-          ["ID", "Lecturer", "Council Name", "Role", "Actions"],
+          ["ID", "Lecturer", "Council Name", "Role"],
           filteredAssignments.map((a) => (
             <tr key={a.id}>
               <td>{a.id}</td>
@@ -962,24 +1002,6 @@ export default function AdminDataManagementPage() {
               </td>
               <td>{councilMap.get(a.councilId) || `Council ${a.councilId}`}</td>
               <td>{(a as any).roleName || a.role}</td>
-              <td className="text-right">
-                <div className="flex gap-2 justify-end items-center">
-                  <button
-                    className="btn-subtle"
-                    onClick={() => setEditingAssignment(a)}
-                    title="Edit"
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </button>
-                  <button
-                    className="btn-subtle text-red-600 hover:bg-red-50"
-                    onClick={() => handleDeleteAssignment(a.id)}
-                    title="Delete"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </td>
             </tr>
           ))
         )}
@@ -998,6 +1020,10 @@ export default function AdminDataManagementPage() {
         isOpen={isAddSemesterModalOpen}
         onClose={() => setIsAddSemesterModalOpen(false)}
         onSubmit={handleAddSemester}
+        majorOptions={majors.map((m) => ({
+          id: String(m.id),
+          name: m.majorName || `Major ${m.id}`,
+        }))}
       />
       <AddMajorModal
         isOpen={isAddMajorModalOpen}
@@ -1030,6 +1056,10 @@ export default function AdminDataManagementPage() {
             endDate: editingSemester.endDate,
             majorID: String(editingSemester.majorId),
           }}
+          majorOptions={majors.map((m) => ({
+            id: String(m.id),
+            name: m.majorName || `Major ${m.id}`,
+          }))}
         />
       )}
       {editingMajor && (
@@ -1057,24 +1087,7 @@ export default function AdminDataManagementPage() {
           }}
         />
       )}
-      {editingAssignment && (
-        <EditAssignmentModal
-          isOpen
-          onClose={() => setEditingAssignment(null)}
-          onSubmit={(id, data) => handleEditAssignment(id, data)}
-          assignmentData={{
-            id: String(editingAssignment.id),
-            lecturerId: String(editingAssignment.lecturerId),
-            councilId: String(editingAssignment.councilId),
-            role: editingAssignment.roleName || editingAssignment.role || "",
-          }}
-          lecturers={users}
-          councils={councils.map((c) => ({
-            id: String(c.id),
-            councilName: c.majorName || c.councilName || `Council ${c.id}`,
-          }))}
-        />
-      )}
+      {/* Assignment actions temporarily disabled */} 
     </main>
   );
 }

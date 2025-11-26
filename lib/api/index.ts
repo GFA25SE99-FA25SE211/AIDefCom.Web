@@ -6,6 +6,7 @@ export * from './semesters';
 export * from './rubrics';
 export * from './groups';
 export * from './students';
+export * from './lecturers';
 export * from './defense-sessions';
 export * from './councils';
 export * from './project-tasks';

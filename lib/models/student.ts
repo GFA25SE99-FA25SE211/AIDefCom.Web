@@ -34,3 +34,9 @@ export interface ImportResultDto {
   errors?: string[];
 }
 
+export interface StudentGroupImportResultDto extends ImportResultDto {
+  message?: string;
+  createdStudentIds?: string[];
+  createdGroupIds?: string[];
+}
+

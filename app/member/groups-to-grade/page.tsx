@@ -279,14 +279,6 @@ export default function GroupsToGradePage() {
         <footer className="text-center text-sm text-gray-500 mt-8">
           © 2025 AIDefCom — Smart Graduation Defense
         </footer>
-
-        {/* Nút trợ giúp cố định */}
-        <button
-          className="help-btn fixed bottom-6 right-6 w-10 h-10 rounded-full bg-gradient-to-r from-purple-600 to-blue-500 text-white flex items-center justify-center shadow-lg hover:opacity-90 transition"
-          title="Help"
-        >
-          ?
-        </button>
       </main>
     </div>
   );

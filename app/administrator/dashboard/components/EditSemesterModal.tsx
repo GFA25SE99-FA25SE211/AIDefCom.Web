@@ -19,6 +19,14 @@ interface EditSemesterModalProps {
   majorOptions?: { id: string; name: string }[];
 }
 
+const formatDateInputValue = (value?: string) => {
+  if (!value) return "";
+  if (value.includes("T")) {
+    return value.split("T")[0];
+  }
+  return value;
+};
+
 const EditSemesterModal: React.FC<EditSemesterModalProps> = ({
   isOpen,
   onClose,
@@ -36,8 +44,8 @@ const EditSemesterModal: React.FC<EditSemesterModalProps> = ({
     if (semesterData) {
       setName(semesterData.name);
       setYear(String(semesterData.year));
-      setStartDate(semesterData.startDate);
-      setEndDate(semesterData.endDate);
+      setStartDate(formatDateInputValue(semesterData.startDate));
+      setEndDate(formatDateInputValue(semesterData.endDate));
       setMajorID(semesterData.majorID);
     } else {
       setName("");
@@ -116,9 +124,16 @@ const EditSemesterModal: React.FC<EditSemesterModalProps> = ({
             <label htmlFor="start-date">Start Date</label>
             <input
               id="start-date"
-              type="date"
+              type="text"
+              placeholder="dd/mm/yyyy"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
+              onFocus={(e) => (e.target.type = "date")}
+              onBlur={(e) => {
+                if (!e.target.value) {
+                  e.target.type = "text";
+                }
+              }}
               required
             />
           </div>
@@ -127,9 +142,16 @@ const EditSemesterModal: React.FC<EditSemesterModalProps> = ({
             <label htmlFor="end-date">End Date</label>
             <input
               id="end-date"
-              type="date"
+              type="text"
+              placeholder="dd/mm/yyyy"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
+              onFocus={(e) => (e.target.type = "date")}
+              onBlur={(e) => {
+                if (!e.target.value) {
+                  e.target.type = "text";
+                }
+              }}
               required
             />
           </div>

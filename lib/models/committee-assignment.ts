@@ -11,8 +11,7 @@ export interface CommitteeAssignmentDto {
 export interface CommitteeAssignmentCreateDto {
   lecturerId: string;
   councilId: number;
-  defenseSessionId: number;
-  role: string;
+  councilRoleId: number;
 }
 
 export interface CommitteeAssignmentUpdateDto {

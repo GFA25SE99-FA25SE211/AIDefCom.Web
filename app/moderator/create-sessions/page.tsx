@@ -1,7 +1,7 @@
 // app/moderator/create-sessions/page.tsx
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Plus,
   Calendar,
@@ -9,13 +9,17 @@ import {
   MapPin,
   Users,
   CheckCircle,
+  Download,
+  Upload,
+  X,
 } from "lucide-react";
 import CreateSessionForm, {
   SessionFormData,
 } from "./components/CreateSessionForm";
 import { defenseSessionsApi } from "@/lib/api/defense-sessions";
 import { groupsApi } from "@/lib/api/groups";
-import type { DefenseSessionDto, GroupDto } from "@/lib/models";
+import { councilsApi } from "@/lib/api/councils";
+import type { DefenseSessionDto, GroupDto, CouncilDto } from "@/lib/models";
 import { swalConfig } from "@/lib/utils/sweetAlert";
 
 // Inline SVG icons nhỏ gọn (kích thước 20x20)
@@ -45,20 +49,26 @@ export default function CreateSessionsPage() {
   const [isFormVisible, setIsFormVisible] = useState(false);
   const [sessions, setSessions] = useState<DefenseSessionDto[]>([]);
   const [groups, setGroups] = useState<GroupDto[]>([]);
+  const [councils, setCouncils] = useState<CouncilDto[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const uploadInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const [sessionsRes, groupsRes] = await Promise.all([
+        const [sessionsRes, groupsRes, councilsRes] = await Promise.all([
           defenseSessionsApi.getAll().catch(() => ({ data: [] })),
           groupsApi.getAll().catch(() => ({ data: [] })),
+          councilsApi.getAll(false).catch(() => ({ data: [] })),
         ]);
 
         setSessions(sessionsRes.data || []);
         const normalizedGroups = (groupsRes.data || []).map(normalizeGroup);
         setGroups(normalizedGroups);
+        setCouncils(councilsRes.data || []);
       } catch (error) {
         console.error("Error fetching data:", error);
       } finally {
@@ -69,23 +79,74 @@ export default function CreateSessionsPage() {
     fetchData();
   }, []);
 
+  const handleDownloadTemplate = async () => {
+    try {
+      await defenseSessionsApi.downloadTemplate();
+      setIsDownloadModalOpen(false);
+    } catch (error: any) {
+      console.error("Download template failed:", error);
+      await swalConfig.error(
+        "Download Failed",
+        error.message || "Unable to download template."
+      );
+    }
+  };
+
+  const handleUploadClick = () => {
+    uploadInputRef.current?.click();
+  };
+
+  const handleFileChange = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      await defenseSessionsApi.importFromFile(file);
+      const refreshed = await defenseSessionsApi.getAll();
+      setSessions(refreshed.data || []);
+      await swalConfig.success("Import Complete", "Defense sessions imported!");
+      setIsUploadModalOpen(false);
+    } catch (error: any) {
+      console.error("Upload failed:", error);
+      await swalConfig.error(
+        "Import Failed",
+        error.message || "Unable to upload the file."
+      );
+    } finally {
+      event.target.value = "";
+    }
+  };
+
   const handleCreateSession = async (formData: SessionFormData) => {
     try {
-      const group = groups.find((g) => g.groupName === formData.groupName);
-      if (!group) {
+      if (!formData.groupId || !formData.councilId) {
         await swalConfig.error(
-          "Group Not Found",
-          "The specified group could not be found. Please check the group name and try again."
+          "Missing Required Fields",
+          "Please select both a group and a council."
         );
         return;
       }
 
+      // Format times to HH:MM:SS
+      const formatTime = (time: string) => {
+        if (!time) return "00:00:00";
+        const parts = time.split(":");
+        if (parts.length === 2) {
+          return `${time}:00`;
+        }
+        return time;
+      };
+
       await defenseSessionsApi.create({
-        groupId: group.id,
+        groupId: formData.groupId,
+        councilId: formData.councilId,
         defenseDate: formData.defenseDate,
-        startTime: formData.defenseTime,
-        endTime: formData.defenseTime, // TODO: Add endTime to form
+        startTime: formatTime(formData.startTime),
+        endTime: formatTime(formData.endTime),
         location: formData.location,
+        status: formData.status || "Scheduled",
       });
 
       // Refresh sessions
@@ -160,6 +221,20 @@ export default function CreateSessionsPage() {
 
         <div className="flex items-center gap-3">
           <button
+            onClick={() => setIsDownloadModalOpen(true)}
+            className="inline-flex items-center gap-2 rounded-full border border-green-500 px-4 py-2 text-sm font-medium text-green-600 transition hover:bg-green-50"
+          >
+            <Download className="w-4 h-4" />
+            Download Template
+          </button>
+          <button
+            onClick={() => setIsUploadModalOpen(true)}
+            className="inline-flex items-center gap-2 rounded-full border border-purple-500 px-4 py-2 text-sm font-medium text-purple-600 transition hover:bg-purple-50"
+          >
+            <Upload className="w-4 h-4" />
+            Import File
+          </button>
+          <button
             onClick={() => setIsFormVisible(true)}
             className="inline-flex items-center gap-2 bg-gradient-to-r from-purple-600 to-blue-500 text-white px-4 py-2 rounded-lg shadow"
           >
@@ -175,6 +250,8 @@ export default function CreateSessionsPage() {
           <CreateSessionForm
             onCancel={() => setIsFormVisible(false)}
             onSubmit={handleCreateSession}
+            groups={groups}
+            councils={councils}
           />
         </div>
       )}
@@ -296,6 +373,87 @@ export default function CreateSessionsPage() {
             © 2025 AIDefCom - Smart Graduation Defense
           </footer>
         </>
+      )}
+
+      {/* Hidden file input */}
+      <input
+        ref={uploadInputRef}
+        type="file"
+        accept=".xlsx,.xls"
+        className="hidden"
+        onChange={handleFileChange}
+      />
+
+      {/* Download modal */}
+      {isDownloadModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="mb-4 flex items-start justify-between">
+              <div>
+                <div className="flex items-center gap-2 text-lg font-semibold text-gray-900">
+                  <Download className="w-5 h-5 text-green-500" />
+                  Download Template
+                </div>
+                <p className="text-sm text-gray-500">
+                  Get the Excel template for defense session import
+                </p>
+              </div>
+              <button
+                className="rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                onClick={() => setIsDownloadModalOpen(false)}
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={handleDownloadTemplate}
+              className="flex w-full items-center justify-between rounded-2xl bg-gradient-to-r from-purple-600 to-blue-500 px-5 py-4 text-white"
+            >
+              <span className="flex items-center gap-2 text-sm font-semibold">
+                <Calendar className="w-4 h-4" />
+                Defense Sessions Template
+              </span>
+              <Download className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Upload modal */}
+      {isUploadModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="mb-4 flex items-start justify-between">
+              <div>
+                <div className="flex items-center gap-2 text-lg font-semibold text-gray-900">
+                  <Upload className="w-5 h-5 text-purple-500" />
+                  Import File
+                </div>
+                <p className="text-sm text-gray-500">
+                  Import defense sessions from the prepared template
+                </p>
+              </div>
+              <button
+                className="rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                onClick={() => setIsUploadModalOpen(false)}
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={handleUploadClick}
+              className="flex w-full items-center justify-between rounded-2xl bg-gradient-to-r from-purple-600 to-blue-500 px-5 py-4 text-white"
+            >
+              <span className="flex items-center gap-2 text-sm font-semibold">
+                <Upload className="w-4 h-4" />
+                Choose Excel File
+              </span>
+              <Upload className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

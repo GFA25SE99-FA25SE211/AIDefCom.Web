@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { Languages, Search, Users } from "lucide-react";
+import { Search, Users } from "lucide-react";
 import { studentsApi } from "@/lib/api/students";
 import { defenseSessionsApi } from "@/lib/api/defense-sessions";
 import type { StudentDto } from "@/lib/models";
@@ -62,7 +62,7 @@ export default function StudentHistoryListPage() {
     <>
       <main className="main-content">
         {/* Header */}
-        <header className="flex flex-col md:flex-row md:items-center md:justify-between bg-white p-5 rounded-2xl shadow-sm border border-gray-100 mb-6">
+        <header className="flex flex-col bg-white p-5 rounded-2xl shadow-sm border border-gray-100 mb-6">
           <div>
             <h1 className="text-xl font-semibold text-gray-800">
               Student Defense History
@@ -72,10 +72,6 @@ export default function StudentHistoryListPage() {
             </p>
           </div>
 
-          <button className="flex items-center gap-2 mt-4 md:mt-0 px-3 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-blue-500 text-white text-sm font-medium shadow-sm hover:opacity-90 transition">
-            <Languages className="w-4 h-4" />
-            <span>Tiếng Việt</span>
-          </button>
         </header>
 
         {/* Search bar */}
@@ -176,14 +172,6 @@ export default function StudentHistoryListPage() {
         <footer className="text-center text-sm text-gray-500 mt-8">
           © 2025 AIDefCom - Smart Graduation Defense
         </footer>
-
-        {/* Help button */}
-        <button
-          className="fixed bottom-6 right-6 w-10 h-10 rounded-full bg-gradient-to-r from-purple-600 to-blue-500 text-white flex items-center justify-center shadow-lg"
-          aria-label="Help"
-        >
-          ?
-        </button>
       </main>
     </>
   );
