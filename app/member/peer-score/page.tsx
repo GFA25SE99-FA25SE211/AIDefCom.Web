@@ -151,75 +151,81 @@ export default function PeerScoresPage() {
         const allScores = scoresRes.data || [];
 
         // Debug logging
-        console.log('🔍 Debug Peer Scores Data:');
-        console.log('Groups:', groups.length, groups);
-        console.log('Sessions:', sessions.length, sessions);
-        console.log('Assignments:', assignments.length, assignments);
-        console.log('Users:', users.length, users);
-        console.log('All Scores:', allScores.length, allScores);
+        console.log("🔍 Debug Peer Scores Data:");
+        console.log("Groups:", groups.length, groups);
+        console.log("Sessions:", sessions.length, sessions);
+        console.log("Assignments:", assignments.length, assignments);
+        console.log("Users:", users.length, users);
+        console.log("All Scores:", allScores.length, allScores);
 
         // Transform data to score format
         const scores: ScoreData[] = [];
-        
+
         // If we have actual scores, organize them by session
         if (allScores.length > 0) {
           const scoresBySession = new Map<number, any[]>();
-          allScores.forEach(score => {
+          allScores.forEach((score) => {
             if (!scoresBySession.has(score.sessionId)) {
               scoresBySession.set(score.sessionId, []);
             }
             scoresBySession.get(score.sessionId)!.push(score);
           });
-          
+
           // Create score cards based on sessions that have scores
           scoresBySession.forEach((sessionScores, sessionId) => {
-            const session = sessions.find(s => s.id === sessionId);
-            const group = groups.find(g => g.id === session?.groupId);
-            
+            const session = sessions.find((s) => s.id === sessionId);
+            const group = groups.find((g) => g.id === session?.groupId);
+
             if (group) {
               // Group scores by evaluator
               const scoresByEvaluator = new Map<string, any[]>();
-              sessionScores.forEach(score => {
+              sessionScores.forEach((score) => {
                 if (!scoresByEvaluator.has(score.evaluatorId)) {
                   scoresByEvaluator.set(score.evaluatorId, []);
                 }
                 scoresByEvaluator.get(score.evaluatorId)!.push(score);
               });
-              
+
               // Create members array with actual scores
               const members: Array<{
                 name: string;
                 score: string;
                 status: "Pending" | "Submitted";
               }> = [];
-              
+
               // Add evaluators who have submitted scores
               scoresByEvaluator.forEach((evaluatorScores, evaluatorId) => {
                 const firstScore = evaluatorScores[0];
-                const evaluatorName = firstScore.evaluatorName || 'Unknown';
-                
+                const evaluatorName = firstScore.evaluatorName || "Unknown";
+
                 // Calculate average score for this evaluator
-                const total = evaluatorScores.reduce((sum, score) => sum + score.value, 0);
+                const total = evaluatorScores.reduce(
+                  (sum, score) => sum + score.value,
+                  0
+                );
                 const average = total / evaluatorScores.length;
-                
+
                 members.push({
                   name: evaluatorName,
                   score: average.toFixed(1),
-                  status: "Submitted"
+                  status: "Submitted",
                 });
               });
-              
+
               // Calculate group average
               let avgScore: string | null = null;
               if (members.length > 0) {
-                const total = members.reduce((sum, member) => sum + parseFloat(member.score), 0);
+                const total = members.reduce(
+                  (sum, member) => sum + parseFloat(member.score),
+                  0
+                );
                 const average = total / members.length;
                 avgScore = average.toFixed(2);
               }
-              
+
               const displayName = getGroupDisplayName(group);
               const projectTitle = getProjectTitle(group);
-              
+
               scores.push({
                 groupName: displayName,
                 projectTitle,
@@ -229,7 +235,7 @@ export default function PeerScoresPage() {
             }
           });
         }
-        
+
         // If no actual data, fall back to groups with committee assignments
         if (scores.length === 0 && groups.length > 0) {
           groups.forEach((group: GroupDto) => {
@@ -268,65 +274,70 @@ export default function PeerScoresPage() {
             }
           });
         }
-        
+
         // Final fallback: if we have scores but no organized data, create simple display
         if (scores.length === 0 && allScores.length > 0) {
-          console.log('🔄 Using direct scores fallback');
-          
+          console.log("🔄 Using direct scores fallback");
+
           // Group scores by student and session
           const sessionGroups = new Map<number, any[]>();
-          allScores.forEach(score => {
+          allScores.forEach((score) => {
             if (!sessionGroups.has(score.sessionId)) {
               sessionGroups.set(score.sessionId, []);
             }
             sessionGroups.get(score.sessionId)!.push(score);
           });
-          
+
           sessionGroups.forEach((sessionScores, sessionId) => {
             const firstScore = sessionScores[0];
-            
+
             // Group by evaluator for this session
             const evaluatorMap = new Map<string, any[]>();
-            sessionScores.forEach(score => {
+            sessionScores.forEach((score) => {
               if (!evaluatorMap.has(score.evaluatorId)) {
                 evaluatorMap.set(score.evaluatorId, []);
               }
               evaluatorMap.get(score.evaluatorId)!.push(score);
             });
-            
+
             // Create members from evaluators
             const members: Array<{
               name: string;
               score: string;
               status: "Pending" | "Submitted";
             }> = [];
-            
+
             evaluatorMap.forEach((evalScores, evaluatorId) => {
               const total = evalScores.reduce((sum, s) => sum + s.value, 0);
               const average = total / evalScores.length;
-              
+
               members.push({
-                name: evalScores[0].evaluatorName || 'Unknown',
+                name: evalScores[0].evaluatorName || "Unknown",
                 score: average.toFixed(1),
-                status: "Submitted"
+                status: "Submitted",
               });
             });
-            
+
             // Calculate group average
-            const total = members.reduce((sum, member) => sum + parseFloat(member.score), 0);
+            const total = members.reduce(
+              (sum, member) => sum + parseFloat(member.score),
+              0
+            );
             const avgScore = (total / members.length).toFixed(2);
-            
+
             scores.push({
               groupName: `Session ${sessionId} Group`,
-              projectTitle: firstScore.studentName ? `${firstScore.studentName}'s Project` : 'Unknown Project',
+              projectTitle: firstScore.studentName
+                ? `${firstScore.studentName}'s Project`
+                : "Unknown Project",
               avgScore,
               members,
             });
           });
         }
 
-        console.log('📊 Transformed scores:', scores);
-        
+        console.log("📊 Transformed scores:", scores);
+
         setScoreData(scores.length > 0 ? scores : defaultScoreData); // Fallback to default if empty
       } catch (error) {
         console.error("Error fetching peer scores:", error);
