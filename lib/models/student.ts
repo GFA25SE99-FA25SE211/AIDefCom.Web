@@ -15,9 +15,12 @@ export interface StudentDto {
 export interface StudentCreateDto {
   studentCode: string;
   fullName: string;
+  userName?: string; // Add userName to match API expectations
   email?: string;
   phoneNumber?: string;
   groupId?: string;
+  dateOfBirth?: string;
+  gender?: string;
 }
 
 export interface StudentUpdateDto {

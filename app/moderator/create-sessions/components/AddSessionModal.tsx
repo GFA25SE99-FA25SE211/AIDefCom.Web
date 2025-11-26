@@ -259,6 +259,7 @@ const AddSessionModal: React.FC<AddSessionModalProps> = ({
             className="w-full border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 outline-none"
           >
             <option value="Scheduled">Scheduled</option>
+            <option value="InProgress">In Progress</option>
             <option value="Completed">Completed</option>
           </select>
         </div>

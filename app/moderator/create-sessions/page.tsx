@@ -169,10 +169,21 @@ export default function CreateSessionsPage() {
   };
 
   const scheduledSessions = sessions
-    .filter((s) => {
+    .filter((s) => s.status === "Scheduled")
+    .map((s) => {
+      const group = groups.find((g) => g.id === s.groupId);
       const sessionDate = new Date(s.defenseDate);
-      return sessionDate >= new Date();
-    })
+      return {
+        id: s.id,
+        groupName: group?.groupName || "Unknown",
+        date: sessionDate.toLocaleDateString("en-GB"),
+        time: s.startTime || "TBD",
+        location: s.location || "TBD",
+      };
+    });
+
+  const inProgressSessions = sessions
+    .filter((s) => s.status === "InProgress")
     .map((s) => {
       const group = groups.find((g) => g.id === s.groupId);
       const sessionDate = new Date(s.defenseDate);
@@ -186,10 +197,7 @@ export default function CreateSessionsPage() {
     });
 
   const completedSessions = sessions
-    .filter((s) => {
-      const sessionDate = new Date(s.defenseDate);
-      return sessionDate < new Date();
-    })
+    .filter((s) => s.status === "Completed")
     .map((s) => {
       const group = groups.find((g) => g.id === s.groupId);
       const sessionDate = new Date(s.defenseDate);
@@ -205,6 +213,7 @@ export default function CreateSessionsPage() {
   const summaryData = {
     total: sessions.length,
     scheduled: scheduledSessions.length,
+    inProgress: inProgressSessions.length,
     completed: completedSessions.length,
   };
 
@@ -259,7 +268,7 @@ export default function CreateSessionsPage() {
       {/* summary cards */}
       {!isFormVisible && (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-6">
             <div className="bg-white p-4 rounded-lg shadow flex items-center gap-4">
               <div className="flex items-center justify-center w-12 h-12 rounded-lg bg-indigo-500">
                 <Calendar className="w-5 h-5" />
@@ -279,6 +288,18 @@ export default function CreateSessionsPage() {
                   {summaryData.scheduled}
                 </div>
                 <div className="text-sm text-gray-500">Scheduled</div>
+              </div>
+            </div>
+
+            <div className="bg-white p-4 rounded-lg shadow flex items-center gap-4">
+              <div className="flex items-center justify-center w-12 h-12 rounded-lg bg-blue-500">
+                <Clock className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="text-xl font-semibold">
+                  {summaryData.inProgress}
+                </div>
+                <div className="text-sm text-gray-500">In Progress</div>
               </div>
             </div>
 
@@ -326,6 +347,43 @@ export default function CreateSessionsPage() {
                   </div>
                   <span className="absolute right-3 top-3 text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full">
                     Scheduled
+                  </span>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* in progress list */}
+          <section className="mb-6">
+            <h2 className="text-lg font-semibold mb-3">In Progress Sessions</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {inProgressSessions.map((s) => (
+                <div
+                  key={s.id}
+                  className="bg-white rounded-lg shadow p-4 relative"
+                >
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-10 h-10 rounded-md bg-blue-50 flex items-center justify-center">
+                      <Users className="w-5 h-5" />
+                    </div>
+                    <h3 className="text-md font-medium">{s.groupName}</h3>
+                  </div>
+                  <div className="text-sm text-gray-600 flex flex-col gap-1">
+                    <div>
+                      <Calendar className="w-4 h-4 inline-block mr-2" />
+                      {s.date}
+                    </div>
+                    <div>
+                      <Clock className="w-4 h-4 inline-block mr-2" />
+                      {s.time}
+                    </div>
+                    <div>
+                      <MapPin className="w-4 h-4 inline-block mr-2" />
+                      {s.location}
+                    </div>
+                  </div>
+                  <span className="absolute right-3 top-3 text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
+                    In Progress
                   </span>
                 </div>
               ))}

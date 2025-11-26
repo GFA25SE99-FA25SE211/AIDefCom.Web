@@ -7,6 +7,7 @@ import GroupCard, { GroupStatus, SessionStatus } from "./components/GroupCard";
 import { groupsApi } from "@/lib/api/groups";
 import { defenseSessionsApi } from "@/lib/api/defense-sessions";
 import { studentsApi } from "@/lib/api/students";
+import { scoresApi } from "@/lib/api/scores";
 import type { GroupDto, DefenseSessionDto, StudentDto } from "@/lib/models";
 
 interface GroupWithSession extends GroupDto {
@@ -196,6 +197,35 @@ export default function GroupsToGradePage() {
                     .join(", ")
                 : "No members assigned";
 
+            // Check if group has been graded
+            let isGraded = false;
+            if (latestSession && students.length > 0) {
+              // Get current user ID (implement based on your auth system)
+              const currentUserId =
+                localStorage.getItem("currentUserId") || "temp-user-id";
+
+              // Check if all students have scores from this evaluator in this session
+              const scoresPromises = students.map((student: StudentDto) =>
+                scoresApi.getByStudentId(student.id).catch(() => ({ data: [] }))
+              );
+
+              const allStudentScores = await Promise.all(scoresPromises);
+
+              // Check if this evaluator has graded all students in this session
+              const hasGradedAllStudents = allStudentScores.every(
+                (scoresRes) => {
+                  const scores = scoresRes.data || [];
+                  return scores.some(
+                    (score: any) =>
+                      score.sessionId === latestSession.id &&
+                      score.evaluatorId === currentUserId
+                  );
+                }
+              );
+
+              isGraded = hasGradedAllStudents;
+            }
+
             const sessionDate = latestSession
               ? new Date(latestSession.defenseDate)
               : new Date();
@@ -209,8 +239,9 @@ export default function GroupsToGradePage() {
               ...group,
               groupName: displayName,
               projectTitle,
-              // Allow grading for all groups - members should be able to grade/edit
-              status: "Not Graded" as GroupStatus,
+              status: isGraded
+                ? ("Graded" as GroupStatus)
+                : ("Not Graded" as GroupStatus),
               members,
               sessionTitle: latestSession
                 ? `Defense Session - ${displayName}`

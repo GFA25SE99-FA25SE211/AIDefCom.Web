@@ -49,7 +49,13 @@ export interface SessionFormData {
 interface CreateSessionFormProps {
   onCancel: () => void;
   onSubmit: (formData: SessionFormData) => void;
-  groups: Array<{ id: string; groupName?: string; projectCode?: string; topicTitle_EN?: string; topicTitle_VN?: string }>;
+  groups: Array<{
+    id: string;
+    groupName?: string;
+    projectCode?: string;
+    topicTitle_EN?: string;
+    topicTitle_VN?: string;
+  }>;
   councils: Array<{ id: number; councilName?: string; majorName?: string }>;
 }
 
@@ -66,11 +72,19 @@ const CreateSessionForm: React.FC<CreateSessionFormProps> = ({
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
   const [location, setLocation] = useState("");
+  const [status, setStatus] = useState("Scheduled");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!groupId || !councilId || !defenseDate || !startTime || !endTime || !location) {
+
+    if (
+      !groupId ||
+      !councilId ||
+      !defenseDate ||
+      !startTime ||
+      !endTime ||
+      !location
+    ) {
       return;
     }
 
@@ -87,22 +101,28 @@ const CreateSessionForm: React.FC<CreateSessionFormProps> = ({
       startTime,
       endTime,
       location,
-      status: "Scheduled",
+      status: status,
     };
     onSubmit(formData);
   };
 
-  const getGroupDisplayName = (group: typeof groups[0]) => {
-    return group.groupName || 
-           group.projectCode || 
-           group.topicTitle_EN || 
-           group.topicTitle_VN || 
-           `Group ${group.id?.slice(0, 8) || ""}`;
+  const getGroupDisplayName = (group: (typeof groups)[0]) => {
+    return (
+      group.groupName ||
+      group.projectCode ||
+      group.topicTitle_EN ||
+      group.topicTitle_VN ||
+      `Group ${group.id?.slice(0, 8) || ""}`
+    );
   };
 
-  const getCouncilDisplayName = (council: typeof councils[0]) => {
-    return council.councilName || 
-           `Council ${council.id}${council.majorName ? ` (${council.majorName})` : ""}`;
+  const getCouncilDisplayName = (council: (typeof councils)[0]) => {
+    return (
+      council.councilName ||
+      `Council ${council.id}${
+        council.majorName ? ` (${council.majorName})` : ""
+      }`
+    );
   };
 
   return (
@@ -110,15 +130,17 @@ const CreateSessionForm: React.FC<CreateSessionFormProps> = ({
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-        <div className="flex items-center justify-center w-10 h-10 bg-gradient-to-r from-purple-600 to-blue-500 text-white rounded-lg shadow">
+          <div className="flex items-center justify-center w-10 h-10 bg-gradient-to-r from-purple-600 to-blue-500 text-white rounded-lg shadow">
             <Users className="w-5 h-5" />
-        </div>
-        <div>
-          <h2 className="text-lg font-semibold">Create New Defense Session</h2>
-          <p className="text-sm text-gray-500">
-            Fill in the details to schedule a new defense session
-          </p>
-        </div>
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold">
+              Create New Defense Session
+            </h2>
+            <p className="text-sm text-gray-500">
+              Fill in the details to schedule a new defense session
+            </p>
+          </div>
         </div>
         <button
           type="button"
@@ -183,7 +205,7 @@ const CreateSessionForm: React.FC<CreateSessionFormProps> = ({
                 value={defenseDate}
                 onChange={(e) => setDefenseDate(e.target.value)}
                 required
-                min={new Date().toISOString().split('T')[0]}
+                min={new Date().toISOString().split("T")[0]}
                 className="custom-picker-input w-full border border-gray-300 rounded-lg px-3 py-2 pr-10 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
               />
               <span className="absolute right-3 top-2.5 pointer-events-none z-0">
@@ -232,23 +254,39 @@ const CreateSessionForm: React.FC<CreateSessionFormProps> = ({
           </div>
 
           {/* Location */}
-          <div className="md:col-span-2">
+          <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Location <span className="text-red-500">*</span>
             </label>
             <div className="relative">
-            <input
-              type="text"
-              placeholder="e.g. Room A-301, Building A"
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              required
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-            />
+              <input
+                type="text"
+                placeholder="e.g. Room A-301, Building A"
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                required
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              />
               <span className="absolute right-3 top-2.5 text-gray-500 pointer-events-none">
                 <MapPin className="w-4 h-4" />
               </span>
-              </div>
+            </div>
+          </div>
+
+          {/* Status */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Status
+            </label>
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+            >
+              <option value="Scheduled">Scheduled</option>
+              <option value="InProgress">In Progress</option>
+              <option value="Completed">Completed</option>
+            </select>
           </div>
         </div>
 

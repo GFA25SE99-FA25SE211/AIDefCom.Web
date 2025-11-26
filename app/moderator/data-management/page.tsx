@@ -44,6 +44,17 @@ import EditGroupModal from "../create-sessions/components/EditGroupModal";
 import EditStudentModal from "../create-sessions/components/EditStudentModal";
 import EditSessionModal from "../create-sessions/components/EditSessionModal";
 
+// Format date function to display only date without time
+const formatDateOnly = (dateString: string) => {
+  if (!dateString) return "";
+  const date = new Date(dateString);
+  return date.toLocaleDateString("vi-VN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+};
+
 // Types (kept)
 type Council = {
   id: number;
@@ -53,17 +64,10 @@ type Council = {
   status: "Active" | "Inactive";
   majorId?: number;
 };
-type Group = {
-  id: string;
-  topicEN: string;
-  topicVN: string;
-  semester: string;
-  semesterId: number;
-  majorId: number;
-  status: "Active" | "Completed" | "Pending";
-};
+type Group = GroupDto;
 type LocalStudent = {
-  id: number;
+  id: string; // Real ID from API (can be GUID or student code)
+  displayId: number; // Display ID for table (1, 2, 3...)
   userId: string;
   groupId: string | number; // Allow both string (group name) and number (group id)
   dob: string;
@@ -76,7 +80,7 @@ type Session = {
   location: string;
   date: string;
   time: string;
-  status: "Scheduled" | "Completed";
+  status: "Scheduled" | "InProgress" | "Completed";
   councilId: number;
 };
 type Transcript = {
@@ -286,29 +290,8 @@ export default function DataManagementPage() {
       }));
       setCouncils(councilsData);
 
-      // Transform groups
-      const groupsData = (
-        Array.isArray(groupsRes.data) ? groupsRes.data : []
-      ).map((g: GroupDto) => ({
-        id: g.id || "0",
-        topicEN:
-          g.projectCode ||
-          g.groupName ||
-          g.topicTitle_EN ||
-          g.projectTitle ||
-          `Group ${g.id?.slice(0, 8) || "Unknown"}`,
-        topicVN:
-          g.topicTitle_VN ||
-          g.projectTitle ||
-          g.projectCode ||
-          g.groupName ||
-          "Không có tiêu đề",
-        semester:
-          semesterMap.get(String(g.semesterId)) || `Semester ${g.semesterId}`,
-        semesterId: g.semesterId || 1,
-        majorId: g.majorId || 1,
-        status: "Active" as const,
-      }));
+      // Transform groups (use raw data like admin for consistency)
+      const groupsData = (groupsRes.data || []).map((g: GroupDto) => g);
       setGroups(groupsData);
 
       // Transform students
@@ -323,23 +306,25 @@ export default function DataManagementPage() {
 
           console.log(`Student ${index + 1}:`, {
             studentData: s,
+            realId: s.id, // Log real ID from API
             groupId: studentGroupId,
             groupIdType: typeof studentGroupId,
             foundInMap: groupMap.get(String(studentGroupId)),
           });
 
           return {
-            id: index + 1,
+            id: s.id, // Use real ID from API instead of index + 1
+            displayId: index + 1, // Add display ID for table
             userId:
-              s.studentCode ||
-              s.userName ||
               s.fullName ||
+              s.userName ||
+              s.studentCode ||
               `Student ${s.id?.slice(0, 8) || index + 1}`,
             groupId: studentGroupId
               ? groupMap.get(String(studentGroupId)) ||
                 `Group ${studentGroupId}`
               : "No Group Assigned",
-            dob: s.dateOfBirth || "",
+            dob: s.dateOfBirth ? s.dateOfBirth.split("T")[0] : "", // Format to yyyy-MM-dd
             gender: s.gender || "",
             role: index === 0 ? ("Leader" as const) : ("Member" as const),
           };
@@ -366,6 +351,8 @@ export default function DataManagementPage() {
           status:
             s.status === "Completed"
               ? ("Completed" as const)
+              : s.status === "InProgress"
+              ? ("InProgress" as const)
               : ("Scheduled" as const),
           councilId: s.councilId ?? 0,
         })
@@ -376,7 +363,9 @@ export default function DataManagementPage() {
       const transcriptsData = (transcriptsRes.data || []).map((t: any) => ({
         id: t.id,
         sessionId: t.sessionId,
-        createdAt: t.createdAt || new Date().toISOString().split("T")[0],
+        createdAt:
+          formatDateOnly(t.createdAt) ||
+          formatDateOnly(new Date().toISOString()),
         status: t.isApproved ? ("Approved" as const) : ("Pending" as const),
         isApproved: t.isApproved || false,
         groupName: "Group",
@@ -397,7 +386,8 @@ export default function DataManagementPage() {
         id: r.id,
         sessionId: r.sessionId,
         generatedDate:
-          r.generatedDate || new Date().toISOString().split("T")[0],
+          formatDateOnly(r.generatedDate) ||
+          formatDateOnly(new Date().toISOString()),
         summary: r.summary || "No summary",
         filePath: r.filePath || "",
       }));
@@ -637,25 +627,61 @@ export default function DataManagementPage() {
     role: string;
   }) => {
     try {
-      await studentsApi.update(data.userId, {
+      console.log("Add student data:", data);
+
+      // Validate age (must be at least 18 years old)
+      if (data.dob) {
+        const today = new Date();
+        const birthDate = new Date(data.dob);
+        let age = today.getFullYear() - birthDate.getFullYear();
+        const monthDiff = today.getMonth() - birthDate.getMonth();
+
+        if (
+          monthDiff < 0 ||
+          (monthDiff === 0 && today.getDate() < birthDate.getDate())
+        ) {
+          age--;
+        }
+
+        if (age < 18) {
+          await swalConfig.error(
+            "Invalid Age",
+            "Student must be at least 18 years old"
+          );
+          return;
+        }
+      }
+
+      const createPayload = {
         studentCode: data.userId,
         fullName: data.userId,
+        userName: data.userId, // Add userName field since API response shows this is the main name field
         groupId: data.groupId,
-      });
+        dateOfBirth: data.dob,
+        gender: data.gender,
+      };
+      console.log("Create student payload:", createPayload);
+
+      await studentsApi.create(createPayload);
       const response = await studentsApi.getAll();
+      console.log("Students API response:", response.data);
       const studentsData = (response.data || []).map(
-        (s: StudentDto, index: number) => ({
-          id: index + 1,
-          userId:
-            s.studentCode ||
-            s.userName ||
-            s.fullName ||
-            `Student ${s.id?.slice(0, 8) || index + 1}`,
-          groupId: `Group ${s.groupId}`,
-          dob: s.dateOfBirth || "",
-          gender: s.gender || "",
-          role: index === 0 ? ("Leader" as const) : ("Member" as const),
-        })
+        (s: StudentDto, index: number) => {
+          console.log(`Student ${index + 1}:`, s);
+          return {
+            id: s.id, // Use real API ID
+            displayId: index + 1, // Display ID for table
+            userId:
+              s.fullName ||
+              s.userName ||
+              s.studentCode ||
+              `Student ${s.id?.slice(0, 8) || index + 1}`,
+            groupId: `Group ${s.groupId}`,
+            dob: s.dateOfBirth ? s.dateOfBirth.split("T")[0] : "", // Format to yyyy-MM-dd
+            gender: s.gender || "",
+            role: index === 0 ? ("Leader" as const) : ("Member" as const),
+          };
+        }
       );
       setStudents(studentsData);
       setIsAddStudentModalOpen(false);
@@ -826,7 +852,7 @@ export default function DataManagementPage() {
   };
 
   const handleEditStudent = async (
-    id: number,
+    id: string, // Changed from number to string
     data: {
       userId: string;
       groupId: string;
@@ -836,24 +862,31 @@ export default function DataManagementPage() {
     }
   ) => {
     try {
-      const student = students.find((s) => s.id === id);
+      console.log("Edit student data:", { id, data });
+      const student = students.find((s) => s.id === id); // Now both are strings
+      console.log("Found student:", student);
+
       if (student) {
-        await studentsApi.update(student.userId, {
+        const updatePayload = {
           studentCode: data.userId,
           fullName: data.userId,
           groupId: data.groupId,
-        });
+        };
+        console.log("Update student payload:", updatePayload);
+
+        await studentsApi.update(student.id, updatePayload);
         const response = await studentsApi.getAll();
         const studentsData = (response.data || []).map(
           (s: StudentDto, index: number) => ({
-            id: index + 1,
+            id: s.id, // Use real API ID
+            displayId: index + 1, // Display ID for table
             userId:
-              s.studentCode ||
-              s.userName ||
               s.fullName ||
+              s.userName ||
+              s.studentCode ||
               `Student ${s.id?.slice(0, 8) || index + 1}`,
             groupId: `Group ${s.groupId}`,
-            dob: s.dateOfBirth || "",
+            dob: s.dateOfBirth ? s.dateOfBirth.split("T")[0] : "", // Format to yyyy-MM-dd
             gender: s.gender || "",
             role: index === 0 ? ("Leader" as const) : ("Member" as const),
           })
@@ -883,20 +916,88 @@ export default function DataManagementPage() {
     }
   ) => {
     try {
-      await defenseSessionsApi.update(id, {
-        groupId: data.groupId,
-        defenseDate: data.date,
-        startTime: data.time.split(" - ")[0] || data.time,
-        endTime: data.time.split(" - ")[1] || data.time,
+      console.log("Edit session data:", data);
+
+      // Find the actual group ID from the display name
+      let actualGroupId = data.groupId;
+
+      // If groupId looks like a display name (contains letters/dashes), find the real ID
+      if (
+        data.groupId &&
+        (data.groupId.includes("-") || data.groupId.match(/[a-zA-Z]/))
+      ) {
+        const group = groups.find(
+          (g) =>
+            g.topicTitle_EN === data.groupId ||
+            g.topicTitle_VN === data.groupId ||
+            `Group ${g.id?.slice(0, 8)}` === data.groupId
+        );
+        if (group) {
+          actualGroupId = group.id;
+        } else {
+          console.warn("Could not find group with display name:", data.groupId);
+          // Try to find any group as fallback
+          const firstGroup = groups[0];
+          if (firstGroup) {
+            actualGroupId = firstGroup.id;
+            console.log("Using fallback group:", firstGroup.id);
+          }
+        }
+      }
+
+      console.log("Using actualGroupId:", actualGroupId);
+
+      // Handle time properly - data.time could be just start time or start-end time format
+      let startTime, endTime;
+      if (data.time.includes(" - ")) {
+        [startTime, endTime] = data.time.split(" - ");
+      } else {
+        startTime = data.time;
+        // Default end time to 1 hour after start time
+        const startDate = new Date(`2000-01-01 ${data.time}`);
+        startDate.setHours(startDate.getHours() + 1);
+        endTime = startDate.toTimeString().slice(0, 5);
+      }
+
+      // Ensure date is in ISO format (YYYY-MM-DD)
+      let formattedDate = data.date;
+      if (data.date && data.date.includes("/")) {
+        // Convert DD/MM/YYYY to YYYY-MM-DD
+        const parts = data.date.split("/");
+        if (parts.length === 3) {
+          formattedDate = `${parts[2]}-${parts[1].padStart(
+            2,
+            "0"
+          )}-${parts[0].padStart(2, "0")}`;
+        }
+      }
+
+      const updatePayload = {
+        groupId: actualGroupId,
+        defenseDate: formattedDate,
+        startTime: startTime,
+        endTime: endTime,
         location: data.location,
         status: data.status,
         councilId: data.councilId,
-      });
+      };
+
+      console.log("Update payload:", updatePayload);
+
+      await defenseSessionsApi.update(id, updatePayload);
       const response = await defenseSessionsApi.getAll();
-      const sessionsData = (response.data || []).map(
-        (s: DefenseSessionDto) => ({
+      const sessionsData = (response.data || []).map((s: DefenseSessionDto) => {
+        // Find group name from groups state
+        const group = groups.find((g) => g.id === s.groupId);
+        const groupDisplayName =
+          group?.topicTitle_EN ||
+          group?.topicTitle_VN ||
+          `Group ${s.groupId?.slice(0, 8)}` ||
+          "Unknown Group";
+
+        return {
           id: s.id,
-          groupId: `Group ${s.groupId?.slice(0, 8)}` || "Unknown Group",
+          groupId: groupDisplayName,
           location: s.location || "TBD",
           date: s.defenseDate
             ? new Date(s.defenseDate).toISOString().split("T")[0]
@@ -908,10 +1009,12 @@ export default function DataManagementPage() {
           status:
             s.status === "Completed"
               ? ("Completed" as const)
+              : s.status === "InProgress" || s.status === "Ongoing"
+              ? ("InProgress" as const)
               : ("Scheduled" as const),
           councilId: s.councilId ?? 0,
-        })
-      );
+        };
+      });
       setSessions(sessionsData);
       setIsEditSessionModalOpen(false);
       setEditingSession(null);
@@ -923,7 +1026,6 @@ export default function DataManagementPage() {
       );
     }
   };
-
   // Delete handlers - all using swalConfig consistently
   const handleDeleteCouncil = async (id: number) => {
     const result = await swalConfig.confirm(
@@ -970,25 +1072,39 @@ export default function DataManagementPage() {
   };
 
   const handleDeleteStudent = async (studentId: string) => {
+    console.log("Delete student called with ID:", studentId);
+    console.log("Student ID type:", typeof studentId);
+
+    // Find the actual student to get more info
+    const student = students.find(
+      (s) => s.id.toString() === studentId.toString() || s.userId === studentId
+    );
+    console.log("Found student for deletion:", student);
+
     const result = await swalConfig.confirm(
       "Delete Student?",
-      `Are you sure you want to delete this student? This action cannot be undone.`,
+      `Are you sure you want to delete student: ${
+        student?.userId || studentId
+      }? This action cannot be undone.`,
       "Yes, delete it!"
     );
 
     if (!result.isConfirmed) return;
 
     try {
-      await studentsApi.delete(studentId);
+      console.log("Calling API delete with studentId:", studentId);
+      const deleteResponse = await studentsApi.delete(studentId);
+      console.log("Delete student API response:", deleteResponse);
       // Manually refresh students list
       const response = await studentsApi.getAll();
       const studentsData = (response.data || []).map(
         (s: StudentDto, index: number) => ({
-          id: index + 1,
+          id: s.id, // Use real API ID
+          displayId: index + 1, // Display ID for table
           userId:
-            s.studentCode ||
-            s.userName ||
             s.fullName ||
+            s.userName ||
+            s.studentCode ||
             `Student ${s.id?.slice(0, 8) || index + 1}`,
           groupId: "No Group Assigned", // Will be updated with proper mapping
           dob: s.dateOfBirth || "",
@@ -1392,10 +1508,11 @@ export default function DataManagementPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-gray-600 text-xs uppercase">
-                <th className="px-3 py-2">ID</th>
-                <th className="px-3 py-2">Topic (EN)</th>
-                <th className="px-3 py-2">Topic (VN)</th>
+                <th className="px-3 py-2">Project Code</th>
+                <th className="px-3 py-2">Title (EN)</th>
+                <th className="px-3 py-2">Title (VN)</th>
                 <th className="px-3 py-2">Semester</th>
+                <th className="px-3 py-2">Major</th>
                 <th className="px-3 py-2">Status</th>
                 <th className="px-3 py-2 text-center">Actions</th>
               </tr>
@@ -1403,19 +1520,24 @@ export default function DataManagementPage() {
             <tbody>
               {paginatedGroups.map((g) => (
                 <tr key={g.id} className="border-t hover:bg-gray-50">
-                  <td className="px-3 py-2">{g.id}</td>
-                  <td className="px-3 py-2">{g.topicEN}</td>
-                  <td className="px-3 py-2">{g.topicVN}</td>
-                  <td className="px-3 py-2">{g.semester}</td>
+                  <td className="px-3 py-2">{g.projectCode || "N/A"}</td>
+                  <td className="px-3 py-2 max-w-48 truncate">
+                    {g.topicTitle_EN || "N/A"}
+                  </td>
+                  <td className="px-3 py-2 max-w-48 truncate">
+                    {g.topicTitle_VN || "N/A"}
+                  </td>
+                  <td className="px-3 py-2">{g.semesterName || "N/A"}</td>
+                  <td className="px-3 py-2">{g.majorName || "N/A"}</td>
                   <td className="px-3 py-2">
                     <span
                       className={`px-2 py-1 rounded-full text-xs ${
                         g.status === "Active"
-                          ? "bg-blue-50 text-blue-700"
-                          : "bg-gray-100 text-gray-600"
+                          ? "bg-green-100 text-green-700"
+                          : "bg-gray-100 text-gray-700"
                       }`}
                     >
-                      {g.status}
+                      {g.status || "Unknown"}
                     </span>
                   </td>
                   <td className="px-3 py-2 text-center">
@@ -1509,7 +1631,7 @@ export default function DataManagementPage() {
             <tbody>
               {paginatedStudents.map((s) => (
                 <tr key={s.id} className="border-t hover:bg-gray-50">
-                  <td className="px-3 py-2">{s.id}</td>
+                  <td className="px-3 py-2">{s.displayId}</td>
                   <td className="px-3 py-2">{s.userId}</td>
                   <td className="px-3 py-2">{s.dob}</td>
                   <td className="px-3 py-2">{s.gender}</td>
@@ -1532,7 +1654,7 @@ export default function DataManagementPage() {
                       </button>
                       <button
                         className="p-2 rounded-md hover:bg-gray-100"
-                        onClick={() => handleDeleteStudent(s.userId)}
+                        onClick={() => handleDeleteStudent(s.id)} // Use real ID, not String conversion
                         title="Delete"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -1592,7 +1714,15 @@ export default function DataManagementPage() {
                   <td className="px-3 py-2">{s.date}</td>
                   <td className="px-3 py-2">{s.time}</td>
                   <td className="px-3 py-2">
-                    <span className="px-2 py-1 rounded-full text-xs bg-yellow-50 text-yellow-700">
+                    <span
+                      className={`px-2 py-1 rounded-full text-xs ${
+                        s.status === "Completed"
+                          ? "bg-green-50 text-green-700"
+                          : s.status === "InProgress"
+                          ? "bg-blue-50 text-blue-700"
+                          : "bg-yellow-50 text-yellow-700"
+                      }`}
+                    >
                       {s.status}
                     </span>
                   </td>
@@ -1837,12 +1967,27 @@ export default function DataManagementPage() {
         isOpen={isAddStudentModalOpen}
         onClose={() => setIsAddStudentModalOpen(false)}
         onSubmit={handleAddStudent}
+        groupOptions={groups.map((g) => ({
+          id: g.id,
+          name:
+            g.topicTitle_EN ||
+            g.topicTitle_VN ||
+            g.groupName ||
+            `Group ${g.id}`,
+        }))}
       />
       <AddSessionModal
         isOpen={isAddSessionModalOpen}
         onClose={() => setIsAddSessionModalOpen(false)}
         onSubmit={handleAddSession}
-        groupOptions={groups.map((g) => ({ id: g.id, name: g.topicEN }))}
+        groupOptions={groups.map((g) => ({
+          id: g.id,
+          name:
+            g.topicTitle_EN ||
+            g.topicTitle_VN ||
+            g.groupName ||
+            `Group ${g.id}`,
+        }))}
         councilOptions={councils.map((c) => ({ id: c.id, name: c.name }))}
       />
 
@@ -1863,7 +2008,19 @@ export default function DataManagementPage() {
           setEditingGroup(null);
         }}
         onSubmit={handleEditGroup}
-        groupData={editingGroup}
+        groupData={
+          editingGroup
+            ? {
+                id: editingGroup.id,
+                topicEN: editingGroup.topicTitle_EN || "",
+                topicVN: editingGroup.topicTitle_VN || "",
+                semester: editingGroup.semesterName || "",
+                semesterId: editingGroup.semesterId || 1,
+                majorId: editingGroup.majorId || 1,
+                status: editingGroup.status || "Active",
+              }
+            : null
+        }
         majorOptions={majors}
         semesterOptions={semesters}
       />
@@ -1874,20 +2031,14 @@ export default function DataManagementPage() {
           setEditingStudent(null);
         }}
         onSubmit={handleEditStudent}
-        studentData={
-          editingStudent
-            ? {
-                ...editingStudent,
-                groupId:
-                  typeof editingStudent.groupId === "string"
-                    ? 0
-                    : editingStudent.groupId,
-              }
-            : null
-        }
+        studentData={editingStudent}
         groupOptions={groups.map((group) => ({
           id: group.id,
-          name: group.topicEN || group.topicVN || `Group ${group.id}`,
+          name:
+            group.topicTitle_EN ||
+            group.topicTitle_VN ||
+            group.groupName ||
+            `Group ${group.id}`,
         }))}
       />
       <EditSessionModal

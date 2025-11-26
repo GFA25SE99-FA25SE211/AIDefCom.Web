@@ -37,9 +37,10 @@ const CalendarIcon = () => (
 );
 
 interface Student {
-  id: number;
+  id: string; // Changed from number to string to match API
+  displayId?: number; // Optional display ID
   userId: string;
-  groupId: number;
+  groupId: string | number; // Allow both string and number
   dob: string;
   gender: string;
   role: "Leader" | "Member";
@@ -49,7 +50,7 @@ interface EditStudentModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (
-    id: number,
+    id: string, // Changed from number to string
     data: {
       userId: string;
       groupId: string;
@@ -131,13 +132,26 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({
         onSubmit={handleSubmit}
         className="space-y-5"
       >
-        {/* User ID */}
+        {/* Student ID */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Student ID
+          </label>
+          <input
+            type="text"
+            value={studentData.id}
+            disabled
+            className="w-full border rounded-md px-3 py-2 text-sm bg-gray-100 text-gray-500 cursor-not-allowed"
+          />
+        </div>
+
+        {/* Student Name */}
         <div>
           <label
             htmlFor="editUserId"
             className="block text-sm font-medium text-gray-700 mb-1"
           >
-            User ID
+            Student Name
           </label>
           <input
             type="text"
@@ -145,6 +159,7 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({
             value={userId}
             onChange={(e) => setUserId(e.target.value)}
             required
+            placeholder="Enter student's full name"
             className="w-full border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 outline-none"
           />
         </div>

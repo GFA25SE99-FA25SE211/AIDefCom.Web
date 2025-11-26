@@ -46,7 +46,10 @@ const EditSemesterModal: React.FC<EditSemesterModalProps> = ({
       setYear(String(semesterData.year));
       setStartDate(formatDateInputValue(semesterData.startDate));
       setEndDate(formatDateInputValue(semesterData.endDate));
-      setMajorID(semesterData.majorID);
+      setMajorID(
+        semesterData.majorID ||
+          (majorOptions.length > 0 ? majorOptions[0].id : "")
+      );
     } else {
       setName("");
       setYear(String(new Date().getFullYear()));
@@ -54,7 +57,7 @@ const EditSemesterModal: React.FC<EditSemesterModalProps> = ({
       setEndDate("");
       setMajorID("");
     }
-  }, [semesterData]);
+  }, [semesterData, majorOptions]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

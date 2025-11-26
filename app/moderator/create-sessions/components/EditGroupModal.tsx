@@ -116,7 +116,19 @@ const EditGroupModal: React.FC<EditGroupModalProps> = ({
       <form id="edit-group-form" onSubmit={handleSubmit} className="space-y-5">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Topic Title (English)
+            Group ID
+          </label>
+          <input
+            type="text"
+            value={groupData.id}
+            disabled
+            className="w-full border rounded-md px-3 py-2 text-sm bg-gray-100 text-gray-500 cursor-not-allowed"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Topic Title (English) <span className="text-red-500">*</span>
           </label>
           <input
             type="text"

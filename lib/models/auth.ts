@@ -17,7 +17,8 @@ export interface UserDto {
   email: string;
   fullName: string;
   phoneNumber: string;
-  roles?: string[];
+  role?: string; // Single role string to match API response
+  roles?: string[]; // Keep this for backward compatibility if needed
 }
 
 export interface UpdateAccountDto {

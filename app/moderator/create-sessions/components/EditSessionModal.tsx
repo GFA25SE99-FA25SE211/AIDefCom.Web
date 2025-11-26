@@ -58,7 +58,7 @@ interface Session {
   location: string;
   date: string;
   time: string;
-  status: "Scheduled" | "Completed";
+  status: "Scheduled" | "InProgress" | "Completed";
   councilId: number;
 }
 
@@ -157,6 +157,18 @@ const EditSessionModal: React.FC<EditSessionModalProps> = ({
       >
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
+            Session ID
+          </label>
+          <input
+            type="text"
+            value={sessionData.id}
+            disabled
+            className="w-full border rounded-md px-3 py-2 text-sm bg-gray-100 text-gray-500 cursor-not-allowed"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
             Group ID
           </label>
           <input
@@ -228,6 +240,7 @@ const EditSessionModal: React.FC<EditSessionModalProps> = ({
             className="w-full border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 outline-none"
           >
             <option value="Scheduled">Scheduled</option>
+            <option value="InProgress">In Progress</option>
             <option value="Completed">Completed</option>
           </select>
         </div>

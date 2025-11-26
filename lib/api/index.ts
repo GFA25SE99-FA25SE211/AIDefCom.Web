@@ -14,6 +14,7 @@ export * from './committee-assignments';
 export * from './transcripts';
 export * from './reports';
 export * from './member-notes';
+export * from './scores';
 
 // Re-export models for convenience
 export * from '@/lib/models';
