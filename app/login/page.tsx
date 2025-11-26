@@ -41,6 +41,9 @@ export default function LoginPage() {
       }
 
       // FE chỉ dùng role trả về từ API route
+      if (data.user) {
+        localStorage.setItem("user", JSON.stringify(data.user));
+      }
       redirectByRole(data.role, router);
     } catch {
       setError("Invalid Email or Password");

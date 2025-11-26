@@ -6,8 +6,8 @@ import type {
 } from '@/lib/models';
 
 export const defenseSessionsApi = {
-  getAll: async () => {
-    return apiClient.get<DefenseSessionDto[]>('/api/defense-sessions');
+  getAll: async (includeDeleted: boolean = false) => {
+    return apiClient.get<DefenseSessionDto[]>(`/api/defense-sessions?includeDeleted=${includeDeleted}`);
   },
 
   getById: async (id: number) => {

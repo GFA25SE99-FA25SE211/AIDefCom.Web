@@ -1,11 +1,16 @@
 // Score Models
 export interface ScoreDto {
   id: number;
-  studentId: string;
+  value: number;
   rubricId: number;
-  score: number;
-  defenseSessionId: number;
-  lecturerId?: string;
+  rubricName?: string;
+  evaluatorId: string;
+  evaluatorName?: string;
+  studentId: string;
+  studentName?: string;
+  sessionId: number;
+  comment?: string;
+  createdAt?: string;
 }
 
 export interface ScoreCreateDto {
@@ -18,4 +23,3 @@ export interface ScoreCreateDto {
 export interface ScoreUpdateDto {
   score: number;
 }
-
