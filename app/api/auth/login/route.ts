@@ -6,26 +6,33 @@ export async function POST(req: Request) {
     const { email, password } = await req.json();
 
     // ============================
-// HARDCODED CHAIR ACCOUNT
-// ============================
-if (email === "chair@fpt.edu.vn" && password === "123456") {
-  const role = "chair";
+    // HARDCODED CHAIR ACCOUNT
+    // ============================
+    if (email === "chair@fpt.edu.vn" && password === "123456") {
+      const role = "chair";
+      const user = {
+        id: "8EB5D9FB-4389-4587-A7AE-23AFBAF461CE", // Real ID from DB
+        email: "lecturer1@university.edu", // Real email from DB
+        fullName: "PGS.TS Le Van Chien",
+        roles: ["Chair"],
+        role: "Chair"
+      };
 
-  const res = NextResponse.json({ role });
+      const res = NextResponse.json({ role, user });
 
-  // Cookie giống backend
-  res.cookies.set("token", "dummy-token-chair", {
-    httpOnly: true,
-    path: "/",
-  });
+      // Cookie giống backend
+      res.cookies.set("token", "dummy-token-chair", {
+        httpOnly: true,
+        path: "/",
+      });
 
-  res.cookies.set("role", role, {
-    httpOnly: true,
-    path: "/",
-  });
+      res.cookies.set("role", role, {
+        httpOnly: true,
+        path: "/",
+      });
 
-  return res;
-}
+      return res;
+    }
 
 
     const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "https://aidefcomapi.azurewebsites.net";
@@ -72,8 +79,17 @@ if (email === "chair@fpt.edu.vn" && password === "123456") {
       decoded[
         "http://schemas.microsoft.com/ws/2008/06/identity/claims/role"
       ]?.toLowerCase() || "member";
+      
+    // Extract user info from token or backend response
+    const user = data?.data?.user || {
+      id: decoded.sub || decoded.id || "unknown-id",
+      email: decoded.email || email,
+      fullName: decoded.name || decoded.unique_name || email,
+      roles: [role], 
+      role: role
+    };
 
-    const res = NextResponse.json({ role });
+    const res = NextResponse.json({ role, user });
 
     res.cookies.set("token", token, { httpOnly: true, path: "/" });
     res.cookies.set("role", role, { httpOnly: true, path: "/" });

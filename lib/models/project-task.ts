@@ -5,13 +5,17 @@ export interface ProjectTaskDto {
   description?: string;
   assignedById: string;
   assignedToId: string;
+  rubricId?: number;
   status: string;
 }
 
 export interface ProjectTaskCreateDto {
   title: string;
   description?: string;
+  assignedById: string;
   assignedToId: string;
+  rubricId?: number;
+  status: string;
 }
 
 export interface ProjectTaskUpdateDto {

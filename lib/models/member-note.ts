@@ -1,10 +1,11 @@
 // Member Note Models
 export interface MemberNoteDto {
   id: number;
-  userId: string;
+  committeeAssignmentId: string;
+  userName?: string | null;
   groupId: string;
-  content: string;
-  createdAt?: string;
+  noteContent: string;
+  createdAt: string;
 }
 
 export interface MemberNoteCreateDto {
@@ -16,4 +17,3 @@ export interface MemberNoteCreateDto {
 export interface MemberNoteUpdateDto {
   content: string;
 }
-

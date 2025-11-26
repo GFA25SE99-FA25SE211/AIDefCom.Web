@@ -1,6 +1,6 @@
 // Common Models
 export interface ApiResponse<T> {
-  code: number;
+  code: number | string;
   message: string;
   data: T;
 }
