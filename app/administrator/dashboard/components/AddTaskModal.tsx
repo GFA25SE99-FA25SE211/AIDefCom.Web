@@ -8,7 +8,7 @@ interface AddTaskData {
   title: string;
   description: string;
   assignedTo: string;
-  status: "Pending" | "Completed" | "InProgress";
+  status: "Pending" | "Completed" | "Inprogress";
 }
 interface AddTaskModalProps {
   isOpen: boolean;
@@ -26,7 +26,9 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [assignedTo, setAssignedTo] = useState("");
-  const [status, setStatus] = useState<"Pending" | "Completed" | "InProgress" | "">("");
+  const [status, setStatus] = useState<
+    "Pending" | "Completed" | "Inprogress" | ""
+  >("");
 
   const assignees =
     userOptions.length > 0
@@ -35,7 +37,7 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({
           { id: "chair", name: "Chair (No users found)" },
           { id: "secretary", name: "Secretary (No users found)" },
         ];
-  const statuses = ["Pending", "InProgress", "Completed"];
+  const statuses = ["Pending", "Inprogress", "Completed"];
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,7 +49,7 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({
       title,
       description,
       assignedTo,
-      status: status as "Pending" | "Completed" | "InProgress",
+      status: status as "Pending" | "Completed" | "Inprogress",
     });
     onClose();
   };
