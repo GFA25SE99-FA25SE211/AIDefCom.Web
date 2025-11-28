@@ -57,7 +57,7 @@ export async function POST(req: Request) {
     let roleClaim =
       decoded["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"];
 
-    // Nếu role là array (nhiều role), lấy role đầu tiên
+    // Nếu role là array nhiều role, lấy role đầu tiên
     if (Array.isArray(roleClaim)) {
       roleClaim = roleClaim[0];
     }

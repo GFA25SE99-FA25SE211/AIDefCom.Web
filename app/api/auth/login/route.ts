@@ -85,9 +85,8 @@ export async function POST(req: Request) {
       role = rawRole[0].toLowerCase();
     }
 
-    // ============================
     // USER EXTRACTION
-    // ============================
+
     const userId =
       decoded.sub ||
       decoded.id ||
