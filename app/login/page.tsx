@@ -23,8 +23,6 @@ export default function LoginPage() {
     setLoading(true);
     setError("");
 
-
-
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
@@ -71,6 +69,10 @@ export default function LoginPage() {
       if (!res.ok) {
         setError(data.message || "Google login failed");
         return;
+      }
+
+      if (data.user) {
+        localStorage.setItem("user", JSON.stringify(data.user));
       }
 
       redirectByRole(data.role, router);
@@ -161,7 +163,7 @@ export default function LoginPage() {
               </button>
             </div>
           </div>
-          
+
           <div className="flex justify-end">
             <a
               href="/forgot-password"
