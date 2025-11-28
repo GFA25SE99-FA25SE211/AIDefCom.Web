@@ -1580,7 +1580,7 @@ export default function DataManagementPage() {
               {paginatedSessions.map((s) => (
                 <tr key={s.id} className="border-t hover:bg-gray-50">
                   <td className="px-3 py-2">{s.id}</td>
-                  <td className="px-3 py-2">{s.groupName}</td>
+                  <td className="px-3 py-2">{s.groupId}</td>
                   <td className="px-3 py-2">{s.location}</td>
                   <td className="px-3 py-2">{s.date}</td>
                   <td className="px-3 py-2">{s.time}</td>

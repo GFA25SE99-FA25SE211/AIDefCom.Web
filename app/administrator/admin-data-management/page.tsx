@@ -474,7 +474,12 @@ export default function AdminDataManagementPage() {
   };
 
   /* ============ CRUD Handlers ============ */
-  const handleAddTask = async (data: Omit<Task, "id" | "assignedBy">) => {
+  const handleAddTask = async (data: {
+    title: string;
+    description: string;
+    assignedTo: string;
+    status: "Pending" | "Completed" | "InProgress";
+  }) => {
     try {
       // Find CommitteeAssignment for assignedTo (user ID -> lecturer ID -> committee assignment)
       const assignedToUser = users.find(u => u.id === data.assignedTo);
@@ -524,11 +529,8 @@ export default function AdminDataManagementPage() {
         return;
       }
 
-      // Map frontend status to backend format
-      let backendStatus = data.status;
-      if (data.status === "Inprogress") {
-        backendStatus = "InProgress";
-      }
+      // Map frontend status to backend format (modal uses "InProgress", backend expects "InProgress")
+      const backendStatus: string = data.status;
 
       console.log("Creating task with:", {
         title: data.title,
@@ -542,8 +544,8 @@ export default function AdminDataManagementPage() {
       await projectTasksApi.create({
         title: data.title,
         description: data.description,
-        assignedById: assignedByAssignment.id,
-        assignedToId: assignedToAssignment.id,
+        assignedById: String(assignedByAssignment.id),
+        assignedToId: String(assignedToAssignment.id),
         rubricId: firstRubric,
         status: backendStatus,
       });
