@@ -424,13 +424,31 @@ export default function AdminDataManagementPage() {
   }, [filteredAssignments, assignmentPage]);
 
   // Total pages calculations
-  const taskTotalPages = Math.max(1, Math.ceil(filteredTasks.length / PAGE_SIZE));
-  const semesterTotalPages = Math.max(1, Math.ceil(filteredSemesters.length / PAGE_SIZE));
-  const majorTotalPages = Math.max(1, Math.ceil(filteredMajors.length / PAGE_SIZE));
-  const groupTotalPages = Math.max(1, Math.ceil(filteredGroups.length / PAGE_SIZE));
-  const rubricTotalPages = Math.max(1, Math.ceil(filteredRubrics.length / PAGE_SIZE));
+  const taskTotalPages = Math.max(
+    1,
+    Math.ceil(filteredTasks.length / PAGE_SIZE)
+  );
+  const semesterTotalPages = Math.max(
+    1,
+    Math.ceil(filteredSemesters.length / PAGE_SIZE)
+  );
+  const majorTotalPages = Math.max(
+    1,
+    Math.ceil(filteredMajors.length / PAGE_SIZE)
+  );
+  const groupTotalPages = Math.max(
+    1,
+    Math.ceil(filteredGroups.length / PAGE_SIZE)
+  );
+  const rubricTotalPages = Math.max(
+    1,
+    Math.ceil(filteredRubrics.length / PAGE_SIZE)
+  );
   const noteTotalPages = Math.max(1, Math.ceil(notes.length / PAGE_SIZE));
-  const assignmentTotalPages = Math.max(1, Math.ceil(filteredAssignments.length / PAGE_SIZE));
+  const assignmentTotalPages = Math.max(
+    1,
+    Math.ceil(filteredAssignments.length / PAGE_SIZE)
+  );
 
   // Pagination component helper
   const renderPagination = (
@@ -477,7 +495,7 @@ export default function AdminDataManagementPage() {
   const handleAddTask = async (data: Omit<Task, "id" | "assignedBy">) => {
     try {
       // Find CommitteeAssignment for assignedTo (user ID -> lecturer ID -> committee assignment)
-      const assignedToUser = users.find(u => u.id === data.assignedTo);
+      const assignedToUser = users.find((u) => u.id === data.assignedTo);
       if (!assignedToUser) {
         await swalConfig.error(
           "Error",
@@ -488,9 +506,9 @@ export default function AdminDataManagementPage() {
 
       // Find CommitteeAssignment by LecturerId (which should match user ID if user is a lecturer)
       const assignedToAssignment = assignments.find(
-        a => a.lecturerId === assignedToUser.id
+        (a) => a.lecturerId === assignedToUser.id
       );
-      
+
       if (!assignedToAssignment) {
         await swalConfig.error(
           "Error",
@@ -500,9 +518,11 @@ export default function AdminDataManagementPage() {
       }
 
       // Get assignedBy - find admin user's committee assignment or use first assignment
-      const adminUser = users.find(u => u.role === "Administrator") || users[0];
-      const assignedByAssignment = adminUser 
-        ? assignments.find(a => a.lecturerId === adminUser.id) || assignments[0]
+      const adminUser =
+        users.find((u) => u.role === "Administrator") || users[0];
+      const assignedByAssignment = adminUser
+        ? assignments.find((a) => a.lecturerId === adminUser.id) ||
+          assignments[0]
         : assignments[0];
 
       if (!assignedByAssignment) {
@@ -525,16 +545,13 @@ export default function AdminDataManagementPage() {
       }
 
       // Map frontend status to backend format
-      let backendStatus = data.status;
-      if (data.status === "Inprogress") {
-        backendStatus = "InProgress";
-      }
+      const backendStatus = data.status;
 
       console.log("Creating task with:", {
         title: data.title,
         description: data.description,
-        assignedById: assignedByAssignment.id,
-        assignedToId: assignedToAssignment.id,
+        assignedById: assignedByAssignment.lecturerId,
+        assignedToId: assignedToAssignment.lecturerId,
         rubricId: firstRubric,
         status: backendStatus,
       });
@@ -542,8 +559,8 @@ export default function AdminDataManagementPage() {
       await projectTasksApi.create({
         title: data.title,
         description: data.description,
-        assignedById: assignedByAssignment.id,
-        assignedToId: assignedToAssignment.id,
+        assignedById: assignedByAssignment.lecturerId,
+        assignedToId: assignedToAssignment.lecturerId,
         rubricId: firstRubric,
         status: backendStatus,
       });
@@ -594,10 +611,7 @@ export default function AdminDataManagementPage() {
       const originalTask = tasks.find((t) => t.id === Number(id));
 
       // Map frontend status to backend expected format
-      let backendStatus: string = data.status;
-      if (data.status === "Inprogress") {
-        backendStatus = "InProgress"; // API might expect this format
-      }
+      const backendStatus = data.status;
 
       const updatePayload = {
         title: data.title,
@@ -1284,8 +1298,12 @@ export default function AdminDataManagementPage() {
             paginatedGroups.map((g) => (
               <tr key={g.id}>
                 <td>{g.projectCode || "N/A"}</td>
-                <td className="max-w-48 truncate">{g.topicTitle_EN || "N/A"}</td>
-                <td className="max-w-48 truncate">{g.topicTitle_VN || "N/A"}</td>
+                <td className="max-w-48 truncate">
+                  {g.topicTitle_EN || "N/A"}
+                </td>
+                <td className="max-w-48 truncate">
+                  {g.topicTitle_VN || "N/A"}
+                </td>
                 <td>{g.semesterName || "N/A"}</td>
                 <td>{g.majorName || "N/A"}</td>
                 <td>
@@ -1394,12 +1412,18 @@ export default function AdminDataManagementPage() {
                     (a as any).lecturerName ||
                     a.lecturerId}
                 </td>
-                <td>{councilMap.get(a.councilId) || `Council ${a.councilId}`}</td>
+                <td>
+                  {councilMap.get(a.councilId) || `Council ${a.councilId}`}
+                </td>
                 <td>{(a as any).roleName || a.role}</td>
               </tr>
             ))
           )}
-          {renderPagination(assignmentPage, assignmentTotalPages, setAssignmentPage)}
+          {renderPagination(
+            assignmentPage,
+            assignmentTotalPages,
+            setAssignmentPage
+          )}
         </>
       )}
 

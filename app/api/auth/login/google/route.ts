@@ -39,6 +39,22 @@ export async function POST(req: Request) {
 
     if (!backendRes.ok) {
       console.error("❌ Backend error:", data);
+
+      // Check if user is not registered (404 or specific message)
+      if (
+        backendRes.status === 404 ||
+        (data?.message && data.message.toLowerCase().includes("not found")) ||
+        (data?.message && data.message.toLowerCase().includes("registered"))
+      ) {
+        return NextResponse.json(
+          {
+            message:
+              "Email is not registered in the system. Please contact administrator to create an account",
+          },
+          { status: 404 }
+        );
+      }
+
       return NextResponse.json(data, { status: backendRes.status });
     }
 
