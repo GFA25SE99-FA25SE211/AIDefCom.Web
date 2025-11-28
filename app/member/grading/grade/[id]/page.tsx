@@ -20,6 +20,7 @@ interface StudentScore {
   name: string;
   role: string;
   scores: number[];
+  criterionComments: string[];
   note: string;
   existingScoreIds: number[]; // Track existing score IDs for updates
 }
@@ -43,6 +44,7 @@ const allGroupsData: AllGroupsData = {
         name: "Pham Van D",
         role: "Team Leader",
         scores: [0, 0, 0, 0, 0],
+        criterionComments: ["", "", "", "", ""],
         note: "",
         existingScoreIds: [0, 0, 0, 0, 0],
       },
@@ -51,6 +53,7 @@ const allGroupsData: AllGroupsData = {
         name: "Hoang Thi E",
         role: "Developer",
         scores: [0, 0, 0, 0, 0],
+        criterionComments: ["", "", "", "", ""],
         note: "",
         existingScoreIds: [0, 0, 0, 0, 0],
       },
@@ -65,6 +68,7 @@ const allGroupsData: AllGroupsData = {
         name: "Do Van F",
         role: "Developer",
         scores: [0, 0, 0, 0, 0],
+        criterionComments: ["", "", "", "", ""],
         note: "",
         existingScoreIds: [0, 0, 0, 0, 0],
       },
@@ -73,6 +77,7 @@ const allGroupsData: AllGroupsData = {
         name: "Vu Thi G",
         role: "Developer",
         scores: [0, 0, 0, 0, 0],
+        criterionComments: ["", "", "", "", ""],
         note: "",
         existingScoreIds: [0, 0, 0, 0, 0],
       },
@@ -87,6 +92,7 @@ const allGroupsData: AllGroupsData = {
         name: "Mai Van I",
         role: "Developer",
         scores: [0, 0, 0, 0, 0],
+        criterionComments: ["", "", "", "", ""],
         note: "",
         existingScoreIds: [0, 0, 0, 0, 0],
       },
@@ -95,6 +101,7 @@ const allGroupsData: AllGroupsData = {
         name: "Dinh Thi K",
         role: "Developer",
         scores: [0, 0, 0, 0, 0],
+        criterionComments: ["", "", "", "", ""],
         note: "",
         existingScoreIds: [0, 0, 0, 0, 0],
       },
@@ -166,6 +173,14 @@ export default function GradeGroupPage() {
         const groupSession = sessions.find((s: any) => s.groupId === groupId);
         if (groupSession) {
           setSessionId(groupSession.id);
+          if (
+            groupSession.status &&
+            groupSession.status.toLowerCase() === "completed"
+          ) {
+            setLoading(false);
+            router.replace(`/member/grading/view/${groupId}`);
+            return;
+          }
         }
 
         // Get current user ID from auth token
@@ -211,10 +226,10 @@ export default function GradeGroupPage() {
                 : [];
 
               // Create scores array based on rubrics
-              const scoresArray = new Array(rubricsRes.data?.length || 5).fill(
-                0
-              );
-              const scoreIds = new Array(rubricsRes.data?.length || 5).fill(0);
+              const rubricCount = rubricsRes.data?.length || 5;
+              const scoresArray = new Array(rubricCount).fill(0);
+              const scoreIds = new Array(rubricCount).fill(0);
+              const commentsArray = new Array(rubricCount).fill("");
 
               // Map existing scores to rubrics
               sessionScores.forEach((score: ScoreReadDto) => {
@@ -224,6 +239,7 @@ export default function GradeGroupPage() {
                 if (rubricIndex >= 0) {
                   scoresArray[rubricIndex] = score.value;
                   scoreIds[rubricIndex] = score.id;
+                  commentsArray[rubricIndex] = score.comment || "";
                 }
               });
 
@@ -232,6 +248,7 @@ export default function GradeGroupPage() {
                 name: s.fullName || s.userName || "Unknown",
                 role: index === 0 ? "Team Leader" : "Developer",
                 scores: scoresArray,
+                criterionComments: commentsArray,
                 note: "",
                 existingScoreIds: scoreIds,
               };
@@ -262,7 +279,7 @@ export default function GradeGroupPage() {
     };
 
     fetchGroupData();
-  }, [groupId]);
+  }, [groupId, router]);
 
   const calculateAverage = (scores: number[]) =>
     (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(2);
@@ -300,6 +317,16 @@ export default function GradeGroupPage() {
     setStudentScores(newScores);
   };
 
+  const handleCriterionCommentChange = (
+    studentIndex: number,
+    criterionIndex: number,
+    value: string
+  ) => {
+    const newScores = [...studentScores];
+    newScores[studentIndex].criterionComments[criterionIndex] = value;
+    setStudentScores(newScores);
+  };
+
   const handleNoteChange = (studentIndex: number, value: string) => {
     const newScores = [...studentScores];
     newScores[studentIndex].note = value;
@@ -328,6 +355,7 @@ export default function GradeGroupPage() {
           const score = student.scores[i];
           const existingScoreId = student.existingScoreIds[i];
           const rubric = rubrics[i];
+          const criterionComment = student.criterionComments[i]?.trim();
 
           if (!rubric) continue;
 
@@ -335,7 +363,7 @@ export default function GradeGroupPage() {
             // Update existing score
             await scoresApi.update(existingScoreId, {
               value: score,
-              comment: student.note || undefined,
+              comment: criterionComment || undefined,
             });
           } else if (score > 0) {
             // Create new score
@@ -345,7 +373,7 @@ export default function GradeGroupPage() {
               evaluatorId: currentUserId,
               studentId: student.id,
               sessionId: sessionId,
-              comment: student.note || undefined,
+              comment: criterionComment || undefined,
             };
             await scoresApi.create(newScore);
           }
@@ -505,71 +533,90 @@ export default function GradeGroupPage() {
                               key={criterionIndex}
                               className="py-3 px-3 align-top"
                             >
-                              <input
-                                type="number"
-                                step="0.1"
-                                min="0"
-                                max="10"
-                                placeholder="0"
-                                className="w-20 rounded-md border px-2 py-1 text-sm text-center focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors"
-                                value={score === 0 ? "" : score.toString()}
-                                onChange={(e) =>
-                                  handleScoreChange(
-                                    studentIndex,
-                                    criterionIndex,
-                                    e.target.value
-                                  )
-                                }
-                                onBlur={(e) => {
-                                  // Apply final validation on blur
-                                  const value = parseFloat(e.target.value) || 0;
-                                  if (value > 10 || value < 0) {
-                                    const finalValue = Math.max(
-                                      0,
-                                      Math.min(10, value)
-                                    );
+                              <div className="flex flex-col gap-2">
+                                <input
+                                  type="number"
+                                  step="0.1"
+                                  min="0"
+                                  max="10"
+                                  placeholder="0"
+                                  className="w-20 rounded-md border px-2 py-1 text-sm text-center focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors"
+                                  value={score === 0 ? "" : score.toString()}
+                                  onChange={(e) =>
                                     handleScoreChange(
                                       studentIndex,
                                       criterionIndex,
-                                      finalValue.toString()
-                                    );
+                                      e.target.value
+                                    )
                                   }
-                                }}
-                                onFocus={(e) => {
-                                  // Select all text on focus for easy replacement
-                                  e.target.select();
-                                }}
-                                onKeyDown={(e) => {
-                                  // Allow quick score entry with number keys
-                                  if (e.key >= "0" && e.key <= "9") {
-                                    // If current value is 0, replace it
-                                    if (score === 0) {
-                                      e.preventDefault();
+                                  onBlur={(e) => {
+                                    // Apply final validation on blur
+                                    const value =
+                                      parseFloat(e.target.value) || 0;
+                                    if (value > 10 || value < 0) {
+                                      const finalValue = Math.max(
+                                        0,
+                                        Math.min(10, value)
+                                      );
                                       handleScoreChange(
                                         studentIndex,
                                         criterionIndex,
-                                        e.key
+                                        finalValue.toString()
                                       );
                                     }
-                                  }
-                                  // Allow Enter to move to next input
-                                  if (e.key === "Enter") {
-                                    const inputs = document.querySelectorAll(
-                                      'input[type="number"]'
-                                    );
-                                    const currentIndex = Array.from(
-                                      inputs
-                                    ).indexOf(e.target as HTMLInputElement);
-                                    const nextInput = inputs[
-                                      currentIndex + 1
-                                    ] as HTMLInputElement;
-                                    if (nextInput) {
-                                      nextInput.focus();
-                                      nextInput.select();
+                                  }}
+                                  onFocus={(e) => {
+                                    // Select all text on focus for easy replacement
+                                    e.target.select();
+                                  }}
+                                  onKeyDown={(e) => {
+                                    // Allow quick score entry with number keys
+                                    if (e.key >= "0" && e.key <= "9") {
+                                      // If current value is 0, replace it
+                                      if (score === 0) {
+                                        e.preventDefault();
+                                        handleScoreChange(
+                                          studentIndex,
+                                          criterionIndex,
+                                          e.key
+                                        );
+                                      }
                                     }
+                                    // Allow Enter to move to next input
+                                    if (e.key === "Enter") {
+                                      const inputs = document.querySelectorAll(
+                                        'input[type="number"]'
+                                      );
+                                      const currentIndex = Array.from(
+                                        inputs
+                                      ).indexOf(e.target as HTMLInputElement);
+                                      const nextInput = inputs[
+                                        currentIndex + 1
+                                      ] as HTMLInputElement;
+                                      if (nextInput) {
+                                        nextInput.focus();
+                                        nextInput.select();
+                                      }
+                                    }
+                                  }}
+                                />
+                                <textarea
+                                  className="w-full rounded-md border px-2 py-1 text-xs text-gray-700 focus:ring-1 focus:ring-purple-500 focus:border-purple-500 transition-colors"
+                                  rows={2}
+                                  placeholder="Nhận xét mục này..."
+                                  value={
+                                    student.criterionComments[criterionIndex] ||
+                                    ""
                                   }
-                                }}
-                              />
+                                  onChange={(e) =>
+                                    handleCriterionCommentChange(
+                                      studentIndex,
+                                      criterionIndex,
+                                      e.target.value
+                                    )
+                                  }
+                                />
+                              </div>
                             </td>
                           ))}
 

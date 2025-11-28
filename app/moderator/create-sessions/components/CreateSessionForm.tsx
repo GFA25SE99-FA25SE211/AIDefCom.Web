@@ -55,6 +55,8 @@ interface CreateSessionFormProps {
     projectCode?: string;
     topicTitle_EN?: string;
     topicTitle_VN?: string;
+    semesterStart?: string;
+    semesterEnd?: string;
   }>;
   councils: Array<{ id: number; councilName?: string; majorName?: string }>;
 }
@@ -125,6 +127,16 @@ const CreateSessionForm: React.FC<CreateSessionFormProps> = ({
     );
   };
 
+  const selectedGroup = groups.find((group) => group.id === groupId);
+  const formatDate = (value?: string) =>
+    value ? new Date(value).toLocaleDateString("en-GB") : undefined;
+  const semesterWindowLabel =
+    selectedGroup?.semesterStart && selectedGroup?.semesterEnd
+      ? `${formatDate(selectedGroup.semesterStart)} - ${formatDate(
+          selectedGroup.semesterEnd
+        )}`
+      : undefined;
+
   return (
     <div className="bg-white p-6 rounded-2xl shadow border border-gray-100">
       {/* Header */}
@@ -139,6 +151,12 @@ const CreateSessionForm: React.FC<CreateSessionFormProps> = ({
             </h2>
             <p className="text-sm text-gray-500">
               Fill in the details to schedule a new defense session
+            </p>
+            <p className="text-xs text-gray-400 mt-1">
+              * Only groups without a completed defense can be scheduled
+              {semesterWindowLabel
+                ? ` and dates must fall between ${semesterWindowLabel}.`
+                : ". Please pick a group to see its semester window."}
             </p>
           </div>
         </div>
@@ -172,6 +190,9 @@ const CreateSessionForm: React.FC<CreateSessionFormProps> = ({
                 </option>
               ))}
             </select>
+            <p className="text-xs text-gray-500 mt-1">
+              Tip: Groups already defended in the past are blocked automatically.
+            </p>
           </div>
 
           {/* Council Selection */}
@@ -205,13 +226,23 @@ const CreateSessionForm: React.FC<CreateSessionFormProps> = ({
                 value={defenseDate}
                 onChange={(e) => setDefenseDate(e.target.value)}
                 required
-                min={new Date().toISOString().split("T")[0]}
+                min={
+                  selectedGroup?.semesterStart ||
+                  new Date().toISOString().split("T")[0]
+                }
+                max={selectedGroup?.semesterEnd}
                 className="custom-picker-input w-full border border-gray-300 rounded-lg px-3 py-2 pr-10 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
               />
               <span className="absolute right-3 top-2.5 pointer-events-none z-0">
                 <CalendarIcon />
               </span>
             </div>
+            {semesterWindowLabel && (
+              <p className="text-xs text-gray-500 mt-1">
+                Allowed window: {semesterWindowLabel}. This comes directly from
+                the semester configuration.
+              </p>
+            )}
           </div>
 
           {/* Start Time */}

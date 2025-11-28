@@ -69,7 +69,8 @@ type LocalStudent = {
   id: string; // Real ID from API (can be GUID or student code)
   displayId: number; // Display ID for table (1, 2, 3...)
   userId: string;
-  groupId: string | number; // Allow both string (group name) and number (group id)
+  groupId: string; // Store actual group ID for editing
+  groupName: string;
   dob: string;
   gender: string;
   role: "Leader" | "Member";
@@ -175,6 +176,20 @@ export default function DataManagementPage() {
   const [transcriptPage, setTranscriptPage] = useState(1);
   const [reportPage, setReportPage] = useState(1);
 
+  const studentGroupOptions = useMemo(
+    () =>
+      groups.map((group) => ({
+        id: String(group.id),
+        name:
+          group.projectCode ||
+          group.groupName ||
+          group.topicTitle_EN ||
+          group.projectTitle ||
+          `Group ${group.id?.slice(0, 8) || "Unknown"}`,
+      })),
+    [groups]
+  );
+
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
@@ -231,7 +246,7 @@ export default function DataManagementPage() {
         }
       );
 
-      const groupMap = new Map();
+      const groupMap = new Map<string, string>();
       (Array.isArray(groupsRes.data) ? groupsRes.data : []).forEach(
         (g: any) => {
           const groupName =
@@ -301,6 +316,11 @@ export default function DataManagementPage() {
             foundInMap: groupMap.get(String(studentGroupId)),
           });
 
+          const actualGroupId = studentGroupId ? String(studentGroupId) : "";
+          const groupDisplayName = actualGroupId
+            ? groupMap.get(actualGroupId) || `Group ${studentGroupId}`
+            : "No Group Assigned";
+
           return {
             id: s.id, // Use real ID from API instead of index + 1
             displayId: index + 1, // Add display ID for table
@@ -309,10 +329,8 @@ export default function DataManagementPage() {
               s.userName ||
               s.studentCode ||
               `Student ${s.id?.slice(0, 8) || index + 1}`,
-            groupId: studentGroupId
-              ? groupMap.get(String(studentGroupId)) ||
-                `Group ${studentGroupId}`
-              : "No Group Assigned",
+            groupId: actualGroupId,
+            groupName: groupDisplayName,
             dob: s.dateOfBirth ? s.dateOfBirth.split("T")[0] : "", // Format to yyyy-MM-dd
             gender: s.gender || "",
             role: index === 0 ? ("Leader" as const) : ("Member" as const),
@@ -581,27 +599,7 @@ export default function DataManagementPage() {
       console.log("Create student payload:", createPayload);
 
       await studentsApi.create(createPayload);
-      const response = await studentsApi.getAll();
-      console.log("Students API response:", response.data);
-      const studentsData = (response.data || []).map(
-        (s: StudentDto, index: number) => {
-          console.log(`Student ${index + 1}:`, s);
-          return {
-            id: s.id, // Use real API ID
-            displayId: index + 1, // Display ID for table
-            userId:
-              s.fullName ||
-              s.userName ||
-              s.studentCode ||
-              `Student ${s.id?.slice(0, 8) || index + 1}`,
-            groupId: `Group ${s.groupId}`,
-            dob: s.dateOfBirth ? s.dateOfBirth.split("T")[0] : "", // Format to yyyy-MM-dd
-            gender: s.gender || "",
-            role: index === 0 ? ("Leader" as const) : ("Member" as const),
-          };
-        }
-      );
-      setStudents(studentsData);
+      await fetchData();
       setIsAddStudentModalOpen(false);
       await swalConfig.success("Success!", "Student added successfully!");
     } catch (error: any) {
@@ -793,23 +791,7 @@ export default function DataManagementPage() {
         console.log("Update student payload:", updatePayload);
 
         await studentsApi.update(student.id, updatePayload);
-        const response = await studentsApi.getAll();
-        const studentsData = (response.data || []).map(
-          (s: StudentDto, index: number) => ({
-            id: s.id, // Use real API ID
-            displayId: index + 1, // Display ID for table
-            userId:
-              s.fullName ||
-              s.userName ||
-              s.studentCode ||
-              `Student ${s.id?.slice(0, 8) || index + 1}`,
-            groupId: `Group ${s.groupId}`,
-            dob: s.dateOfBirth ? s.dateOfBirth.split("T")[0] : "", // Format to yyyy-MM-dd
-            gender: s.gender || "",
-            role: index === 0 ? ("Leader" as const) : ("Member" as const),
-          })
-        );
-        setStudents(studentsData);
+        await fetchData();
         await swalConfig.success("Success!", "Student updated successfully!");
       }
       setIsEditStudentModalOpen(false);
@@ -1013,24 +995,7 @@ export default function DataManagementPage() {
       console.log("Calling API delete with studentId:", studentId);
       const deleteResponse = await studentsApi.delete(studentId);
       console.log("Delete student API response:", deleteResponse);
-      // Manually refresh students list
-      const response = await studentsApi.getAll();
-      const studentsData = (response.data || []).map(
-        (s: StudentDto, index: number) => ({
-          id: s.id, // Use real API ID
-          displayId: index + 1, // Display ID for table
-          userId:
-            s.fullName ||
-            s.userName ||
-            s.studentCode ||
-            `Student ${s.id?.slice(0, 8) || index + 1}`,
-          groupId: "No Group Assigned", // Will be updated with proper mapping
-          dob: s.dateOfBirth || "",
-          gender: s.gender || "",
-          role: index === 0 ? ("Leader" as const) : ("Member" as const),
-        })
-      );
-      setStudents(studentsData);
+      await fetchData();
       await swalConfig.success("Deleted!", "Student deleted successfully!");
     } catch (error: any) {
       console.error("Error deleting student:", error);
@@ -1615,7 +1580,7 @@ export default function DataManagementPage() {
               {paginatedSessions.map((s) => (
                 <tr key={s.id} className="border-t hover:bg-gray-50">
                   <td className="px-3 py-2">{s.id}</td>
-                  <td className="px-3 py-2">{s.groupId}</td>
+                  <td className="px-3 py-2">{s.groupName}</td>
                   <td className="px-3 py-2">{s.location}</td>
                   <td className="px-3 py-2">{s.date}</td>
                   <td className="px-3 py-2">{s.time}</td>
@@ -1938,14 +1903,7 @@ export default function DataManagementPage() {
         }}
         onSubmit={handleEditStudent}
         studentData={editingStudent}
-        groupOptions={groups.map((group) => ({
-          id: group.id,
-          name:
-            group.topicTitle_EN ||
-            group.topicTitle_VN ||
-            group.groupName ||
-            `Group ${group.id}`,
-        }))}
+        groupOptions={studentGroupOptions}
       />
       <EditSessionModal
         isOpen={isEditSessionModalOpen}

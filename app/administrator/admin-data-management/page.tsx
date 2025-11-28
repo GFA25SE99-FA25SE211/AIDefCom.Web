@@ -124,6 +124,8 @@ const adminTabs: {
   { key: "assignments", label: "Assignments", icon: Users },
 ];
 
+const PAGE_SIZE = 16;
+
 export default function AdminDataManagementPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<AdminTabKey>("tasks");
@@ -209,6 +211,15 @@ export default function AdminDataManagementPage() {
   const [assignments, setAssignments] = useState<CommitteeAssignmentDto[]>([]);
   const [users, setUsers] = useState<UserDto[]>([]);
 
+  // Pagination state for each tab
+  const [taskPage, setTaskPage] = useState(1);
+  const [semesterPage, setSemesterPage] = useState(1);
+  const [majorPage, setMajorPage] = useState(1);
+  const [groupPage, setGroupPage] = useState(1);
+  const [rubricPage, setRubricPage] = useState(1);
+  const [notePage, setNotePage] = useState(1);
+  const [assignmentPage, setAssignmentPage] = useState(1);
+
   // Map userId to fullName for quick lookup
   const userMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -238,6 +249,17 @@ export default function AdminDataManagementPage() {
     });
     return map;
   }, [councils]);
+
+  // Reset page to 1 when switching tabs
+  useEffect(() => {
+    setTaskPage(1);
+    setSemesterPage(1);
+    setMajorPage(1);
+    setGroupPage(1);
+    setRubricPage(1);
+    setNotePage(1);
+    setAssignmentPage(1);
+  }, [activeTab]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -365,16 +387,165 @@ export default function AdminDataManagementPage() {
     [assignments, searchQuery]
   );
 
+  // Pagination calculations
+  const paginatedTasks = useMemo(() => {
+    const startIndex = (taskPage - 1) * PAGE_SIZE;
+    return filteredTasks.slice(startIndex, startIndex + PAGE_SIZE);
+  }, [filteredTasks, taskPage]);
+
+  const paginatedSemesters = useMemo(() => {
+    const startIndex = (semesterPage - 1) * PAGE_SIZE;
+    return filteredSemesters.slice(startIndex, startIndex + PAGE_SIZE);
+  }, [filteredSemesters, semesterPage]);
+
+  const paginatedMajors = useMemo(() => {
+    const startIndex = (majorPage - 1) * PAGE_SIZE;
+    return filteredMajors.slice(startIndex, startIndex + PAGE_SIZE);
+  }, [filteredMajors, majorPage]);
+
+  const paginatedGroups = useMemo(() => {
+    const startIndex = (groupPage - 1) * PAGE_SIZE;
+    return filteredGroups.slice(startIndex, startIndex + PAGE_SIZE);
+  }, [filteredGroups, groupPage]);
+
+  const paginatedRubrics = useMemo(() => {
+    const startIndex = (rubricPage - 1) * PAGE_SIZE;
+    return filteredRubrics.slice(startIndex, startIndex + PAGE_SIZE);
+  }, [filteredRubrics, rubricPage]);
+
+  const paginatedNotes = useMemo(() => {
+    const startIndex = (notePage - 1) * PAGE_SIZE;
+    return notes.slice(startIndex, startIndex + PAGE_SIZE);
+  }, [notes, notePage]);
+
+  const paginatedAssignments = useMemo(() => {
+    const startIndex = (assignmentPage - 1) * PAGE_SIZE;
+    return filteredAssignments.slice(startIndex, startIndex + PAGE_SIZE);
+  }, [filteredAssignments, assignmentPage]);
+
+  // Total pages calculations
+  const taskTotalPages = Math.max(1, Math.ceil(filteredTasks.length / PAGE_SIZE));
+  const semesterTotalPages = Math.max(1, Math.ceil(filteredSemesters.length / PAGE_SIZE));
+  const majorTotalPages = Math.max(1, Math.ceil(filteredMajors.length / PAGE_SIZE));
+  const groupTotalPages = Math.max(1, Math.ceil(filteredGroups.length / PAGE_SIZE));
+  const rubricTotalPages = Math.max(1, Math.ceil(filteredRubrics.length / PAGE_SIZE));
+  const noteTotalPages = Math.max(1, Math.ceil(notes.length / PAGE_SIZE));
+  const assignmentTotalPages = Math.max(1, Math.ceil(filteredAssignments.length / PAGE_SIZE));
+
+  // Pagination component helper
+  const renderPagination = (
+    currentPage: number,
+    totalPages: number,
+    setPage: (page: number) => void
+  ) => {
+    if (totalPages <= 1) {
+      return (
+        <div className="flex items-center justify-center mt-4 flex-wrap gap-2">
+          <button
+            className="px-3 py-1 rounded-md text-sm bg-blue-600 text-white"
+            disabled
+          >
+            1
+          </button>
+        </div>
+      );
+    }
+    return (
+      <div className="flex items-center justify-center mt-4 flex-wrap gap-2">
+        {Array.from({ length: totalPages }, (_, index) => {
+          const pageNum = index + 1;
+          const isActive = pageNum === currentPage;
+          return (
+            <button
+              key={pageNum}
+              className={`px-3 py-1 rounded-md text-sm ${
+                isActive
+                  ? "bg-blue-600 text-white"
+                  : "btn-subtle border border-gray-200"
+              }`}
+              onClick={() => setPage(pageNum)}
+            >
+              {pageNum}
+            </button>
+          );
+        })}
+      </div>
+    );
+  };
+
   /* ============ CRUD Handlers ============ */
   const handleAddTask = async (data: Omit<Task, "id" | "assignedBy">) => {
     try {
+      // Find CommitteeAssignment for assignedTo (user ID -> lecturer ID -> committee assignment)
+      const assignedToUser = users.find(u => u.id === data.assignedTo);
+      if (!assignedToUser) {
+        await swalConfig.error(
+          "Error",
+          "Selected user not found. Please select a valid user."
+        );
+        return;
+      }
+
+      // Find CommitteeAssignment by LecturerId (which should match user ID if user is a lecturer)
+      const assignedToAssignment = assignments.find(
+        a => a.lecturerId === assignedToUser.id
+      );
+      
+      if (!assignedToAssignment) {
+        await swalConfig.error(
+          "Error",
+          "Selected user does not have a committee assignment. Please select a user with a committee assignment."
+        );
+        return;
+      }
+
+      // Get assignedBy - find admin user's committee assignment or use first assignment
+      const adminUser = users.find(u => u.role === "Administrator") || users[0];
+      const assignedByAssignment = adminUser 
+        ? assignments.find(a => a.lecturerId === adminUser.id) || assignments[0]
+        : assignments[0];
+
+      if (!assignedByAssignment) {
+        await swalConfig.error(
+          "Error",
+          "No committee assignment available. Please ensure committee assignments are loaded."
+        );
+        return;
+      }
+
+      // Get first available rubric or default to 1
+      const firstRubric = rubrics.length > 0 ? rubrics[0].id : 1;
+
+      if (!firstRubric) {
+        await swalConfig.error(
+          "Error",
+          "No rubric available. Please create a rubric first."
+        );
+        return;
+      }
+
+      // Map frontend status to backend format
+      let backendStatus = data.status;
+      if (data.status === "Inprogress") {
+        backendStatus = "InProgress";
+      }
+
+      console.log("Creating task with:", {
+        title: data.title,
+        description: data.description,
+        assignedById: assignedByAssignment.id,
+        assignedToId: assignedToAssignment.id,
+        rubricId: firstRubric,
+        status: backendStatus,
+      });
+
       await projectTasksApi.create({
         title: data.title,
         description: data.description,
-        assignedById: "admin-user-id", // TODO: Get from auth context
-        assignedToId: data.assignedTo,
-        rubricId: 1, // TODO: Get from form or default rubric
-        status: "Pending", // Default status
+        assignedById: assignedByAssignment.id,
+        assignedToId: assignedToAssignment.id,
+        rubricId: firstRubric,
+        status: backendStatus,
       });
       const response = await projectTasksApi.getAll();
       const transformedTasks = (response.data || []).map(
@@ -967,244 +1138,270 @@ export default function AdminDataManagementPage() {
       </div>
 
       {/* Tables */}
-      {activeTab === "tasks" &&
-        renderHeader("Task Management", () => setIsAddTaskModalOpen(true)) &&
-        renderSearch("Search tasks...") &&
-        renderTable(
-          [
-            "ID",
-            "Title",
-            "Description",
-            "Assigned By",
-            "Assigned To",
-            "Status",
-            "Actions",
-          ],
-          filteredTasks.map((t) => (
-            <tr key={t.id}>
-              <td>{t.id}</td>
-              <td>{t.title}</td>
-              <td>{t.description}</td>
-              <td>{userMap.get(t.assignedBy) || t.assignedBy}</td>
-              <td>{userMap.get(t.assignedTo) || t.assignedTo}</td>
-              <td>
-                <span
-                  className={`badge ${
-                    t.status === "Completed"
-                      ? "badge-success"
-                      : t.status === "Pending"
-                      ? "badge-warning"
-                      : "badge-info"
-                  }`}
-                >
-                  {t.status}
-                </span>
-              </td>
-              <td className="text-center align-middle">
-                <div className="flex gap-2 justify-center items-center">
-                  <button
-                    className="btn-subtle"
-                    onClick={() => setEditingTask(t)}
+      {activeTab === "tasks" && (
+        <>
+          {renderHeader("Task Management", () => setIsAddTaskModalOpen(true))}
+          {renderSearch("Search tasks...")}
+          {renderTable(
+            [
+              "ID",
+              "Title",
+              "Description",
+              "Assigned By",
+              "Assigned To",
+              "Status",
+              "Actions",
+            ],
+            paginatedTasks.map((t) => (
+              <tr key={t.id}>
+                <td>{t.id}</td>
+                <td>{t.title}</td>
+                <td>{t.description}</td>
+                <td>{userMap.get(t.assignedBy) || t.assignedBy}</td>
+                <td>{userMap.get(t.assignedTo) || t.assignedTo}</td>
+                <td>
+                  <span
+                    className={`badge ${
+                      t.status === "Completed"
+                        ? "badge-success"
+                        : t.status === "Pending"
+                        ? "badge-warning"
+                        : "badge-info"
+                    }`}
                   >
-                    <Pencil className="w-4 h-4" />
-                  </button>
-                  <button
-                    className="btn-subtle text-red-600 hover:bg-red-50"
-                    onClick={() => handleDeleteTask(t.id)}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </td>
-            </tr>
-          ))
-        )}
+                    {t.status}
+                  </span>
+                </td>
+                <td className="text-center align-middle">
+                  <div className="flex gap-2 justify-center items-center">
+                    <button
+                      className="btn-subtle"
+                      onClick={() => setEditingTask(t)}
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button
+                      className="btn-subtle text-red-600 hover:bg-red-50"
+                      onClick={() => handleDeleteTask(t.id)}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))
+          )}
+          {renderPagination(taskPage, taskTotalPages, setTaskPage)}
+        </>
+      )}
 
-      {activeTab === "semesters" &&
-        renderHeader("Semester Management", () =>
-          setIsAddSemesterModalOpen(true)
-        ) &&
-        renderSearch("Search semesters...") &&
-        renderTable(
-          ["ID", "Name", "Year", "Start", "End", "Actions"],
-          filteredSemesters.map((s) => (
-            <tr key={s.id}>
-              <td>{s.id}</td>
-              <td>{s.semesterName}</td>
-              <td>{s.year}</td>
-              <td>{formatDateOnly(s.startDate)}</td>
-              <td>{formatDateOnly(s.endDate)}</td>
-              <td className="text-center align-middle">
-                <div className="flex gap-2 justify-center items-center">
-                  <button
-                    className="btn-subtle"
-                    onClick={() => setEditingSemester(s)}
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </button>
-                  <button
-                    className="btn-subtle text-red-600 hover:bg-red-50"
-                    onClick={() => handleDeleteSemester(s.id)}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </td>
-            </tr>
-          ))
-        )}
+      {activeTab === "semesters" && (
+        <>
+          {renderHeader("Semester Management", () =>
+            setIsAddSemesterModalOpen(true)
+          )}
+          {renderSearch("Search semesters...")}
+          {renderTable(
+            ["ID", "Name", "Year", "Start", "End", "Actions"],
+            paginatedSemesters.map((s) => (
+              <tr key={s.id}>
+                <td>{s.id}</td>
+                <td>{s.semesterName}</td>
+                <td>{s.year}</td>
+                <td>{formatDateOnly(s.startDate)}</td>
+                <td>{formatDateOnly(s.endDate)}</td>
+                <td className="text-center align-middle">
+                  <div className="flex gap-2 justify-center items-center">
+                    <button
+                      className="btn-subtle"
+                      onClick={() => setEditingSemester(s)}
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button
+                      className="btn-subtle text-red-600 hover:bg-red-50"
+                      onClick={() => handleDeleteSemester(s.id)}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))
+          )}
+          {renderPagination(semesterPage, semesterTotalPages, setSemesterPage)}
+        </>
+      )}
 
-      {activeTab === "majors" &&
-        renderHeader("Major Management", () => setIsAddMajorModalOpen(true)) &&
-        renderSearch("Search majors...") &&
-        renderTable(
-          ["ID", "Major Name", "Description", "Actions"],
-          filteredMajors.map((m) => (
-            <tr key={m.id}>
-              <td>{m.id}</td>
-              <td>{m.majorName}</td>
-              <td>{m.description || "N/A"}</td>
-              <td className="text-center align-middle">
-                <div className="flex gap-2 justify-center items-center">
-                  <button
-                    className="btn-subtle"
-                    onClick={() => setEditingMajor(m)}
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </button>
-                  <button
-                    className="btn-subtle text-red-600 hover:bg-red-50"
-                    onClick={() => handleDeleteMajor(m.id)}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </td>
-            </tr>
-          ))
-        )}
+      {activeTab === "majors" && (
+        <>
+          {renderHeader("Major Management", () => setIsAddMajorModalOpen(true))}
+          {renderSearch("Search majors...")}
+          {renderTable(
+            ["ID", "Major Name", "Description", "Actions"],
+            paginatedMajors.map((m) => (
+              <tr key={m.id}>
+                <td>{m.id}</td>
+                <td>{m.majorName}</td>
+                <td>{m.description || "N/A"}</td>
+                <td className="text-center align-middle">
+                  <div className="flex gap-2 justify-center items-center">
+                    <button
+                      className="btn-subtle"
+                      onClick={() => setEditingMajor(m)}
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button
+                      className="btn-subtle text-red-600 hover:bg-red-50"
+                      onClick={() => handleDeleteMajor(m.id)}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))
+          )}
+          {renderPagination(majorPage, majorTotalPages, setMajorPage)}
+        </>
+      )}
 
-      {activeTab === "groups" &&
-        renderHeader("Groups Management", () => {
-          /* Add group modal later */
-        }) &&
-        renderSearch("Search groups...") &&
-        renderTable(
-          [
-            "Project Code",
-            "Title (EN)",
-            "Title (VN)",
-            "Semester",
-            "Major",
-            "Status",
-            "Actions",
-          ],
-          filteredGroups.map((g) => (
-            <tr key={g.id}>
-              <td>{g.projectCode || "N/A"}</td>
-              <td className="max-w-48 truncate">{g.topicTitle_EN || "N/A"}</td>
-              <td className="max-w-48 truncate">{g.topicTitle_VN || "N/A"}</td>
-              <td>{g.semesterName || "N/A"}</td>
-              <td>{g.majorName || "N/A"}</td>
-              <td>
-                <span
-                  className={`px-2 py-1 rounded-full text-xs ${
-                    g.status === "Active"
-                      ? "bg-green-100 text-green-700"
-                      : "bg-gray-100 text-gray-700"
-                  }`}
-                >
-                  {g.status || "Unknown"}
-                </span>
-              </td>
-              <td className="text-center align-middle">
-                <div className="flex gap-2 justify-center items-center">
-                  <button
-                    className="btn-subtle"
-                    title="Edit Group"
-                    onClick={() => {
-                      setEditingGroup(g);
-                    }}
+      {activeTab === "groups" && (
+        <>
+          {renderHeader("Groups Management")}
+          {renderSearch("Search groups...")}
+          {renderTable(
+            [
+              "Project Code",
+              "Title (EN)",
+              "Title (VN)",
+              "Semester",
+              "Major",
+              "Status",
+              "Actions",
+            ],
+            paginatedGroups.map((g) => (
+              <tr key={g.id}>
+                <td>{g.projectCode || "N/A"}</td>
+                <td className="max-w-48 truncate">{g.topicTitle_EN || "N/A"}</td>
+                <td className="max-w-48 truncate">{g.topicTitle_VN || "N/A"}</td>
+                <td>{g.semesterName || "N/A"}</td>
+                <td>{g.majorName || "N/A"}</td>
+                <td>
+                  <span
+                    className={`px-2 py-1 rounded-full text-xs ${
+                      g.status === "Active"
+                        ? "bg-green-100 text-green-700"
+                        : "bg-gray-100 text-gray-700"
+                    }`}
                   >
-                    <Pencil className="w-4 h-4" />
-                  </button>
-                  <button
-                    className="btn-subtle text-red-600 hover:bg-red-50"
-                    title="Delete Group"
-                    onClick={() => handleDeleteGroup(g.id)}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </td>
-            </tr>
-          ))
-        )}
+                    {g.status || "Unknown"}
+                  </span>
+                </td>
+                <td className="text-center align-middle">
+                  <div className="flex gap-2 justify-center items-center">
+                    <button
+                      className="btn-subtle"
+                      title="Edit Group"
+                      onClick={() => {
+                        setEditingGroup(g);
+                      }}
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button
+                      className="btn-subtle text-red-600 hover:bg-red-50"
+                      title="Delete Group"
+                      onClick={() => handleDeleteGroup(g.id)}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))
+          )}
+          {renderPagination(groupPage, groupTotalPages, setGroupPage)}
+        </>
+      )}
 
-      {activeTab === "rubrics" &&
-        renderHeader("Rubric Management", () =>
-          setIsAddRubricModalOpen(true)
-        ) &&
-        renderSearch("Search rubrics...") &&
-        renderTable(
-          ["ID", "Rubric Name", "Description", "Actions"],
-          filteredRubrics.map((r) => (
-            <tr key={r.id}>
-              <td>{r.id}</td>
-              <td>{r.rubricName}</td>
-              <td>{r.description || "N/A"}</td>
-              <td className="text-center align-middle">
-                <div className="flex gap-2 justify-center items-center">
-                  <button
-                    className="btn-subtle"
-                    onClick={() => setEditingRubric(r)}
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </button>
-                  <button
-                    className="btn-subtle text-red-600 hover:bg-red-50"
-                    onClick={() => handleDeleteRubric(r.id)}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </td>
-            </tr>
-          ))
-        )}
+      {activeTab === "rubrics" && (
+        <>
+          {renderHeader("Rubric Management", () =>
+            setIsAddRubricModalOpen(true)
+          )}
+          {renderSearch("Search rubrics...")}
+          {renderTable(
+            ["ID", "Rubric Name", "Description", "Actions"],
+            paginatedRubrics.map((r) => (
+              <tr key={r.id}>
+                <td>{r.id}</td>
+                <td>{r.rubricName}</td>
+                <td>{r.description || "N/A"}</td>
+                <td className="text-center align-middle">
+                  <div className="flex gap-2 justify-center items-center">
+                    <button
+                      className="btn-subtle"
+                      onClick={() => setEditingRubric(r)}
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button
+                      className="btn-subtle text-red-600 hover:bg-red-50"
+                      onClick={() => handleDeleteRubric(r.id)}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))
+          )}
+          {renderPagination(rubricPage, rubricTotalPages, setRubricPage)}
+        </>
+      )}
 
-      {activeTab === "notes" &&
-        renderHeader("Member Notes") &&
-        renderTable(
-          ["ID", "Assignment ID", "Group ID", "Note Content", "Created At"],
-          notes.map((n) => (
-            <tr key={n.id}>
-              <td>{n.id}</td>
-              <td>{n.committeeAssignmentId}</td>
-              <td>{n.groupId}</td>
-              <td>{n.noteContent}</td>
-              <td>{new Date(n.createdAt).toLocaleString()}</td>
-            </tr>
-          ))
-        )}
+      {activeTab === "notes" && (
+        <>
+          {renderHeader("Member Notes")}
+          {renderTable(
+            ["ID", "Assignment ID", "Group ID", "Note Content", "Created At"],
+            paginatedNotes.map((n) => (
+              <tr key={n.id}>
+                <td>{n.id}</td>
+                <td>{n.committeeAssignmentId}</td>
+                <td>{n.groupId}</td>
+                <td>{n.noteContent}</td>
+                <td>{new Date(n.createdAt).toLocaleString()}</td>
+              </tr>
+            ))
+          )}
+          {renderPagination(notePage, noteTotalPages, setNotePage)}
+        </>
+      )}
 
-      {activeTab === "assignments" &&
-        renderHeader("Committee Assignments") &&
-        renderTable(
-          ["ID", "Lecturer", "Council Name", "Role"],
-          filteredAssignments.map((a) => (
-            <tr key={a.id}>
-              <td>{a.id}</td>
-              <td>
-                {userMap.get(a.lecturerId) ||
-                  (a as any).lecturerName ||
-                  a.lecturerId}
-              </td>
-              <td>{councilMap.get(a.councilId) || `Council ${a.councilId}`}</td>
-              <td>{(a as any).roleName || a.role}</td>
-            </tr>
-          ))
-        )}
+      {activeTab === "assignments" && (
+        <>
+          {renderHeader("Committee Assignments")}
+          {renderTable(
+            ["ID", "Lecturer", "Council Name", "Role"],
+            paginatedAssignments.map((a) => (
+              <tr key={a.id}>
+                <td>{a.id}</td>
+                <td>
+                  {userMap.get(a.lecturerId) ||
+                    (a as any).lecturerName ||
+                    a.lecturerId}
+                </td>
+                <td>{councilMap.get(a.councilId) || `Council ${a.councilId}`}</td>
+                <td>{(a as any).roleName || a.role}</td>
+              </tr>
+            ))
+          )}
+          {renderPagination(assignmentPage, assignmentTotalPages, setAssignmentPage)}
+        </>
+      )}
 
       <footer className="page-footer">
         © 2025 AIDefCom - Smart Graduation Defense
