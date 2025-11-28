@@ -122,7 +122,12 @@ export default function AdminDashboardPage() {
     datasets: [] as any[],
   });
   const [footerStats, setFooterStats] = useState({
-    completedMonth: { value: 0, label: "Sessions", progress: 0 },
+    completedMonth: {
+      value: 0,
+      label: "Sessions",
+      progress: 0,
+      detail: "No sessions logged",
+    },
     avgRating: { value: "0.0 / 10.0", progress: 0 },
     uptime: { value: "99.8%", progress: 99.8 },
   });
@@ -166,9 +171,15 @@ export default function AdminDashboardPage() {
         // Calculate user distribution by roles
         const roleCounts: { [key: string]: number } = {};
         usersData.forEach((user: UserDto) => {
-          user.roles?.forEach((role: string) => {
-            roleCounts[role] = (roleCounts[role] || 0) + 1;
-          });
+          if (user.roles && user.roles.length > 0) {
+            user.roles.forEach((role: string) => {
+              roleCounts[role] = (roleCounts[role] || 0) + 1;
+            });
+          } else if (user.role) {
+            roleCounts[user.role] = (roleCounts[user.role] || 0) + 1;
+          } else {
+            roleCounts["Unassigned"] = (roleCounts["Unassigned"] || 0) + 1;
+          }
         });
 
         const roleLabels = Object.keys(roleCounts);
@@ -313,6 +324,10 @@ export default function AdminDashboardPage() {
                     (completedSessions.length / totalSessionsThisMonth) * 100
                   )
                 : 0,
+            detail:
+              totalSessionsThisMonth > 0
+                ? `${completedSessions.length} / ${totalSessionsThisMonth} finished`
+                : "No sessions scheduled",
           },
           avgRating: { value: "N/A", progress: 0 },
           uptime: { value: "99.8%", progress: 99.8 },
@@ -496,6 +511,9 @@ export default function AdminDashboardPage() {
           <div className="footer-stat-value">
             {footerStats.completedMonth.value}{" "}
             {footerStats.completedMonth.label}
+          </div>
+          <div className="footer-stat-detail">
+            {footerStats.completedMonth.detail}
           </div>
           <div className="progress-bar-bg">
             <div

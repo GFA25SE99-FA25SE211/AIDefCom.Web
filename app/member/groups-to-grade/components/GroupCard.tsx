@@ -30,11 +30,12 @@ const GroupCard: React.FC<GroupCardProps> = ({
 }) => {
   const router = useRouter();
   const isGraded = status === "Graded";
+  const isSessionCompleted = sessionStatus === "Completed";
   const sessionStatusClass = sessionStatus.toLowerCase();
 
   const handleGradeClick = () => {
     router.push(
-      isGraded
+      isGraded || isSessionCompleted
         ? `/member/grading/view/${groupId}`
         : `/member/grading/grade/${groupId}`
     );
@@ -64,12 +65,12 @@ const GroupCard: React.FC<GroupCardProps> = ({
           <button
             onClick={handleGradeClick}
             className={`px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm font-medium rounded-md sm:rounded-lg transition flex-shrink-0 whitespace-nowrap min-w-0 ${
-              isGraded
+              isGraded || isSessionCompleted
                 ? "bg-gradient-to-r from-purple-500 to-blue-500 text-white hover:opacity-90"
                 : "border border-gray-300 text-gray-700 hover:bg-gray-100"
             }`}
           >
-            Grade
+            {isGraded || isSessionCompleted ? "View" : "Grade"}
           </button>
         </div>
       </header>

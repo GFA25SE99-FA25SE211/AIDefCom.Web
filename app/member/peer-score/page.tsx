@@ -9,6 +9,12 @@ import { scoresApi } from "@/lib/api/scores";
 import { authApi } from "@/lib/api/auth";
 import type { GroupDto, DefenseSessionDto } from "@/lib/models";
 
+interface ScoreCriteriaDetail {
+  rubricName: string;
+  score: string;
+  comment?: string;
+}
+
 interface ScoreData {
   groupName: string;
   projectTitle: string;
@@ -17,6 +23,8 @@ interface ScoreData {
     name: string;
     score: string;
     status: "Submitted" | "Pending";
+    comment?: string;
+    criteria?: ScoreCriteriaDetail[];
   }>;
 }
 
@@ -31,9 +39,42 @@ const defaultScoreData: ScoreData[] = [
         name: "Assoc. Prof. Dr. Nguyen Van X",
         score: "8.8",
         status: "Submitted",
+        criteria: [
+          {
+            rubricName: "Thesis Quality",
+            score: "9.0",
+            comment: "Excellent methodology description.",
+          },
+          {
+            rubricName: "Presentation",
+            score: "8.5",
+            comment: "Slides could be more concise.",
+          },
+        ],
       },
-      { name: "Dr. Tran Thi Y", score: "9.0", status: "Submitted" },
-      { name: "Dr. Le Van Z", score: "8.0", status: "Submitted" },
+      {
+        name: "Dr. Tran Thi Y",
+        score: "9.0",
+        status: "Submitted",
+        criteria: [
+          {
+            rubricName: "Thesis Quality",
+            score: "9.2",
+            comment: "Great problem statement.",
+          },
+        ],
+      },
+      {
+        name: "Dr. Le Van Z",
+        score: "8.0",
+        status: "Submitted",
+        criteria: [
+          {
+            rubricName: "Presentation",
+            score: "8.0",
+          },
+        ],
+      },
     ],
   },
   {
@@ -130,6 +171,16 @@ const getProjectTitle = (group: GroupDto) =>
 export default function PeerScoresPage() {
   const [scoreData, setScoreData] = useState<ScoreData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>(
+    {}
+  );
+
+  const toggleDetails = (rowKey: string) => {
+    setExpandedRows((prev) => ({
+      ...prev,
+      [rowKey]: !prev[rowKey],
+    }));
+  };
 
   useEffect(() => {
     const fetchPeerScores = async () => {
@@ -191,6 +242,8 @@ export default function PeerScoresPage() {
                 name: string;
                 score: string;
                 status: "Pending" | "Submitted";
+                comment?: string;
+                criteria?: ScoreCriteriaDetail[];
               }> = [];
 
               // Add evaluators who have submitted scores
@@ -205,10 +258,27 @@ export default function PeerScoresPage() {
                 );
                 const average = total / evaluatorScores.length;
 
+                // Collect detailed criteria
+                const criteriaDetails: ScoreCriteriaDetail[] =
+                  evaluatorScores.map((score) => ({
+                    rubricName:
+                      score.rubricName ||
+                      `Criteria ${score.rubricId ?? "N/A"}`,
+                    score: score.value.toFixed(1),
+                    comment: score.comment?.trim() || undefined,
+                  }));
+
+                const comments = criteriaDetails
+                  .map((c) => c.comment)
+                  .filter((comment) => comment && comment !== "")
+                  .join(" | ");
+
                 members.push({
                   name: evaluatorName,
                   score: average.toFixed(1),
                   status: "Submitted",
+                  comment: comments || undefined,
+                  criteria: criteriaDetails,
                 });
               });
 
@@ -253,6 +323,7 @@ export default function PeerScoresPage() {
                 name: string;
                 score: string;
                 status: "Pending" | "Submitted";
+                comment?: string;
               }> = groupAssignments.map((a: any) => {
                 const user = users.find((u: any) => u.id === a.lecturerId);
                 return {
@@ -305,16 +376,34 @@ export default function PeerScoresPage() {
               name: string;
               score: string;
               status: "Pending" | "Submitted";
+              comment?: string;
+              criteria?: ScoreCriteriaDetail[];
             }> = [];
 
             evaluatorMap.forEach((evalScores, evaluatorId) => {
               const total = evalScores.reduce((sum, s) => sum + s.value, 0);
               const average = total / evalScores.length;
 
+              const criteriaDetails: ScoreCriteriaDetail[] = evalScores.map(
+                (score) => ({
+                  rubricName:
+                    score.rubricName || `Criteria ${score.rubricId ?? "N/A"}`,
+                  score: score.value.toFixed(1),
+                  comment: score.comment?.trim() || undefined,
+                })
+              );
+
+              const comments = criteriaDetails
+                .map((c) => c.comment)
+                .filter((comment) => comment && comment !== "")
+                .join(" | ");
+
               members.push({
                 name: evalScores[0].evaluatorName || "Unknown",
                 score: average.toFixed(1),
                 status: "Submitted",
+                comment: comments || undefined,
+                criteria: criteriaDetails,
               });
             });
 
@@ -427,43 +516,102 @@ export default function PeerScoresPage() {
                     <span className="col-span-2 text-right">Status</span>
                   </div>
 
-                  {group.members.map((member, memberIndex) => (
-                    <div
-                      key={`${group.groupName}-${member.name}-${memberIndex}`}
-                      className="score-table-row grid grid-cols-12 items-center py-3 border-b last:border-b-0"
-                    >
-                      <div className="col-span-7 flex items-center gap-3 text-sm text-gray-800">
-                        <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-600">
-                          <Users className="w-5 h-5" />
+                  {group.members.map((member, memberIndex) => {
+                    const rowKey = `${groupIndex}-${memberIndex}`;
+                    const hasCriteria = (member.criteria?.length ?? 0) > 0;
+                    const isExpanded = expandedRows[rowKey];
+
+                    return (
+                      <div
+                        key={`${group.groupName}-${member.name}-${memberIndex}`}
+                        className="score-table-row border-b last:border-b-0"
+                      >
+                        <div className="grid grid-cols-12 items-center py-3">
+                          <div className="col-span-5">
+                            <div className="flex items-center gap-3 text-sm text-gray-800">
+                              <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-600">
+                                <Users className="w-5 h-5" />
+                              </div>
+                              <span className="font-medium">{member.name}</span>
+                            </div>
+                            {member.comment && (
+                              <p className="mt-1 pl-11 text-xs text-gray-600 italic">
+                                Nhận xét: {member.comment}
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="col-span-3 text-center">
+                            <span
+                              className={`score-value ${
+                                member.status === "Pending"
+                                  ? "text-gray-400"
+                                  : "text-gray-800"
+                              } font-medium`}
+                            >
+                              {member.score}
+                            </span>
+                          </div>
+
+                          <div className="col-span-2 text-right">
+                            <span
+                              className={`status-badge inline-block px-3 py-1 rounded-full text-xs ${
+                                member.status === "Pending"
+                                  ? "bg-yellow-50 text-yellow-700"
+                                  : "bg-green-50 text-green-700"
+                              }`}
+                            >
+                              {member.status}
+                            </span>
+                          </div>
+
+                          <div className="col-span-2 text-right">
+                            {hasCriteria && (
+                              <button
+                                type="button"
+                                onClick={() => toggleDetails(rowKey)}
+                                className="text-xs font-medium text-blue-600 hover:text-blue-800 underline underline-offset-2"
+                              >
+                                {isExpanded ? "Ẩn chi tiết" : "Xem chi tiết"}
+                              </button>
+                            )}
+                          </div>
                         </div>
-                        <span>{member.name}</span>
-                      </div>
 
-                      <div className="col-span-3 text-center">
-                        <span
-                          className={`score-value ${
-                            member.status === "Pending"
-                              ? "text-gray-400"
-                              : "text-gray-800"
-                          } font-medium`}
-                        >
-                          {member.score}
-                        </span>
+                        {hasCriteria && isExpanded && (
+                          <div className="pb-3 pl-11 space-y-2">
+                            <div className="text-xs font-semibold uppercase text-gray-500 tracking-wide">
+                              Detailed scores
+                            </div>
+                            <div className="space-y-2">
+                              {member.criteria!.map((criteria, criteriaIndex) => (
+                                <div
+                                  key={`${member.name}-criteria-${criteriaIndex}`}
+                                  className="bg-gray-50 rounded-lg p-3 border-l-4 border-blue-500"
+                                >
+                                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                                    <div>
+                                      <p className="text-sm font-medium text-gray-800">
+                                        {criteria.rubricName}
+                                      </p>
+                                      {criteria.comment && (
+                                        <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                                          {criteria.comment}
+                                        </p>
+                                      )}
+                                    </div>
+                                    <span className="text-sm font-semibold text-blue-700">
+                                      {criteria.score}
+                                    </span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
-
-                      <div className="col-span-2 text-right">
-                        <span
-                          className={`status-badge inline-block px-3 py-1 rounded-full text-xs ${
-                            member.status === "Pending"
-                              ? "bg-yellow-50 text-yellow-700"
-                              : "bg-green-50 text-green-700"
-                          }`}
-                        >
-                          {member.status}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )

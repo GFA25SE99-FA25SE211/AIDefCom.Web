@@ -19,7 +19,13 @@ import CreateSessionForm, {
 import { defenseSessionsApi } from "@/lib/api/defense-sessions";
 import { groupsApi } from "@/lib/api/groups";
 import { councilsApi } from "@/lib/api/councils";
-import type { DefenseSessionDto, GroupDto, CouncilDto } from "@/lib/models";
+import { semestersApi } from "@/lib/api/semesters";
+import type {
+  DefenseSessionDto,
+  GroupDto,
+  CouncilDto,
+  SemesterDto,
+} from "@/lib/models";
 import { swalConfig } from "@/lib/utils/sweetAlert";
 
 // Inline SVG icons nhỏ gọn (kích thước 20x20)
@@ -28,6 +34,11 @@ const Icon = ({ children }: { children: React.ReactNode }) => (
     {children}
   </span>
 );
+
+type GroupWithSemester = GroupDto & {
+  semesterStart?: string;
+  semesterEnd?: string;
+};
 
 const normalizeGroup = (group: GroupDto): GroupDto => ({
   ...group,
@@ -48,7 +59,7 @@ const normalizeGroup = (group: GroupDto): GroupDto => ({
 export default function CreateSessionsPage() {
   const [isFormVisible, setIsFormVisible] = useState(false);
   const [sessions, setSessions] = useState<DefenseSessionDto[]>([]);
-  const [groups, setGroups] = useState<GroupDto[]>([]);
+  const [groups, setGroups] = useState<GroupWithSemester[]>([]);
   const [councils, setCouncils] = useState<CouncilDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
@@ -59,14 +70,27 @@ export default function CreateSessionsPage() {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const [sessionsRes, groupsRes, councilsRes] = await Promise.all([
+        const [sessionsRes, groupsRes, councilsRes, semestersRes] =
+          await Promise.all([
           defenseSessionsApi.getAll().catch(() => ({ data: [] })),
           groupsApi.getAll().catch(() => ({ data: [] })),
           councilsApi.getAll(false).catch(() => ({ data: [] })),
-        ]);
+            semestersApi.getAll().catch(() => ({ data: [] })),
+          ]);
 
         setSessions(sessionsRes.data || []);
-        const normalizedGroups = (groupsRes.data || []).map(normalizeGroup);
+        const semesters = (semestersRes.data || []) as SemesterDto[];
+        const normalizedGroups = (groupsRes.data || []).map((group) => {
+          const normalized = normalizeGroup(group);
+          const semesterInfo = semesters.find(
+            (semester) => semester.id === group.semesterId
+          );
+          return {
+            ...normalized,
+            semesterStart: semesterInfo?.startDate,
+            semesterEnd: semesterInfo?.endDate,
+          };
+        });
         setGroups(normalizedGroups);
         setCouncils(councilsRes.data || []);
       } catch (error) {
@@ -129,6 +153,56 @@ export default function CreateSessionsPage() {
         return;
       }
 
+      // Prevent scheduling for groups that already completed a session
+      const existingPastSession = sessions.find((session) => {
+        if (session.groupId !== formData.groupId) return false;
+        const sessionDate = new Date(session.defenseDate);
+        const isPastDate = sessionDate.getTime() < new Date().getTime();
+        const isCompleted =
+          session.status && session.status.toLowerCase() === "completed";
+        return isPastDate || isCompleted;
+      });
+
+      if (existingPastSession) {
+        const sessionDate = new Date(
+          existingPastSession.defenseDate
+        ).toLocaleDateString("en-GB");
+        await swalConfig.error(
+          "Group Already Defended",
+          `This group already had a defense session on ${sessionDate}. Please choose another group.`
+        );
+        return;
+      }
+
+      const currentGroup = groups.find(
+        (group) => group.id === formData.groupId
+      );
+      if (
+        currentGroup?.semesterStart &&
+        currentGroup?.semesterEnd &&
+        formData.defenseDate
+      ) {
+        const selectedDate = new Date(formData.defenseDate);
+        const semesterStart = new Date(currentGroup.semesterStart);
+        const semesterEnd = new Date(currentGroup.semesterEnd);
+        if (
+          selectedDate.getTime() < semesterStart.getTime() ||
+          selectedDate.getTime() > semesterEnd.getTime()
+        ) {
+          await swalConfig.error(
+            "Defense Date Out of Range",
+            `Group ${
+              currentGroup.groupName || currentGroup.projectCode || "selected"
+            } belongs to the semester running from ${semesterStart.toLocaleDateString(
+              "en-GB"
+            )} to ${semesterEnd.toLocaleDateString(
+              "en-GB"
+            )}. Please choose a defense date inside this window.`
+          );
+          return;
+        }
+      }
+
       // Format times to HH:MM:SS
       const formatTime = (time: string) => {
         if (!time) return "00:00:00";
@@ -160,9 +234,13 @@ export default function CreateSessionsPage() {
       );
     } catch (error: any) {
       console.error("Error creating session:", error);
+      const apiDetails =
+        error?.errorData?.details ||
+        error?.errorData?.message ||
+        error?.message;
       await swalConfig.error(
         "Failed to Create Session",
-        error.message ||
+        apiDetails ||
           "An unexpected error occurred while creating the session."
       );
     }

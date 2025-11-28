@@ -75,7 +75,11 @@ class ApiClient {
           throw new Error(errorMessage);
         }
         
-        const errorMessage = errorData.message || errorData.Message || errorText.substring(0, 200) || `HTTP error! status: ${response.status}`;
+        const errorMessage =
+          errorData.message ||
+          errorData.Message ||
+          errorText.substring(0, 200) ||
+          `HTTP error! status: ${response.status}`;
         console.error(`API Error [${endpoint}]:`, {
           status: response.status,
           statusText: response.statusText,
@@ -100,7 +104,14 @@ class ApiClient {
           userFriendlyMessage = `Server error (${response.status}): ${errorMessage}`;
         }
         
-        throw new Error(userFriendlyMessage);
+        if (errorData.details) {
+          userFriendlyMessage += ` Details: ${errorData.details}`;
+        }
+
+        const enrichedError = new Error(userFriendlyMessage);
+        (enrichedError as any).status = response.status;
+        (enrichedError as any).errorData = errorData;
+        throw enrichedError;
       }
 
       // Handle empty response body (common for DELETE operations)
