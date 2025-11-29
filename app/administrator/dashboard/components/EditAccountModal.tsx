@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Modal from "../../../moderator/create-sessions/components/Modal";
-import { Save } from "lucide-react";
+import { Save, Eye, EyeOff } from "lucide-react";
 
 interface UserAccount {
   id: number | string;
@@ -18,6 +18,8 @@ export interface AccountEditFormData {
   fullName: string;
   email: string;
   role: string;
+  newPassword?: string;
+  confirmNewPassword?: string;
 }
 
 interface EditAccountModalProps {
@@ -36,6 +38,10 @@ const EditAccountModal: React.FC<EditAccountModalProps> = ({
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [role, setRole] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   useEffect(() => {
     if (accountData) {
@@ -47,12 +53,40 @@ const EditAccountModal: React.FC<EditAccountModalProps> = ({
       setEmail("");
       setRole("");
     }
+    // Reset password fields when modal opens/closes
+    setNewPassword("");
+    setConfirmNewPassword("");
   }, [accountData]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!accountData) return;
-    onSubmit(accountData.id, { fullName, email, role });
+
+    // Validate password if provided
+    if (newPassword || confirmNewPassword) {
+      if (newPassword !== confirmNewPassword) {
+        alert("New password and confirm password do not match. Please re-enter.");
+        return;
+      }
+      if (newPassword.length < 6) {
+        alert("Password must be at least 6 characters long.");
+        return;
+      }
+    }
+
+    const formData: AccountEditFormData = {
+      fullName,
+      email,
+      role,
+    };
+
+    // Only include password fields if they are provided
+    if (newPassword && confirmNewPassword) {
+      formData.newPassword = newPassword;
+      formData.confirmNewPassword = confirmNewPassword;
+    }
+
+    onSubmit(accountData.id, formData);
   };
 
   if (!accountData) return null;
@@ -118,12 +152,63 @@ const EditAccountModal: React.FC<EditAccountModalProps> = ({
               Select role
             </option>
             <option value="Administrator">Administrator</option>
+            <option value="Lecturer">Lecturer</option>
             <option value="Moderator">Moderator</option>
             <option value="Chair">Chair</option>
             <option value="Member">Member</option>
             <option value="Secretary">Secretary</option>
             <option value="Student">Student</option>
           </select>
+        </div>
+
+        <div className="form-group">
+          <label htmlFor="editNewPassword">New Password (Optional)</label>
+          <div className="relative">
+            <input
+              id="editNewPassword"
+              type={showNewPassword ? "text" : "password"}
+              placeholder="Leave blank to keep current password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              minLength={6}
+              className="pr-10"
+            />
+            <button
+              type="button"
+              className="absolute inset-y-0 right-2 flex items-center text-gray-500"
+              onClick={() => setShowNewPassword((prev) => !prev)}
+              aria-label={showNewPassword ? "Hide password" : "Show password"}
+            >
+              {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
+        </div>
+
+        <div className="form-group">
+          <label htmlFor="editConfirmPassword">Confirm New Password</label>
+          <div className="relative">
+            <input
+              id="editConfirmPassword"
+              type={showConfirmPassword ? "text" : "password"}
+              placeholder="Re-enter new password"
+              value={confirmNewPassword}
+              onChange={(e) => setConfirmNewPassword(e.target.value)}
+              minLength={6}
+              className="pr-10"
+            />
+            <button
+              type="button"
+              className="absolute inset-y-0 right-2 flex items-center text-gray-500"
+              onClick={() => setShowConfirmPassword((prev) => !prev)}
+              aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
+            >
+              {showConfirmPassword ? (
+                <EyeOff className="w-4 h-4" />
+              ) : (
+                <Eye className="w-4 h-4" />
+              )}
+            </button>
+          </div>
         </div>
       </form>
     </Modal>

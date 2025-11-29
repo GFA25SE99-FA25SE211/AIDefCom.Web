@@ -14,7 +14,7 @@ export interface ProjectTaskCreateDto {
   description?: string;
   assignedById: string;
   assignedToId: string;
-  rubricId?: number;
+  rubricId?: number | null;
   status: string;
 }
 
@@ -24,4 +24,3 @@ export interface ProjectTaskUpdateDto {
   assignedToId: string;
   status?: string;
 }
-

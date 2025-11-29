@@ -110,6 +110,7 @@ const CreateAccountModal: React.FC<CreateAccountModalProps> = ({
               Select role
             </option>
             <option value="Administrator">Administrator</option>
+            <option value="Lecturer">Lecturer</option>
             <option value="Moderator">Moderator</option>
             <option value="Chair">Chair</option>
             <option value="Member">Member</option>

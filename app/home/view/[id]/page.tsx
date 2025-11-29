@@ -16,7 +16,8 @@ import type {
   ScoreDto,
 } from "@/lib/models";
 import { scoresApi } from "@/lib/api/scores";
-import CreateTaskModal from "../../components/CreateTaskModal";
+import CreateTaskModal from "../../../chair/components/CreateTaskModal";
+import { swalConfig } from "@/lib/utils/sweetAlert";
 
 export default function GroupDetailsPage() {
   const params = useParams();
@@ -32,6 +33,7 @@ export default function GroupDetailsPage() {
   const [memberNotes, setMemberNotes] = useState<MemberNoteDto[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string>("");
   const [isChair, setIsChair] = useState(false);
+  const [hasAccess, setHasAccess] = useState(false);
   const [openTaskModal, setOpenTaskModal] = useState(false);
 
   // Score Table State
@@ -68,7 +70,6 @@ export default function GroupDetailsPage() {
           setCurrentUserId(currentUid);
 
           // Check if user has system Chair role (for testing/override)
-          // Case-insensitive check
           if (
             parsedUser.roles &&
             parsedUser.roles.some((r: string) => r.toLowerCase() === "chair")
@@ -80,11 +81,6 @@ export default function GroupDetailsPage() {
           ) {
             isSystemChair = true;
           }
-        }
-
-        // If system chair, grant access immediately
-        if (isSystemChair) {
-          setIsChair(true);
         }
 
         if (groupRes.data) {
@@ -102,7 +98,7 @@ export default function GroupDetailsPage() {
           setMemberNotes(memberNotesRes.data);
         }
 
-        // 2. If session exists, fetch lecturers
+        // 2. If session exists, fetch lecturers and check access
         if (sessionsRes.data && sessionsRes.data.length > 0) {
           const session = sessionsRes.data[0];
           setDefenseSession(session);
@@ -121,26 +117,71 @@ export default function GroupDetailsPage() {
               );
               setLecturers(onlyLecturers);
 
-              // Check if current user is Chair (if not already set by system role)
-              if (currentUid && !isSystemChair) {
+              // Check if current user is in the council
+              if (currentUid) {
                 const currentUserInSession = onlyLecturers.find(
                   (l: any) =>
                     String(l.id).toLowerCase() ===
                     String(currentUid).toLowerCase()
                 );
 
-                if (
-                  currentUserInSession &&
-                  currentUserInSession.role &&
-                  currentUserInSession.role.toLowerCase() === "chair"
-                ) {
-                  setIsChair(true);
+                if (currentUserInSession) {
+                  setHasAccess(true);
+                  
+                  // Check if user is Chair (system role or council role)
+                  if (isSystemChair) {
+                    setIsChair(true);
+                  } else if (
+                    currentUserInSession.role &&
+                    currentUserInSession.role.toLowerCase() === "chair"
+                  ) {
+                    setIsChair(true);
+                  }
+                } else {
+                  setHasAccess(false);
+                  await swalConfig.error(
+                    "Access Denied",
+                    "You do not have access to this group. You must be a member of the defense council."
+                  );
+                  router.push("/home");
+                  return;
                 }
+              } else {
+                setHasAccess(false);
+                await swalConfig.error(
+                  "Authentication Error",
+                  "User information not found. Please login again."
+                );
+                router.push("/home");
+                return;
               }
+            } else {
+              setHasAccess(false);
+              await swalConfig.error(
+                "Access Denied",
+                "No council members found for this session."
+              );
+              router.push("/home");
+              return;
             }
           } catch (lecErr) {
             console.error("Failed to fetch lecturers:", lecErr);
+            setHasAccess(false);
+            await swalConfig.error(
+              "Error",
+              "Failed to verify access. Please try again later."
+            );
+            router.push("/home");
+            return;
           }
+        } else {
+          setHasAccess(false);
+          await swalConfig.error(
+            "Not Found",
+            "No defense session found for this group."
+          );
+          router.push("/home");
+          return;
         }
       } catch (err) {
         console.error("Failed to fetch details:", err);
@@ -188,13 +229,10 @@ export default function GroupDetailsPage() {
     );
   }
 
-  if (error) {
+  if (error || !hasAccess) {
     return (
       <div className="flex flex-col justify-center items-center min-h-[60vh] gap-4">
-        <div className="text-red-500">{error}</div>
-        <button onClick={() => router.back()} className="btn-secondary">
-          Go Back
-        </button>
+        <div className="text-gray-500">Redirecting...</div>
       </div>
     );
   }
@@ -203,8 +241,8 @@ export default function GroupDetailsPage() {
     return (
       <div className="flex flex-col justify-center items-center min-h-[60vh] gap-4">
         <div className="text-gray-500">Group not found.</div>
-        <button onClick={() => router.back()} className="btn-secondary">
-          Go Back
+        <button onClick={() => router.push("/home")} className="btn-secondary">
+          Back to Home
         </button>
       </div>
     );
@@ -223,7 +261,7 @@ export default function GroupDetailsPage() {
       {/* Header with Back Button */}
       <div className="flex items-center gap-4 mb-8">
         <button
-          onClick={() => router.back()}
+          onClick={() => router.push("/home")}
           className="p-2 hover:bg-gray-100 rounded-full transition-colors"
         >
           <svg

@@ -164,10 +164,15 @@ export const swalConfig = {
         }
       });
     }
+  },
+
+  // Close any open Swal dialog
+  closeSwal: () => {
+    Swal.close();
   }
 };
 
-// Close any open Swal dialog
+// Standalone close function for direct import
 export const closeSwal = () => {
   Swal.close();
 };

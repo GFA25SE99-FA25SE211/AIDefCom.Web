@@ -220,7 +220,11 @@ function redirectByRole(role: string, router: any) {
 
   switch (r) {
     case "admin":
+    case "administrator":
       router.push("/administrator");
+      break;
+    case "lecturer":
+      router.push("/home");
       break;
     case "chair":
       router.push("/chair");
