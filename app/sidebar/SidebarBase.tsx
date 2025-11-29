@@ -6,7 +6,7 @@ import { motion } from "framer-motion";
 import { LogOut } from "lucide-react";
 
 interface SidebarBaseProps {
-  role: "Chair" | "Secretary" | "Moderator" | "Member" | "Administrator";
+  role: "Chair" | "Secretary" | "Moderator" | "Member" | "Administrator" | "Lecturer";
   links: { href: string; label: string; icon: React.ElementType }[];
 }
 
@@ -61,12 +61,6 @@ export default function SidebarBase({ role, links }: SidebarBaseProps) {
         <div className="flex items-center gap-3 px-6 py-6 border-b border-white/10">
           <img src="/favicon-new.ico" alt="logo" className="w-8" />
           <span className="text-lg font-semibold tracking-wide">AIDefCom</span>
-        </div>
-
-        {/* User Info */}
-        <div className="p-4 bg-[#1B2C4A] mt-4 rounded-lg mx-4 text-sm">
-          <p className="text-gray-300">Logged in as:</p>
-          <p className="font-semibold mt-1">{role}</p>
         </div>
 
         {/* Navigation */}

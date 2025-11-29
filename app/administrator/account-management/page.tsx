@@ -341,10 +341,18 @@ export default function AccountManagementPage() {
     data: AccountEditFormData
   ) => {
     try {
-      await authApi.updateAccount(String(id), {
+      const updateData: any = {
         fullName: data.fullName,
         email: data.email,
-      });
+      };
+
+      // Include password if provided
+      if (data.newPassword && data.confirmNewPassword) {
+        updateData.newPassword = data.newPassword;
+        updateData.confirmNewPassword = data.confirmNewPassword;
+      }
+
+      await authApi.updateAccount(String(id), updateData);
 
       if (
         data.role &&

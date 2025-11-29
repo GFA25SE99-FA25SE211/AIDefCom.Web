@@ -12,6 +12,7 @@ export function middleware(req: NextRequest) {
     "/secretary",
     "/moderator",
     "/member",
+    "/home",
   ];
 
   // Chặn truy cập khi chưa login
@@ -23,6 +24,7 @@ export function middleware(req: NextRequest) {
   if (token && (path === "/" || path === "/login")) {
     const map: Record<string, string> = {
       administrator: "/administrator",
+      lecturer: "/home",
       chair: "/chair",
       secretary: "/secretary",
       moderator: "/moderator",
@@ -44,5 +46,6 @@ export const config = {
     "/secretary/:path*",
     "/moderator/:path*",
     "/member/:path*",
+    "/home/:path*",
   ],
 };
