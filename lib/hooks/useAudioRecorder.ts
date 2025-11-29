@@ -153,12 +153,24 @@ export const useAudioRecorder = ({
 
   // Kết thúc phiên hội đồng: gửi "stop" để server flush/close
   const stopSession = useCallback(() => {
+    console.log("Stopping session and closing WebSocket...");
     try {
-      wsRef.current?.send("stop");
-    } catch {}
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send("stop");
+      }
+    } catch (e) {
+      console.warn("Error sending stop command:", e);
+    }
+
     try {
-      wsRef.current?.close();
-    } catch {}
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+    } catch (e) {
+      console.warn("Error closing WebSocket:", e);
+    }
+
     stopRecording();
     setIsAsking(false);
   }, [stopRecording]);
