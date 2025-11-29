@@ -57,7 +57,7 @@ export const useAudioRecorder = ({
   const startRecording = useCallback(async () => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
       connectWs();
-      // đợi WS mở
+      // Đợi WS mở
       await new Promise((resolve) => {
         const check = () => {
           if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN)
