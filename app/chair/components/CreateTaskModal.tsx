@@ -21,7 +21,7 @@ export default function CreateTaskModal({
     title: "",
     description: "",
     assignedToId: "",
-    rubricId: "" as string | number, // Allow string for select value
+    rubricId: "" as string | number,
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,13 +41,13 @@ export default function CreateTaskModal({
         description: formData.description,
         assignedById: currentUserId,
         assignedToId: formData.assignedToId,
-        rubricId: formData.rubricId ? Number(formData.rubricId) : undefined,
+        rubricId: formData.rubricId ? Number(formData.rubricId) : 0,
         status: "Pending",
       };
 
       console.log("Creating task with payload:", payload);
       await projectTasksApi.create(payload);
-      
+
       // Reset form
       setFormData({
         title: "",
@@ -55,7 +55,7 @@ export default function CreateTaskModal({
         assignedToId: "",
         rubricId: "",
       });
-      
+
       onClose();
       alert("Task created successfully!");
     } catch (err: any) {
@@ -73,9 +73,23 @@ export default function CreateTaskModal({
       <div className="bg-white w-full max-w-md rounded-2xl shadow-xl p-6">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-xl font-bold text-gray-800">Create New Task</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-6 w-6"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
             </svg>
           </button>
         </div>
@@ -88,52 +102,69 @@ export default function CreateTaskModal({
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Task Title *</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Task Title *
+            </label>
             <input
               type="text"
               required
               className="input-base w-full"
               value={formData.title}
-              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, title: e.target.value })
+              }
               placeholder="Enter task title"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Description
+            </label>
             <textarea
               className="input-base w-full h-24 resize-none"
               value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, description: e.target.value })
+              }
               placeholder="Enter task description"
             />
           </div>
 
           <div className="form-group">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Assign To *</label>
-            <select 
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Assign To *
+            </label>
+            <select
               className="input-base w-full"
               value={formData.assignedToId}
-              onChange={(e) => setFormData({ ...formData, assignedToId: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, assignedToId: e.target.value })
+              }
               required
             >
               <option value="">Select a member</option>
               {lecturers
-                .filter(l => l.id !== currentUserId) 
+                .filter((l) => l.id !== currentUserId)
                 .map((lecturer) => (
-                <option key={lecturer.id} value={lecturer.id}>
-                  {lecturer.fullName || lecturer.userName} ({lecturer.role || 'Member'})
-                </option>
-              ))}
+                  <option key={lecturer.id} value={lecturer.id}>
+                    {lecturer.fullName || lecturer.userName} (
+                    {lecturer.role || "Member"})
+                  </option>
+                ))}
             </select>
           </div>
 
           <div className="form-group">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Rubric (Optional)</label>
-            <select 
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Rubric (Optional)
+            </label>
+            <select
               className="input-base w-full"
               value={formData.rubricId}
-              onChange={(e) => setFormData({ ...formData, rubricId: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, rubricId: e.target.value })
+              }
             >
               <option value="">Select a rubric</option>
               {rubrics.map((rubric) => (

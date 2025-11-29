@@ -68,11 +68,23 @@ export default function GroupDetailsPage() {
           setCurrentUserId(currentUid);
 
           // Check if user has system Chair role (for testing/override)
-          if (parsedUser.roles && parsedUser.roles.includes("Chair")) {
+          // Case-insensitive check
+          if (
+            parsedUser.roles &&
+            parsedUser.roles.some((r: string) => r.toLowerCase() === "chair")
+          ) {
             isSystemChair = true;
-          } else if (parsedUser.role === "Chair") {
+          } else if (
+            parsedUser.role &&
+            parsedUser.role.toLowerCase() === "chair"
+          ) {
             isSystemChair = true;
           }
+        }
+
+        // If system chair, grant access immediately
+        if (isSystemChair) {
+          setIsChair(true);
         }
 
         if (groupRes.data) {
@@ -109,16 +121,18 @@ export default function GroupDetailsPage() {
               );
               setLecturers(onlyLecturers);
 
-              // Check if current user is Chair
-              if (currentUid) {
+              // Check if current user is Chair (if not already set by system role)
+              if (currentUid && !isSystemChair) {
                 const currentUserInSession = onlyLecturers.find(
-                  (l: any) => l.id === currentUid
+                  (l: any) =>
+                    String(l.id).toLowerCase() ===
+                    String(currentUid).toLowerCase()
                 );
 
                 if (
-                  (currentUserInSession &&
-                    currentUserInSession.role === "Chair") ||
-                  isSystemChair
+                  currentUserInSession &&
+                  currentUserInSession.role &&
+                  currentUserInSession.role.toLowerCase() === "chair"
                 ) {
                   setIsChair(true);
                 }
