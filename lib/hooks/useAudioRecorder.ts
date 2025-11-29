@@ -11,6 +11,7 @@ export const useAudioRecorder = ({
 }: UseAudioRecorderProps) => {
   const [isRecording, setIsRecording] = useState(false);
   const [isAsking, setIsAsking] = useState(false); // chế độ câu hỏi
+  const [wsConnected, setWsConnected] = useState(false); // WebSocket connection status
   const wsRef = useRef<WebSocket | null>(null);
 
   const streamRef = useRef<MediaStream | null>(null);
@@ -18,7 +19,7 @@ export const useAudioRecorder = ({
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
 
-  // Mở WS một lần và giữ kết nối suốt phiên
+  // Kết nối WebSocket chỉ khi startRecording
   const connectWs = useCallback(() => {
     if (
       wsRef.current &&
@@ -32,6 +33,7 @@ export const useAudioRecorder = ({
 
     ws.onopen = () => {
       console.log("WS connected:", wsUrl);
+      setWsConnected(true);
     };
     ws.onmessage = (evt) => {
       try {
@@ -41,18 +43,25 @@ export const useAudioRecorder = ({
         console.log("WS raw:", evt.data);
       }
     };
-    ws.onerror = (e) => console.error("WS error:", e);
-    ws.onclose = () => console.log("WS closed");
+    ws.onerror = (e) => {
+      console.error("WS error:", e);
+      setWsConnected(false);
+    };
+    ws.onclose = () => {
+      console.log("WS closed");
+      setWsConnected(false);
+    };
   }, [wsUrl, onWsEvent]);
 
-  useEffect(() => {
-    connectWs();
-    return () => {
-      try {
-        wsRef.current?.close();
-      } catch {}
-    };
-  }, [connectWs]);
+  // Không tự động connect khi load trang nữa
+  // useEffect(() => {
+  //   connectWs();
+  //   return () => {
+  //     try {
+  //       wsRef.current?.close();
+  //     } catch {}
+  //   };
+  // }, [connectWs]);
 
   const startRecording = useCallback(async () => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
@@ -134,6 +143,7 @@ export const useAudioRecorder = ({
       console.warn("Stop recording error:", e);
     }
     setIsRecording(false);
+    console.log("Microphone stopped (WebSocket still open)");
   }, []);
 
   // Toggle chế độ câu hỏi: q:start / q:end
@@ -153,10 +163,19 @@ export const useAudioRecorder = ({
 
   // Kết thúc phiên hội đồng: gửi "stop" để server flush/close
   const stopSession = useCallback(() => {
-    console.log("Stopping session and closing WebSocket...");
+    console.log("Ending session and closing WebSocket...");
+    
+    // Stop recording if still recording
+    if (isRecording) {
+      stopRecording();
+    }
+    setIsAsking(false);
+
+    // Close WebSocket
     try {
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
         wsRef.current.send("stop");
+        console.log("Sent stop command to WebSocket");
       }
     } catch (e) {
       console.warn("Error sending stop command:", e);
@@ -164,20 +183,19 @@ export const useAudioRecorder = ({
 
     try {
       if (wsRef.current) {
-        wsRef.current.close();
+        wsRef.current.close(1000, "Session ended by user"); // 1000 = normal closure
+        console.log("WebSocket closed");
         wsRef.current = null;
       }
     } catch (e) {
       console.warn("Error closing WebSocket:", e);
     }
-
-    stopRecording();
-    setIsAsking(false);
-  }, [stopRecording]);
+  }, [isRecording, stopRecording]);
 
   return {
     isRecording,
     isAsking,
+    wsConnected,
     startRecording,
     stopRecording,
     toggleAsk,
