@@ -1,15 +1,15 @@
 "use client";
 
 import SidebarBase from "@/app/sidebar/SidebarBase";
-import { Users, Star, History } from "lucide-react";
+import { Calendar, Star, History } from "lucide-react";
 
 export default function MemberSidebar() {
   // Cấu hình các liên kết dành cho Member
   const links = [
     {
-      href: "/member/groups-to-grade",
-      label: "Groups to Grade",
-      icon: Users,
+      href: "/member/defense-sessions",
+      label: "Defense Sessions",
+      icon: Calendar,
     },
     {
       href: "/member/peer-score",

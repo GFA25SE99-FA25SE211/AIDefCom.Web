@@ -1,13 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { Users, Info } from "lucide-react";
 import { groupsApi } from "@/lib/api/groups";
 import { defenseSessionsApi } from "@/lib/api/defense-sessions";
 import { committeeAssignmentsApi } from "@/lib/api/committee-assignments";
 import { scoresApi } from "@/lib/api/scores";
 import { authApi } from "@/lib/api/auth";
-import type { GroupDto, DefenseSessionDto } from "@/lib/models";
+import { rubricsApi } from "@/lib/api/rubrics";
+import { studentsApi } from "@/lib/api/students";
+import { useScoreRealTime } from "@/lib/hooks/useScoreRealTime";
+import { ScoreNotifications } from "@/lib/components/ScoreNotifications";
+import type { GroupDto, DefenseSessionDto, ScoreReadDto } from "@/lib/models";
 
 interface ScoreCriteriaDetail {
   rubricName: string;
@@ -19,6 +23,7 @@ interface ScoreData {
   groupName: string;
   projectTitle: string;
   avgScore: string | null;
+  sessionId?: number;
   members: Array<{
     name: string;
     score: string;
@@ -171,9 +176,9 @@ const getProjectTitle = (group: GroupDto) =>
 export default function PeerScoresPage() {
   const [scoreData, setScoreData] = useState<ScoreData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>(
-    {}
-  );
+  const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
+  const [sessionIds, setSessionIds] = useState<number[]>([]);
+  const fetchPeerScoresRef = useRef<(() => Promise<void>) | null>(null);
 
   const toggleDetails = (rowKey: string) => {
     setExpandedRows((prev) => ({
@@ -182,24 +187,33 @@ export default function PeerScoresPage() {
     }));
   };
 
-  useEffect(() => {
-    const fetchPeerScores = async () => {
+  const fetchPeerScores = useCallback(async () => {
       try {
         setLoading(true);
-        const [groupsRes, sessionsRes, assignmentsRes, usersRes, scoresRes] =
-          await Promise.all([
-            groupsApi.getAll().catch(() => ({ data: [] })),
-            defenseSessionsApi.getAll().catch(() => ({ data: [] })),
-            committeeAssignmentsApi.getAll().catch(() => ({ data: [] })),
-            authApi.getAllUsers().catch(() => ({ data: [] })),
-            scoresApi.getAll().catch(() => ({ data: [] })),
-          ]);
+        
+        // Helper function to handle API errors gracefully
+        const safeApiCall = async <T,>(apiCall: () => Promise<{ data: T }>, fallback: T = [] as T) => {
+          try {
+            const result = await apiCall();
+            return result.data || fallback;
+          } catch (error: any) {
+            console.error('API call failed:', error);
+            // Check if it's a network error
+            if (error?.isNetworkError || error?.message?.includes('Network error') || error?.message?.includes('Failed to fetch')) {
+              console.warn('Network error detected, using fallback data');
+            }
+            return fallback;
+          }
+        };
 
-        const groups = groupsRes.data || [];
-        const sessions = sessionsRes.data || [];
-        const assignments = assignmentsRes.data || [];
-        const users = usersRes.data || [];
-        const allScores = scoresRes.data || [];
+        const [groups, sessions, assignments, users, allScores] =
+          await Promise.all([
+            safeApiCall(() => groupsApi.getAll(), []),
+            safeApiCall(() => defenseSessionsApi.getAll(), []),
+            safeApiCall(() => committeeAssignmentsApi.getAll(), []),
+            safeApiCall(() => authApi.getAllUsers(), []),
+            safeApiCall(() => scoresApi.getAll(), []),
+          ]);
 
         // Debug logging
         console.log("🔍 Debug Peer Scores Data:");
@@ -301,6 +315,7 @@ export default function PeerScoresPage() {
                 projectTitle,
                 avgScore,
                 members,
+                sessionId: session?.id, // Add sessionId for real-time filtering
               });
             }
           });
@@ -335,12 +350,15 @@ export default function PeerScoresPage() {
 
               const displayName = getGroupDisplayName(group);
               const projectTitle = getProjectTitle(group);
+              // Use first session ID if available
+              const firstSessionId = groupSessions.length > 0 ? groupSessions[0].id : undefined;
 
               scores.push({
                 groupName: displayName,
                 projectTitle,
                 avgScore: null,
                 members,
+                sessionId: firstSessionId, // Add sessionId for real-time filtering
               });
             }
           });
@@ -421,23 +439,87 @@ export default function PeerScoresPage() {
                 : "Unknown Project",
               avgScore,
               members,
+              sessionId: sessionId, // Add sessionId for real-time filtering
             });
           });
         }
 
         console.log("📊 Transformed scores:", scores);
 
+        // Extract session IDs for SignalR subscription
+        const uniqueSessionIds = Array.from(
+          new Set(
+            scores
+              .map((s) => s.sessionId)
+              .filter((id): id is number => id !== undefined)
+          )
+        );
+        setSessionIds(uniqueSessionIds);
+
         setScoreData(scores.length > 0 ? scores : defaultScoreData); // Fallback to default if empty
-      } catch (error) {
+      } catch (error: any) {
         console.error("Error fetching peer scores:", error);
+        
+        // Show user-friendly error message for network errors
+        if (error?.isNetworkError || error?.message?.includes('Network error') || error?.message?.includes('Failed to fetch')) {
+          console.error('Network connection error. Please check:');
+          console.error('1. Is the backend server running?');
+          console.error('2. Is the API URL correct?');
+          console.error('3. Are CORS settings configured?');
+          
+          // You can optionally show a toast/notification here
+          // For now, we'll use default data as fallback
+        }
+        
         setScoreData(defaultScoreData); // Use default data on error
       } finally {
         setLoading(false);
       }
-    };
+    }, []);
 
+  // Store ref for useScoreRealTime callback
+  fetchPeerScoresRef.current = fetchPeerScores;
+
+  // Real-time score updates - subscribe to all sessions
+  const { isConnected } = useScoreRealTime({
+    onScoreUpdate: (update) => {
+      console.log('Real-time score update received:', update);
+      
+      // Dispatch custom event for notifications
+      const event = new CustomEvent('scoreUpdate', {
+        detail: {
+          message: update.sessionId 
+            ? `Score updated for session ${update.sessionId}`
+            : 'Score updated',
+          type: 'success'
+        }
+      });
+      window.dispatchEvent(event);
+      
+      // Refresh data when score is updated
+      if (fetchPeerScoresRef.current) {
+        fetchPeerScoresRef.current();
+      }
+    },
+    onError: (error) => {
+      console.error('Real-time connection error:', error);
+      
+      // Dispatch error event for notifications
+      const event = new CustomEvent('scoreUpdate', {
+        detail: {
+          message: 'Real-time connection error. Please refresh the page.',
+          type: 'error'
+        }
+      });
+      window.dispatchEvent(event);
+    },
+    sessionIds: sessionIds,
+    subscribeToAll: sessionIds.length === 0, // Subscribe to all if no specific sessions
+  });
+
+  useEffect(() => {
     fetchPeerScores();
-  }, []);
+  }, [fetchPeerScores]);
 
   if (loading) {
     return (
@@ -451,6 +533,9 @@ export default function PeerScoresPage() {
 
   return (
     <>
+      {/* Real-time Score Notifications */}
+      <ScoreNotifications position="top-right" />
+      
       <main className="main-content">
         <header className="main-header flex flex-col md:flex-row md:items-center md:justify-between bg-white p-5 rounded-2xl shadow-sm border border-gray-100 mb-6">
           {/* Left side */}
