@@ -27,15 +27,17 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Read from Azure environment at build time
+  // Will use value from next.config.ts env which reads from Azure
+  const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "";
+
   return (
     <html lang="en" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         {/* Google OAuth provider */}
-        <GoogleOAuthProvider
-          clientId={process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID!}
-        >
+        <GoogleOAuthProvider clientId={googleClientId}>
           {children}
         </GoogleOAuthProvider>
       </body>
