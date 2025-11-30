@@ -127,8 +127,8 @@ export default function TranscriptPage({
   // Use local backend URL for debugging
   // Backend automatically identifies speaker, so we don't need to send speaker param
   // REMOVING defense_session_id to match Python script behavior (which works).
-  //const WS_URL = `ws://localhost:8000/ws/stt`;
-   const WS_URL = `ws://localhost:8000/ws/stt?defense_session_id=${id}`;
+  const WS_URL = `ws://localhost:8000/ws/stt?defense_session_id=${id}`;
+   //const WS_URL = `ws://aidefcom.io.vn/ws/stt?defense_session_id=${id}`;
 
   const {
     isRecording,
@@ -168,15 +168,19 @@ export default function TranscriptPage({
       swalConfig.loading("Đang xử lý câu hỏi...", "Vui lòng chờ hệ thống phân tích câu hỏi");
       
       // 3. Sau 5s, nếu vẫn chưa có kết quả thì show nút "Tiếp tục"
-      questionTimeoutRef.current = setTimeout(() => {
-        // Chỉ show nếu vẫn đang chờ kết quả
+      // Popup upgrade timeout (separate from enable timer). Use a separate timeout so we don't conflict with earlier stored one
+      const upgradePopupTimeout = setTimeout(() => {
         if (waitingForQuestionResult.current) {
           swalConfig.warning(
-            "Đang xử lý câu hỏi...", 
+            "Đang xử lý câu hỏi...",
             "Hệ thống đang phân tích câu hỏi. Bạn có thể tiếp tục buổi bảo vệ, kết quả sẽ hiển thị khi hoàn tất."
           );
         }
       }, 5000);
+      // Keep reference only if previous wasn't repurposed
+      if (!questionTimeoutRef.current) {
+        questionTimeoutRef.current = upgradePopupTimeout;
+      }
       
       // 4. Gửi lệnh kết thúc (toggleAsk sẽ gửi q:end)
       toggleAsk();
@@ -290,13 +294,11 @@ export default function TranscriptPage({
               {wsConnected && isRecording && (
                 <button
                   onClick={handleToggleQuestion}
-                  disabled={isAsking && !hasQuestionFinalText}
                   className={`px-3 py-2 rounded-md text-white text-xs font-medium transition-colors ${
                     isAsking
-                      ? "bg-orange-600 hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      ? "bg-orange-600 hover:bg-orange-700"
                       : "bg-indigo-500 hover:bg-indigo-600"
                   }`}
-                  title={isAsking && !hasQuestionFinalText ? "Vui lòng nói câu hỏi hoàn chỉnh" : ""}
                 >
                   {isAsking ? "Kết thúc đặt câu hỏi" : "Đặt câu hỏi"}
                 </button>
