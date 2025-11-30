@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Save } from "lucide-react";
+import { ArrowLeft, Save, Mic, MicOff } from "lucide-react";
 import { groupsApi } from "@/lib/api/groups";
 import { studentsApi } from "@/lib/api/students";
 import { memberNotesApi } from "@/lib/api/member-notes";
@@ -14,6 +14,7 @@ import { swalConfig } from "@/lib/utils/sweetAlert";
 import { authUtils } from "@/lib/utils/auth";
 import Swal from "sweetalert2";
 import type { GroupDto, StudentDto, ScoreCreateDto } from "@/lib/models";
+import { useAudioRecorder } from "@/lib/hooks/useAudioRecorder";
 
 interface StudentScore {
   id: string;
@@ -153,6 +154,45 @@ export default function GradeGroupPage() {
   const [rubrics, setRubrics] = useState<any[]>([]);
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string>("");
+
+  // Audio Recorder Logic
+  const WS_URL = sessionId
+    ? `ws://localhost:8000/ws/stt?defense_session_id=${sessionId}`
+    : null;
+
+  const handleSTTEvent = (msg: any) => {
+    const eventType = msg.type || msg.event;
+
+    if (eventType === "error") {
+      console.error("STT Error:", msg.message || msg.error);
+      swalConfig.error(
+        "Lỗi STT",
+        msg.message || msg.error || "Đã xảy ra lỗi không xác định"
+      );
+    } else if (eventType === "session_started") {
+      console.log("Session started:", msg.session_id);
+    } else if (eventType === "speaker_identified") {
+      console.log("Speaker identified:", msg.speaker);
+    } else if (eventType === "partial" || eventType === "result") {
+      // Log these events to verify Mic is working and backend is responding
+      console.log(`[STT ${eventType}]`, msg.text);
+    }
+    // We ignore 'partial' and 'result' events here as text is displayed on Secretary's screen
+  };
+
+  const { isRecording, startRecording, stopRecording, wsConnected } =
+    useAudioRecorder({
+      wsUrl: WS_URL || "",
+      onWsEvent: handleSTTEvent,
+    });
+
+  const handleToggleRecording = async () => {
+    if (isRecording) {
+      stopRecording();
+    } else {
+      await startRecording();
+    }
+  };
 
   useEffect(() => {
     const fetchGroupData = async () => {
@@ -461,6 +501,35 @@ export default function GradeGroupPage() {
             </div>
 
             <div className="flex items-center gap-3 flex-wrap justify-end">
+              {/* Mic Button */}
+              {sessionId && (
+                <button
+                  onClick={handleToggleRecording}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium shadow-sm transition ${
+                    isRecording
+                      ? "bg-red-50 border-red-200 text-red-600 hover:bg-red-100"
+                      : "bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100"
+                  }`}
+                  title={wsConnected ? "Ready to record" : "Connecting..."}
+                >
+                  {isRecording ? (
+                    <MicOff className="w-4 h-4" />
+                  ) : (
+                    <Mic className="w-4 h-4" />
+                  )}
+                  <span>{isRecording ? "Stop Mic" : "Start Mic"}</span>
+                  {wsConnected && (
+                    <span
+                      className={`w-2 h-2 rounded-full ml-1 ${
+                        isRecording
+                          ? "bg-red-500 animate-pulse"
+                          : "bg-green-500"
+                      }`}
+                    ></span>
+                  )}
+                </button>
+              )}
+
               <button
                 onClick={handleCancel}
                 className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 text-gray-700 text-sm font-medium shadow-sm hover:bg-gray-100 transition"

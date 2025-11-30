@@ -3,11 +3,13 @@ import { useState, useRef, useCallback, useEffect } from "react";
 interface UseAudioRecorderProps {
   wsUrl: string; // ví dụ: ws://localhost:8000/ws/stt?speaker=Khach&defense_session_id=DEF123
   onWsEvent?: (msg: any) => void; // nhận event JSON từ server (partial/final/question_mode_result...)
+  autoConnect?: boolean;
 }
 
 export const useAudioRecorder = ({
   wsUrl,
   onWsEvent,
+  autoConnect = false,
 }: UseAudioRecorderProps) => {
   const [isRecording, setIsRecording] = useState(false);
   const [isAsking, setIsAsking] = useState(false); // chế độ câu hỏi
@@ -38,6 +40,7 @@ export const useAudioRecorder = ({
     ws.onmessage = (evt) => {
       try {
         const msg = JSON.parse(evt.data);
+        console.log("WS received:", msg); // Debug log
         onWsEvent?.(msg);
       } catch {
         console.log("WS raw:", evt.data);
@@ -53,15 +56,22 @@ export const useAudioRecorder = ({
     };
   }, [wsUrl, onWsEvent]);
 
-  // Không tự động connect khi load trang nữa
-  // useEffect(() => {
-  //   connectWs();
-  //   return () => {
-  //     try {
-  //       wsRef.current?.close();
-  //     } catch {}
-  //   };
-  // }, [connectWs]);
+  // Tự động connect nếu autoConnect = true
+  useEffect(() => {
+    if (autoConnect && wsUrl) {
+      connectWs();
+    }
+    return () => {
+      // Chỉ đóng khi unmount nếu cần, nhưng cẩn thận vì connectWs tạo instance mới
+      // Tốt nhất để cleanup trong connectWs hoặc quản lý state tốt hơn
+      // Ở đây ta giữ kết nối cho đến khi stopSession hoặc unmount
+      if (autoConnect) {
+        try {
+          wsRef.current?.close();
+        } catch {}
+      }
+    };
+  }, [connectWs, autoConnect, wsUrl]);
 
   const startRecording = useCallback(async () => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
@@ -164,7 +174,7 @@ export const useAudioRecorder = ({
   // Kết thúc phiên hội đồng: gửi "stop" để server flush/close
   const stopSession = useCallback(() => {
     console.log("Ending session and closing WebSocket...");
-    
+
     // Stop recording if still recording
     if (isRecording) {
       stopRecording();
