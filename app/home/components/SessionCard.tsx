@@ -1,8 +1,9 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Calendar, MapPin, Users, Clock } from "lucide-react";
+import { defenseSessionsApi } from "@/lib/api/defense-sessions";
 
 export type SessionStatus = "Upcoming" | "Completed" | "Scheduled";
 
@@ -32,6 +33,8 @@ const SessionCard: React.FC<SessionCardProps> = ({
   members,
 }) => {
   const router = useRouter();
+  const [isChair, setIsChair] = useState(false);
+  const [isCheckingRole, setIsCheckingRole] = useState(true);
   const isCompleted = status === "Completed";
   const sessionStatusClass = status.toLowerCase();
 
@@ -40,9 +43,70 @@ const SessionCard: React.FC<SessionCardProps> = ({
     return date.toLocaleDateString("en-GB");
   };
 
+  // Check if current user is chair in this session
+  useEffect(() => {
+    const checkChairRole = async () => {
+      try {
+        setIsCheckingRole(true);
+        
+        // Get current user from localStorage
+        const storedUser = localStorage.getItem("user");
+        if (!storedUser) {
+          setIsCheckingRole(false);
+          return;
+        }
+
+        const parsedUser = JSON.parse(storedUser);
+        const currentUserId = parsedUser.id;
+
+        // Check if user has system Chair role
+        const isSystemChair = 
+          (parsedUser.roles && parsedUser.roles.some((r: string) => r.toLowerCase() === "chair")) ||
+          (parsedUser.role && parsedUser.role.toLowerCase() === "chair");
+
+        if (isSystemChair) {
+          setIsChair(true);
+          setIsCheckingRole(false);
+          return;
+        }
+
+        // Check role in session
+        try {
+          const lecturersRes = await defenseSessionsApi.getUsersBySessionId(sessionId);
+          if (lecturersRes.data) {
+            const currentUserInSession = lecturersRes.data.find(
+              (user: any) => 
+                String(user.id).toLowerCase() === String(currentUserId).toLowerCase()
+            );
+
+            if (
+              currentUserInSession &&
+              currentUserInSession.role &&
+              currentUserInSession.role.toLowerCase() === "chair"
+            ) {
+              setIsChair(true);
+            }
+          }
+        } catch (err) {
+          console.error("Failed to check chair role:", err);
+        }
+      } catch (err) {
+        console.error("Error checking role:", err);
+      } finally {
+        setIsCheckingRole(false);
+      }
+    };
+
+    checkChairRole();
+  }, [sessionId]);
+
   const handleViewClick = () => {
-    // Navigate to session details or grading page using groupId
-    router.push(`/home/view/${groupId}`);
+    // If user is chair, navigate to chair detail page, otherwise to home detail page
+    if (isChair) {
+      router.push(`/chair/groups/${groupId}`);
+    } else {
+      router.push(`/home/view/${groupId}`);
+    }
   };
 
   return (

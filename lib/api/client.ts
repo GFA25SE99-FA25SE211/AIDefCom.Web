@@ -141,8 +141,25 @@ class ApiClient {
     } catch (error) {
       console.error(`API Error [${endpoint}]:`, error);
       // Re-throw with more context if it's a network error
-      if (error instanceof TypeError && error.message === 'Failed to fetch') {
-        throw new Error(`Network error: Cannot connect to API at ${url}. Make sure the backend is running.`);
+      if (error instanceof TypeError && (error.message === 'Failed to fetch' || error.message.includes('fetch'))) {
+        const errorMessage = `Network error: Cannot connect to API at ${url}. 
+        
+Possible causes:
+- Backend server is not running
+- CORS is not configured correctly
+- Network connectivity issues
+- Invalid API URL
+
+Please check:
+1. Is the backend server running?
+2. Is the API URL correct? (Current: ${this.baseUrl})
+3. Are CORS settings configured in the backend?`;
+        
+        const networkError = new Error(errorMessage);
+        (networkError as any).isNetworkError = true;
+        (networkError as any).url = url;
+        (networkError as any).baseUrl = this.baseUrl;
+        throw networkError;
       }
       throw error;
     }

@@ -49,13 +49,12 @@ export default function GroupDetailsPage() {
     const fetchData = async () => {
       try {
         setLoading(true);
-        // 1. Fetch group, students, sessions, rubrics, member notes
-        const [groupRes, studentsRes, sessionsRes, rubricsRes, memberNotesRes] =
+        // 1. Fetch group first to get majorId
+        const [groupRes, studentsRes, sessionsRes, memberNotesRes] =
           await Promise.all([
             groupsApi.getById(id),
             studentsApi.getByGroupId(id),
             defenseSessionsApi.getByGroupId(id),
-            rubricsApi.getAll(),
             memberNotesApi.getByGroupId(id),
           ]);
 
@@ -85,12 +84,33 @@ export default function GroupDetailsPage() {
 
         if (groupRes.data) {
           setGroup(groupRes.data);
+          
+          // 2. Fetch rubrics by majorId after getting group
+          if (groupRes.data.majorId) {
+            try {
+              const rubricsRes = await rubricsApi.getByMajorId(groupRes.data.majorId);
+              if (rubricsRes.data) {
+                setRubrics(rubricsRes.data);
+              }
+            } catch (rubricError) {
+              console.error("Error fetching rubrics by major:", rubricError);
+              setRubrics([]);
+            }
+          } else {
+            // Fallback to getAll if no majorId
+            try {
+              const rubricsRes = await rubricsApi.getAll();
+              if (rubricsRes.data) {
+                setRubrics(rubricsRes.data);
+              }
+            } catch (rubricError) {
+              console.error("Error fetching rubrics:", rubricError);
+              setRubrics([]);
+            }
+          }
         }
         if (studentsRes.data) {
           setStudents(studentsRes.data);
-        }
-        if (rubricsRes.data) {
-          setRubrics(rubricsRes.data);
         }
 
         // Set member notes directly from API response

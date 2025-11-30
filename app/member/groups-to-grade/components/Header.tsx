@@ -4,22 +4,46 @@ import React from "react";
 interface HeaderProps {
   gradedCount: number;
   totalCount: number;
+  showSessionTitle?: boolean;
 }
 
-const Header: React.FC<HeaderProps> = ({ gradedCount, totalCount }) => {
+const Header: React.FC<HeaderProps> = ({
+  gradedCount,
+  totalCount,
+  showSessionTitle = true,
+}) => {
   return (
     <header className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 mb-6">
       <div>
-        <h1 className="text-xl font-semibold text-gray-800">Groups to Grade</h1>
-        <p className="text-gray-500 text-sm">
-          You have graded{" "}
-          <span className="font-medium text-indigo-600">
-            {gradedCount}/{totalCount}
-          </span>{" "}
-          groups
-        </p>
+        {showSessionTitle && (
+          <>
+            <h1 className="text-xl font-semibold text-gray-800">
+              Groups to Grade
+            </h1>
+            <p className="text-gray-500 text-sm">
+              You have graded{" "}
+              <span className="font-medium text-indigo-600">
+                {gradedCount}/{totalCount}
+              </span>{" "}
+              groups
+            </p>
+          </>
+        )}
+        {!showSessionTitle && (
+          <>
+            <h2 className="text-lg font-semibold text-gray-800">
+              Session Groups
+            </h2>
+            <p className="text-gray-500 text-sm">
+              Graded{" "}
+              <span className="font-medium text-indigo-600">
+                {gradedCount}/{totalCount}
+              </span>{" "}
+              groups in this session
+            </p>
+          </>
+        )}
       </div>
-
     </header>
   );
 };

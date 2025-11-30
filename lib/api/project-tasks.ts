@@ -22,6 +22,14 @@ export const projectTasksApi = {
     return apiClient.get<ProjectTaskDto[]>(`/api/project-tasks/assignee/${assignedToId}`);
   },
 
+  getByAssigneeAndSession: async (assignedToId: string, sessionId: number) => {
+    return apiClient.get<ProjectTaskDto[]>(`/api/project-tasks/assignee/${assignedToId}/session/${sessionId}`);
+  },
+
+  getRubricNamesByAssigneeAndSession: async (assignedToId: string, sessionId: number) => {
+    return apiClient.get<string[]>(`/api/project-tasks/assignee/${assignedToId}/session/${sessionId}/rubrics`);
+  },
+
   create: async (data: ProjectTaskCreateDto) => {
     return apiClient.post<ProjectTaskDto>('/api/project-tasks', data);
   },
