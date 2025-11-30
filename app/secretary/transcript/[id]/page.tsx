@@ -130,6 +130,7 @@ export default function TranscriptPage({
   const WS_URL = `ws://localhost:8000/ws/stt?defense_session_id=${id}`;
    //const WS_URL = `ws://aidefcom.io.vn/ws/stt?defense_session_id=${id}`;
 
+
   const {
     isRecording,
     isAsking,
