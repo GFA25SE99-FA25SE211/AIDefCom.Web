@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
 export default function MemberHomePage() {
-  redirect("/member/home");
+  redirect("/member/defense-sessions");
 }

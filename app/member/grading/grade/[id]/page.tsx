@@ -1,16 +1,17 @@
 "use client";
 
-import React, { useState, useEffect, Suspense } from "react";
+import React, { useState, useEffect, Suspense, useRef } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Save } from "lucide-react";
+import { ArrowLeft, Save, Mic, MicOff, MessageSquare, StopCircle } from "lucide-react";
 import { groupsApi } from "@/lib/api/groups";
 import { studentsApi } from "@/lib/api/students";
 import { memberNotesApi } from "@/lib/api/member-notes";
 import { rubricsApi } from "@/lib/api/rubrics";
 import { scoresApi, type ScoreReadDto } from "@/lib/api/scores";
 import { defenseSessionsApi } from "@/lib/api/defense-sessions";
-import { swalConfig } from "@/lib/utils/sweetAlert";
+import { swalConfig, closeSwal } from "@/lib/utils/sweetAlert";
+import { useAudioRecorder } from "@/lib/hooks/useAudioRecorder";
 import { authUtils } from "@/lib/utils/auth";
 import Swal from "sweetalert2";
 import type { GroupDto, StudentDto, ScoreCreateDto } from "@/lib/models";
@@ -157,6 +158,120 @@ export default function GradeGroupPage() {
   
   // Get sessionId from URL if available
   const urlSessionId = searchParams?.get("sessionId");
+
+  // Mic and session states
+  const [sessionStarted, setSessionStarted] = useState(false); // Thư ký đã bắt đầu phiên chưa
+  const [questionResults, setQuestionResults] = useState<any[]>([]);
+  const [hasQuestionFinalText, setHasQuestionFinalText] = useState(false);
+  const questionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const waitingForQuestionResult = useRef<boolean>(false);
+
+  // WebSocket event handler
+  const handleSTTEvent = (msg: any) => {
+    const eventType = msg.type || msg.event;
+
+    if (eventType === "session_started") {
+      // Thư ký đã bắt đầu phiên
+      setSessionStarted(true);
+    } else if (eventType === "session_ended") {
+      // Thư ký đã kết thúc phiên
+      setSessionStarted(false);
+    } else if (eventType === "question_mode_started") {
+      swalConfig.info("Bắt đầu ghi nhận câu hỏi");
+      setHasQuestionFinalText(false);
+    } else if (eventType === "question_mode_result") {
+      if (questionTimeoutRef.current) {
+        clearTimeout(questionTimeoutRef.current);
+        questionTimeoutRef.current = null;
+      }
+      waitingForQuestionResult.current = false;
+      closeSwal();
+      setHasQuestionFinalText(false);
+      
+      if (msg.is_duplicate) {
+        swalConfig.warning("Câu hỏi bị trùng", "Hệ thống đã ghi nhận câu hỏi này trước đó.");
+      } else {
+        setQuestionResults((prev) => [msg, ...prev]);
+        swalConfig.success("Câu hỏi hợp lệ", "Đã ghi nhận câu hỏi mới.");
+      }
+    } else if (eventType === "error") {
+      console.error("STT Error:", msg.message || msg.error);
+      swalConfig.error("Lỗi STT", msg.message || msg.error || "Đã xảy ra lỗi không xác định");
+    } else if (eventType === "broadcast_transcript") {
+      // Transcript từ client khác trong cùng session (thư ký hoặc member khác nói)
+      console.log("📢 Broadcast from other client:", msg.speaker, msg.text);
+      // Member có thể hiển thị hoặc bỏ qua tùy nhu cầu
+    } else if (eventType === "connected") {
+      console.log("✅ WebSocket connected:", msg.session_id, "room_size:", msg.room_size);
+      // Nếu room_size > 1, có nghĩa thư ký đã kết nối
+      if (msg.room_size > 1) {
+        setSessionStarted(true);
+      }
+    }
+  };
+
+  // WebSocket URL - kết nối cùng session với thư ký
+  const WS_URL = sessionId
+    ? `ws://localhost:8000/ws/stt?defense_session_id=${sessionId}&role=member`
+    : null;
+
+  const {
+    isRecording,
+    isAsking,
+    wsConnected,
+    startRecording,
+    stopRecording,
+    toggleAsk,
+    stopSession,
+  } = useAudioRecorder({
+    wsUrl: WS_URL || "",
+    onWsEvent: handleSTTEvent,
+  });
+
+  const handleToggleRecording = async () => {
+    if (isRecording) {
+      stopRecording(); // Chỉ tạm dừng mic, WebSocket vẫn mở
+    } else {
+      await startRecording();
+    }
+  };
+
+  const handleToggleQuestion = async () => {
+    if (!isAsking) {
+      toggleAsk();
+    } else {
+      if (isRecording) {
+        stopRecording();
+      }
+      
+      waitingForQuestionResult.current = true;
+      swalConfig.loading("Đang xử lý câu hỏi...", "Vui lòng chờ hệ thống phân tích câu hỏi");
+      
+      const upgradePopupTimeout = setTimeout(() => {
+        if (waitingForQuestionResult.current) {
+          swalConfig.warning(
+            "Đang xử lý câu hỏi...",
+            "Hệ thống đang phân tích câu hỏi. Bạn có thể tiếp tục buổi bảo vệ, kết quả sẽ hiển thị khi hoàn tất."
+          );
+        }
+      }, 5000);
+      
+      if (!questionTimeoutRef.current) {
+        questionTimeoutRef.current = upgradePopupTimeout;
+      }
+      
+      toggleAsk();
+    }
+  };
+
+  // Check session status - Tạm thời luôn cho phép (sẽ cần backend hỗ trợ sau)
+  useEffect(() => {
+    // TODO: Implement backend check for session status
+    // Hiện tại, cho phép member sử dụng mic khi đã có sessionId
+    if (sessionId) {
+      setSessionStarted(true);
+    }
+  }, [sessionId]);
 
   useEffect(() => {
     const fetchGroupData = async () => {
@@ -462,6 +577,66 @@ export default function GradeGroupPage() {
 
             {/* Right section */}
             <div className="flex items-center gap-3 flex-wrap justify-end">
+              {/* Mic Controls */}
+              <div className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg border">
+                {!isRecording ? (
+                  <button
+                    onClick={handleToggleRecording}
+                    disabled={!sessionId || !sessionStarted}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-white text-sm font-medium shadow-sm transition ${
+                      !sessionId || !sessionStarted
+                        ? "bg-gray-400 cursor-not-allowed opacity-50"
+                        : "bg-purple-600 hover:bg-purple-700"
+                    }`}
+                    title={!sessionStarted ? "Chờ thư ký bắt đầu phiên" : "Bắt đầu ghi âm"}
+                  >
+                    <Mic className="w-4 h-4" />
+                    <span>Start Mic</span>
+                  </button>
+                ) : (
+                  <>
+                    {!isAsking && (
+                      <button
+                        onClick={handleToggleRecording}
+                        className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-500 text-white hover:bg-red-600 text-sm font-medium shadow-sm transition"
+                      >
+                        <MicOff className="w-4 h-4" />
+                        <span>Stop Mic</span>
+                      </button>
+                    )}
+
+                    <button
+                      onClick={handleToggleQuestion}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium shadow-sm transition ${
+                        isAsking
+                          ? "bg-orange-500 text-white hover:bg-orange-600"
+                          : "bg-indigo-500 text-white hover:bg-indigo-600"
+                      }`}
+                    >
+                      {isAsking ? (
+                        <>
+                          <StopCircle className="w-4 h-4" />
+                          <span>Kết thúc câu hỏi</span>
+                        </>
+                      ) : (
+                        <>
+                          <MessageSquare className="w-4 h-4" />
+                          <span>Đặt câu hỏi</span>
+                        </>
+                      )}
+                    </button>
+                  </>
+                )}
+
+                {/* Connection status */}
+                <div
+                  className={`w-2 h-2 rounded-full ${
+                    wsConnected ? "bg-green-500" : "bg-gray-400"
+                  }`}
+                  title={wsConnected ? "Đã kết nối" : "Chưa kết nối"}
+                />
+              </div>
+
               {/* Back to list */}
               <Link
                 href={urlSessionId ? `/member/defense-sessions?sessionId=${urlSessionId}` : (sessionId ? `/member/defense-sessions?sessionId=${sessionId}` : "/member/groups-to-grade")}

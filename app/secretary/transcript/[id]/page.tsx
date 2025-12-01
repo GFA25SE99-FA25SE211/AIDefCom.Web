@@ -111,6 +111,25 @@ export default function TranscriptPage({
     } else if (eventType === "speaker_identified") {
       console.log("Speaker identified:", msg.speaker);
       // Optional: update UI with speaker info if needed
+    } else if (eventType === "broadcast_transcript") {
+      // Transcript từ client khác trong cùng session (member nói)
+      console.log("📢 Broadcast from other client:", msg.speaker, msg.text);
+      if (msg.text) {
+        setTranscript((prev) => [
+          ...prev,
+          {
+            event: "recognized",
+            type: "result",
+            text: msg.text,
+            speaker: msg.speaker || "Member",
+            user_id: msg.user_id,
+            timestamp: msg.timestamp,
+            from_broadcast: true, // Đánh dấu là từ broadcast
+          },
+        ]);
+      }
+    } else if (eventType === "connected") {
+      console.log("✅ WebSocket connected:", msg.session_id, "room_size:", msg.room_size);
     }
   };
 
