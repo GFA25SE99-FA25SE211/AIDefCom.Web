@@ -3,7 +3,14 @@
 import React, { useState, useEffect, Suspense, useRef } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Save, Mic, MicOff, MessageSquare, StopCircle } from "lucide-react";
+import {
+  ArrowLeft,
+  Save,
+  Mic,
+  MicOff,
+  MessageSquare,
+  StopCircle,
+} from "lucide-react";
 import { groupsApi } from "@/lib/api/groups";
 import { studentsApi } from "@/lib/api/students";
 import { memberNotesApi } from "@/lib/api/member-notes";
@@ -155,7 +162,7 @@ export default function GradeGroupPage() {
   const [rubrics, setRubrics] = useState<any[]>([]);
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string>("");
-  
+
   // Get sessionId from URL if available
   const urlSessionId = searchParams?.get("sessionId");
 
@@ -189,20 +196,29 @@ export default function GradeGroupPage() {
       waitingForQuestionResult.current = false;
       closeSwal();
       setHasQuestionFinalText(false);
-      
+
       if (msg.is_duplicate) {
-        swalConfig.warning("Câu hỏi bị trùng", "Hệ thống đã ghi nhận câu hỏi này trước đó.");
+        swalConfig.warning(
+          "Câu hỏi bị trùng",
+          "Hệ thống đã ghi nhận câu hỏi này trước đó."
+        );
       } else {
         setQuestionResults((prev) => [msg, ...prev]);
         swalConfig.success("Câu hỏi hợp lệ", "Đã ghi nhận câu hỏi mới.");
       }
     } else if (eventType === "error") {
       console.error("STT Error:", msg.message || msg.error);
-      swalConfig.error("Lỗi STT", msg.message || msg.error || "Đã xảy ra lỗi không xác định");
+      swalConfig.error(
+        "Lỗi STT",
+        msg.message || msg.error || "Đã xảy ra lỗi không xác định"
+      );
     } else if (eventType === "broadcast_transcript") {
       // Transcript từ client khác trong cùng session (thư ký hoặc member khác nói)
       // Bỏ qua nếu broadcast từ chính mình
-      if (msg.source_session_id && msg.source_session_id === mySessionIdRef.current) {
+      if (
+        msg.source_session_id &&
+        msg.source_session_id === mySessionIdRef.current
+      ) {
         console.log("🚫 Ignoring broadcast from self");
         return;
       }
@@ -210,26 +226,35 @@ export default function GradeGroupPage() {
       // Member có thể hiển thị hoặc bỏ qua tùy nhu cầu
     } else if (eventType === "broadcast_question_started") {
       // Người khác (chair/thư ký/member khác) bắt đầu đặt câu hỏi - dùng toast nhẹ
-      if (msg.source_session_id && msg.source_session_id === mySessionIdRef.current) {
+      if (
+        msg.source_session_id &&
+        msg.source_session_id === mySessionIdRef.current
+      ) {
         return;
       }
       const speakerName = msg.speaker || "Member";
       swalConfig.toast.info(`${speakerName} đang đặt câu hỏi...`);
     } else if (eventType === "broadcast_question_processing") {
       // Người khác kết thúc đặt câu hỏi, đang xử lý - dùng toast nhẹ
-      if (msg.source_session_id && msg.source_session_id === mySessionIdRef.current) {
+      if (
+        msg.source_session_id &&
+        msg.source_session_id === mySessionIdRef.current
+      ) {
         return;
       }
       const speakerName = msg.speaker || "Member";
       swalConfig.toast.info(`Đang xử lý câu hỏi từ ${speakerName}...`);
     } else if (eventType === "broadcast_question_result") {
       // Kết quả câu hỏi từ người khác
-      if (msg.source_session_id && msg.source_session_id === mySessionIdRef.current) {
+      if (
+        msg.source_session_id &&
+        msg.source_session_id === mySessionIdRef.current
+      ) {
         return;
       }
       const speakerName = msg.speaker || "Member";
       const questionText = msg.question_text || "";
-      
+
       if (msg.is_duplicate) {
         swalConfig.toast.info(`Câu hỏi từ ${speakerName} bị trùng`);
       } else {
@@ -242,7 +267,12 @@ export default function GradeGroupPage() {
         swalConfig.toast.success(`Câu hỏi từ ${speakerName} đã được ghi nhận`);
       }
     } else if (eventType === "connected") {
-      console.log("✅ WebSocket connected:", msg.session_id, "room_size:", msg.room_size);
+      console.log(
+        "✅ WebSocket connected:",
+        msg.session_id,
+        "room_size:",
+        msg.room_size
+      );
       // Lưu session_id của mình
       if (msg.session_id) {
         setMySessionId(msg.session_id);
@@ -260,8 +290,6 @@ export default function GradeGroupPage() {
       setSessionStarted(false);
     }
   };
-
-  
 
   // WebSocket URL - kết nối cùng session với thư ký
   const WS_URL = sessionId
@@ -301,13 +329,16 @@ export default function GradeGroupPage() {
       if (isRecording) {
         stopRecording();
       }
-      
+
       // Kết thúc đặt câu hỏi - broadcast cho thư ký biết đang xử lý
       broadcastQuestionProcessing();
-      
+
       waitingForQuestionResult.current = true;
-      swalConfig.loading("Đang xử lý câu hỏi...", "Vui lòng chờ hệ thống phân tích câu hỏi");
-      
+      swalConfig.loading(
+        "Đang xử lý câu hỏi...",
+        "Vui lòng chờ hệ thống phân tích câu hỏi"
+      );
+
       const upgradePopupTimeout = setTimeout(() => {
         if (waitingForQuestionResult.current) {
           swalConfig.warning(
@@ -316,11 +347,11 @@ export default function GradeGroupPage() {
           );
         }
       }, 5000);
-      
+
       if (!questionTimeoutRef.current) {
         questionTimeoutRef.current = upgradePopupTimeout;
       }
-      
+
       toggleAsk();
     }
   };
@@ -332,17 +363,16 @@ export default function GradeGroupPage() {
     const fetchGroupData = async () => {
       try {
         setLoading(true);
-        const [groupRes, studentsRes, sessionsRes] =
-          await Promise.all([
-            groupsApi.getById(groupId).catch(() => ({ data: null })),
-            studentsApi.getByGroupId(groupId).catch(() => ({ data: [] })),
-            defenseSessionsApi.getAll().catch(() => ({ data: [] })),
-          ]);
+        const [groupRes, studentsRes, sessionsRes] = await Promise.all([
+          groupsApi.getById(groupId).catch(() => ({ data: null })),
+          studentsApi.getByGroupId(groupId).catch(() => ({ data: [] })),
+          defenseSessionsApi.getAll().catch(() => ({ data: [] })),
+        ]);
 
         const group = groupRes.data;
         const students = studentsRes.data || [];
         const sessions = sessionsRes.data || [];
-        
+
         // Fetch rubrics by majorId
         if (group?.majorId) {
           try {
@@ -643,7 +673,11 @@ export default function GradeGroupPage() {
                         ? "bg-gray-400 cursor-not-allowed opacity-50"
                         : "bg-purple-600 hover:bg-purple-700"
                     }`}
-                    title={!sessionStarted ? "Chờ thư ký bắt đầu phiên" : "Bắt đầu ghi âm"}
+                    title={
+                      !sessionStarted
+                        ? "Chờ thư ký bắt đầu phiên"
+                        : "Bắt đầu ghi âm"
+                    }
                   >
                     <Mic className="w-4 h-4" />
                     <span>Start Mic</span>
@@ -694,7 +728,13 @@ export default function GradeGroupPage() {
 
               {/* Back to list */}
               <Link
-                href={urlSessionId ? `/member/defense-sessions?sessionId=${urlSessionId}` : (sessionId ? `/member/defense-sessions?sessionId=${sessionId}` : "/member/groups-to-grade")}
+                href={
+                  urlSessionId
+                    ? `/member/defense-sessions?sessionId=${urlSessionId}`
+                    : sessionId
+                    ? `/member/defense-sessions?sessionId=${sessionId}`
+                    : "/member/groups-to-grade"
+                }
                 className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 text-gray-700 text-sm font-medium shadow-sm hover:bg-gray-100 transition"
               >
                 <ArrowLeft className="w-4 h-4" />

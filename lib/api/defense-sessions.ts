@@ -1,14 +1,16 @@
-import { apiClient } from './client';
-import { env } from '@/lib/config';
+import { apiClient } from "./client";
+import { env } from "@/lib/config";
 import type {
   DefenseSessionDto,
   DefenseSessionCreateDto,
   DefenseSessionUpdateDto,
-} from '@/lib/models';
+} from "@/lib/models";
 
 export const defenseSessionsApi = {
   getAll: async (includeDeleted: boolean = false) => {
-    return apiClient.get<DefenseSessionDto[]>(`/api/defense-sessions?includeDeleted=${includeDeleted}`);
+    return apiClient.get<DefenseSessionDto[]>(
+      `/api/defense-sessions?includeDeleted=${includeDeleted}`
+    );
   },
 
   getById: async (id: number) => {
@@ -16,7 +18,15 @@ export const defenseSessionsApi = {
   },
 
   getByGroupId: async (groupId: string) => {
-    return apiClient.get<DefenseSessionDto[]>(`/api/defense-sessions/group/${groupId}`);
+    return apiClient.get<DefenseSessionDto[]>(
+      `/api/defense-sessions/group/${groupId}`
+    );
+  },
+
+  getByLecturerId: async (lecturerId: string) => {
+    return apiClient.get<DefenseSessionDto[]>(
+      `/api/defense-sessions/lecturer/${lecturerId}`
+    );
   },
 
   getUsersBySessionId: async (id: number) => {
@@ -24,7 +34,7 @@ export const defenseSessionsApi = {
   },
 
   create: async (data: DefenseSessionCreateDto) => {
-    return apiClient.post<DefenseSessionDto>('/api/defense-sessions', data);
+    return apiClient.post<DefenseSessionDto>("/api/defense-sessions", data);
   },
 
   update: async (id: number, data: DefenseSessionUpdateDto) => {
@@ -36,17 +46,22 @@ export const defenseSessionsApi = {
   },
 
   downloadTemplate: async () => {
-    const response = await fetch(`${env.apiUrl}/api/defense-sessions/import/template`, {
-      method: 'GET',
-    });
+    const response = await fetch(
+      `${env.apiUrl}/api/defense-sessions/import/template`,
+      {
+        method: "GET",
+      }
+    );
     if (!response.ok) {
-      throw new Error('Failed to download defense session template');
+      throw new Error("Failed to download defense session template");
     }
     const blob = await response.blob();
     const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
-    a.download = `DefenseSessions_Template_${new Date().toISOString().split('T')[0]}.xlsx`;
+    a.download = `DefenseSessions_Template_${
+      new Date().toISOString().split("T")[0]
+    }.xlsx`;
     document.body.appendChild(a);
     a.click();
     window.URL.revokeObjectURL(url);
@@ -55,8 +70,7 @@ export const defenseSessionsApi = {
 
   importFromFile: async (file: File) => {
     const formData = new FormData();
-    formData.append('file', file);
-    return apiClient.postFormData('/api/defense-sessions/import', formData);
+    formData.append("file", file);
+    return apiClient.postFormData("/api/defense-sessions/import", formData);
   },
 };
-

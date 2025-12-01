@@ -78,45 +78,63 @@ export default function GroupDetailsPage() {
       waitingForQuestionResult.current = false;
       closeSwal();
       setHasQuestionFinalText(false);
-      
+
       if (msg.is_duplicate) {
-        swalConfig.warning("Câu hỏi bị trùng", "Hệ thống đã ghi nhận câu hỏi này trước đó.");
+        swalConfig.warning(
+          "Câu hỏi bị trùng",
+          "Hệ thống đã ghi nhận câu hỏi này trước đó."
+        );
       } else {
         setQuestionResults((prev) => [msg, ...prev]);
         swalConfig.success("Câu hỏi hợp lệ", "Đã ghi nhận câu hỏi mới.");
       }
     } else if (eventType === "error") {
       console.error("STT Error:", msg.message || msg.error);
-      swalConfig.error("Lỗi STT", msg.message || msg.error || "Đã xảy ra lỗi không xác định");
+      swalConfig.error(
+        "Lỗi STT",
+        msg.message || msg.error || "Đã xảy ra lỗi không xác định"
+      );
     } else if (eventType === "broadcast_transcript") {
       // Transcript từ client khác trong cùng session
-      if (msg.source_session_id && msg.source_session_id === mySessionIdRef.current) {
+      if (
+        msg.source_session_id &&
+        msg.source_session_id === mySessionIdRef.current
+      ) {
         console.log("🚫 Ignoring broadcast from self");
         return;
       }
       console.log("📢 Broadcast from other client:", msg.speaker, msg.text);
     } else if (eventType === "broadcast_question_started") {
       // Người khác (member/thư ký) bắt đầu đặt câu hỏi - dùng toast nhẹ
-      if (msg.source_session_id && msg.source_session_id === mySessionIdRef.current) {
+      if (
+        msg.source_session_id &&
+        msg.source_session_id === mySessionIdRef.current
+      ) {
         return;
       }
       const speakerName = msg.speaker || "Member";
       swalConfig.toast.info(`${speakerName} đang đặt câu hỏi...`);
     } else if (eventType === "broadcast_question_processing") {
       // Người khác kết thúc đặt câu hỏi, đang xử lý - dùng toast nhẹ
-      if (msg.source_session_id && msg.source_session_id === mySessionIdRef.current) {
+      if (
+        msg.source_session_id &&
+        msg.source_session_id === mySessionIdRef.current
+      ) {
         return;
       }
       const speakerName = msg.speaker || "Member";
       swalConfig.toast.info(`Đang xử lý câu hỏi từ ${speakerName}...`);
     } else if (eventType === "broadcast_question_result") {
       // Kết quả câu hỏi từ người khác
-      if (msg.source_session_id && msg.source_session_id === mySessionIdRef.current) {
+      if (
+        msg.source_session_id &&
+        msg.source_session_id === mySessionIdRef.current
+      ) {
         return;
       }
       const speakerName = msg.speaker || "Member";
       const questionText = msg.question_text || "";
-      
+
       if (msg.is_duplicate) {
         swalConfig.toast.info(`Câu hỏi từ ${speakerName} bị trùng`);
       } else {
@@ -129,7 +147,12 @@ export default function GroupDetailsPage() {
         swalConfig.toast.success(`Câu hỏi từ ${speakerName} đã được ghi nhận`);
       }
     } else if (eventType === "connected") {
-      console.log("✅ WebSocket connected:", msg.session_id, "room_size:", msg.room_size);
+      console.log(
+        "✅ WebSocket connected:",
+        msg.session_id,
+        "room_size:",
+        msg.room_size
+      );
       if (msg.session_id) {
         setMySessionId(msg.session_id);
         mySessionIdRef.current = msg.session_id;
@@ -174,13 +197,16 @@ export default function GroupDetailsPage() {
       if (isRecording) {
         stopRecording();
       }
-      
+
       // Kết thúc đặt câu hỏi - broadcast cho thư ký biết đang xử lý
       broadcastQuestionProcessing();
-      
+
       waitingForQuestionResult.current = true;
-      swalConfig.loading("Đang xử lý câu hỏi...", "Vui lòng chờ hệ thống phân tích câu hỏi");
-      
+      swalConfig.loading(
+        "Đang xử lý câu hỏi...",
+        "Vui lòng chờ hệ thống phân tích câu hỏi"
+      );
+
       const upgradePopupTimeout = setTimeout(() => {
         if (waitingForQuestionResult.current) {
           swalConfig.warning(
@@ -189,11 +215,11 @@ export default function GroupDetailsPage() {
           );
         }
       }, 5000);
-      
+
       if (!questionTimeoutRef.current) {
         questionTimeoutRef.current = upgradePopupTimeout;
       }
-      
+
       toggleAsk();
     }
   };
@@ -245,29 +271,16 @@ export default function GroupDetailsPage() {
 
         if (groupRes.data) {
           setGroup(groupRes.data);
-          
-          // 2. Fetch rubrics by majorId after getting group
-          if (groupRes.data.majorId) {
-            try {
-              const rubricsRes = await rubricsApi.getByMajorId(groupRes.data.majorId);
-              if (rubricsRes.data) {
-                setRubrics(rubricsRes.data);
-              }
-            } catch (rubricError) {
-              console.error("Error fetching rubrics by major:", rubricError);
-              setRubrics([]);
+
+          // 2. Fetch all rubrics
+          try {
+            const rubricsRes = await rubricsApi.getAll();
+            if (rubricsRes.data) {
+              setRubrics(rubricsRes.data);
             }
-          } else {
-            // Fallback to getAll if no majorId
-            try {
-              const rubricsRes = await rubricsApi.getAll();
-              if (rubricsRes.data) {
-                setRubrics(rubricsRes.data);
-              }
-            } catch (rubricError) {
-              console.error("Error fetching rubrics:", rubricError);
-              setRubrics([]);
-            }
+          } catch (rubricError) {
+            console.error("Error fetching rubrics:", rubricError);
+            setRubrics([]);
           }
         }
         if (studentsRes.data) {
@@ -395,6 +408,7 @@ export default function GroupDetailsPage() {
         lecturers={lecturers}
         rubrics={rubrics}
         currentUserId={currentUserId}
+        sessionId={defenseSession?.id}
       />
 
       {/* Header with Back Button */}
@@ -439,7 +453,11 @@ export default function GroupDetailsPage() {
                     ? "bg-gray-400 cursor-not-allowed opacity-50"
                     : "bg-purple-600 hover:bg-purple-700"
                 }`}
-                title={!sessionStarted ? "Chờ thư ký bắt đầu phiên" : "Bắt đầu ghi âm"}
+                title={
+                  !sessionStarted
+                    ? "Chờ thư ký bắt đầu phiên"
+                    : "Bắt đầu ghi âm"
+                }
               >
                 <Mic className="w-4 h-4" />
                 <span>Start Mic</span>

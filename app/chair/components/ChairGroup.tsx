@@ -6,7 +6,9 @@ import { defenseSessionsApi } from "@/lib/api/defense-sessions";
 import type { DefenseSessionDto } from "@/lib/models";
 
 export default function ChairGroups() {
-  const [defenseSessions, setDefenseSessions] = useState<DefenseSessionDto[]>([]);
+  const [defenseSessions, setDefenseSessions] = useState<DefenseSessionDto[]>(
+    []
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -14,7 +16,25 @@ export default function ChairGroups() {
     const fetchSessions = async () => {
       try {
         setLoading(true);
-        const response = await defenseSessionsApi.getAll(false);
+
+        // Get current user from localStorage
+        const storedUser = localStorage.getItem("user");
+        let currentUserId = "";
+
+        if (storedUser) {
+          const parsedUser = JSON.parse(storedUser);
+          currentUserId = parsedUser.id;
+        }
+
+        if (!currentUserId) {
+          setError("User not identified. Please login again.");
+          setLoading(false);
+          return;
+        }
+
+        const response = await defenseSessionsApi.getByLecturerId(
+          currentUserId
+        );
         if (response.data) {
           setDefenseSessions(response.data);
         }
@@ -34,7 +54,9 @@ export default function ChairGroups() {
       {/* --- Header Section --- */}
       <div className="section-header mb-6">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-800">Defense Sessions</h1>
+          <h1 className="text-2xl font-semibold text-gray-800">
+            Defense Sessions
+          </h1>
           <p className="text-gray-500 text-sm">
             List of scheduled defense sessions
           </p>
@@ -44,11 +66,15 @@ export default function ChairGroups() {
       {/* --- Session Cards --- */}
       <div className="mt-6 space-y-6">
         {loading ? (
-          <div className="text-center py-10 text-gray-500">Loading sessions...</div>
+          <div className="text-center py-10 text-gray-500">
+            Loading sessions...
+          </div>
         ) : error ? (
           <div className="text-center py-10 text-red-500">{error}</div>
         ) : defenseSessions.length === 0 ? (
-          <div className="text-center py-10 text-gray-500">No defense sessions found.</div>
+          <div className="text-center py-10 text-gray-500">
+            No defense sessions found.
+          </div>
         ) : (
           defenseSessions.map((session) => (
             <div
@@ -61,7 +87,13 @@ export default function ChairGroups() {
                     Group: {session.groupId}
                   </h3>
                   <div className="flex gap-2 mt-2">
-                    <span className={`badge text-xs ${session.status === 'Scheduled' ? 'badge-info' : 'badge-success'}`}>
+                    <span
+                      className={`badge text-xs ${
+                        session.status === "Scheduled"
+                          ? "badge-info"
+                          : "badge-success"
+                      }`}
+                    >
                       {session.status}
                     </span>
                   </div>
@@ -96,10 +128,16 @@ export default function ChairGroups() {
               <div className="p-4 rounded-xl border border-gray-200 bg-gradient-to-r from-white via-purple-50 to-blue-50">
                 <div className="flex flex-wrap gap-4 items-center text-gray-500 text-sm">
                   <span className="flex items-center gap-1">
-                    📅 <span>{new Date(session.defenseDate).toLocaleDateString()}</span>
+                    📅{" "}
+                    <span>
+                      {new Date(session.defenseDate).toLocaleDateString()}
+                    </span>
                   </span>
                   <span className="flex items-center gap-1">
-                    ⏰ <span>{session.startTime} - {session.endTime}</span>
+                    ⏰{" "}
+                    <span>
+                      {session.startTime} - {session.endTime}
+                    </span>
                   </span>
                   <span className="flex items-center gap-1">
                     📍 <span>{session.location}</span>

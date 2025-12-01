@@ -126,7 +126,15 @@ export const useScoreRealTime = ({
       setIsConnected(false);
       onError?.(err);
     }
-  }, [getToken, onScoreUpdate, onError, sessionIds, studentIds, evaluatorIds, subscribeToAll]);
+  }, [
+    getToken,
+    onScoreUpdate,
+    onError,
+    sessionIds,
+    studentIds,
+    evaluatorIds,
+    subscribeToAll,
+  ]);
 
   const subscribeToGroups = useCallback(
     async (connection: signalR.HubConnection) => {
@@ -160,7 +168,7 @@ export const useScoreRealTime = ({
     if (connectionRef.current) {
       const connection = connectionRef.current;
       const state = connection.state;
-      
+
       // If already disconnected, just cleanup
       if (state === signalR.HubConnectionState.Disconnected) {
         connectionRef.current = null;
@@ -174,7 +182,9 @@ export const useScoreRealTime = ({
           if (connection.state === signalR.HubConnectionState.Connected) {
             await Promise.race([
               connection.invoke(methodName, ...args),
-              new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 500))
+              new Promise((_, reject) =>
+                setTimeout(() => reject(new Error("Timeout")), 500)
+              ),
             ]).catch(() => {
               // Silently ignore all errors
             });
@@ -189,8 +199,10 @@ export const useScoreRealTime = ({
       const safeStop = async () => {
         try {
           const currentState = connection.state;
-          if (currentState === signalR.HubConnectionState.Connected ||
-              currentState === signalR.HubConnectionState.Connecting) {
+          if (
+            currentState === signalR.HubConnectionState.Connected ||
+            currentState === signalR.HubConnectionState.Connecting
+          ) {
             // Use stop() with error handling
             await connection.stop().catch((error: any) => {
               // Silently ignore all stop errors
@@ -256,5 +268,3 @@ export const useScoreRealTime = ({
     disconnect,
   };
 };
-
-

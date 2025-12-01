@@ -15,7 +15,7 @@ export const useAudioRecorder = ({
   const [isAsking, setIsAsking] = useState(false); // chế độ câu hỏi
   const [wsConnected, setWsConnected] = useState(false); // WebSocket connection status
   const wsRef = useRef<WebSocket | null>(null);
-  
+
   // Dùng ref để tránh dependency loop - callback không thay đổi reference
   const onWsEventRef = useRef(onWsEvent);
   useEffect(() => {
@@ -26,7 +26,7 @@ export const useAudioRecorder = ({
   const audioContextRef = useRef<AudioContext | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
-  
+
   // Flag để tránh reconnect liên tục
   const isConnectingRef = useRef(false);
 
@@ -43,11 +43,11 @@ export const useAudioRecorder = ({
     ) {
       return;
     }
-    
+
     if (!wsUrl) {
       return;
     }
-    
+
     isConnectingRef.current = true;
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
@@ -88,7 +88,7 @@ export const useAudioRecorder = ({
       return () => clearTimeout(timer);
     }
   }, [autoConnect, wsUrl, connectWs]);
-  
+
   // Cleanup khi unmount
   useEffect(() => {
     return () => {
@@ -202,7 +202,7 @@ export const useAudioRecorder = ({
   // Kết thúc phiên hội đồng: gửi "stop" để server flush/close
   const stopSession = useCallback(() => {
     console.log("Ending session and closing WebSocket...");
-    
+
     // Stop recording if still recording
     if (isRecording) {
       stopRecording();

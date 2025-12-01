@@ -42,7 +42,7 @@ export default function TranscriptPage({
   const questionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const waitingForQuestionResult = useRef<boolean>(false);
   const [hasQuestionFinalText, setHasQuestionFinalText] = useState(false);
-  
+
   // Deduplicate: track recent transcripts to prevent duplicates
   const recentTranscriptsRef = useRef<Set<string>>(new Set());
   // Track processed question IDs to prevent duplicates
@@ -72,7 +72,7 @@ export default function TranscriptPage({
 
   const handleSTTEvent = (msg: any) => {
     const eventType = msg.type || msg.event;
-    
+
     // Helper: Check if transcript is duplicate (same text within 2 seconds)
     const isDuplicateTranscript = (text: string): boolean => {
       if (!text) return false;
@@ -93,15 +93,15 @@ export default function TranscriptPage({
       setInterimText(msg.text || "");
     } else if (eventType === "result" || eventType === "recognized") {
       setInterimText(""); // Clear partial của mình khi có kết quả
-      
+
       // Deduplicate: skip if same text was added recently
       if (msg.text && isDuplicateTranscript(msg.text)) {
         return;
       }
-      
+
       // Normalize event structure for state
       setTranscript((prev) => [...prev, { ...msg, event: "recognized" }]);
-      
+
       // If in question mode, mark that we have final text
       if (isAsking && msg.text) {
         setHasQuestionFinalText(true);
@@ -114,24 +114,27 @@ export default function TranscriptPage({
     } else if (eventType === "question_mode_result") {
       // Kết quả câu hỏi của CHÍNH MÌNH (thư ký tự đặt)
       console.log("Question mode result (self)", msg);
-      
+
       // Clear timeout and reset waiting flag
       if (questionTimeoutRef.current) {
         clearTimeout(questionTimeoutRef.current);
         questionTimeoutRef.current = null;
       }
       waitingForQuestionResult.current = false;
-      
+
       // Close loading popup if open
       closeSwal();
-      
+
       // Reset flag after getting result
       setHasQuestionFinalText(false);
-      
+
       const questionText = msg.question_text || msg.text || "";
-      
+
       if (msg.is_duplicate) {
-        swalConfig.warning("Câu hỏi bị trùng", "Hệ thống đã ghi nhận câu hỏi này trước đó.");
+        swalConfig.warning(
+          "Câu hỏi bị trùng",
+          "Hệ thống đã ghi nhận câu hỏi này trước đó."
+        );
       } else {
         // Thêm vào danh sách (không cần dedup vì đây là event trực tiếp)
         if (questionText) {
@@ -143,25 +146,31 @@ export default function TranscriptPage({
       console.log("Session started:", msg.session_id);
     } else if (eventType === "error") {
       console.error("STT Error:", msg.message || msg.error);
-      swalConfig.error("Lỗi STT", msg.message || msg.error || "Đã xảy ra lỗi không xác định");
+      swalConfig.error(
+        "Lỗi STT",
+        msg.message || msg.error || "Đã xảy ra lỗi không xác định"
+      );
     } else if (eventType === "speaker_identified") {
       console.log("Speaker identified:", msg.speaker);
       // Optional: update UI with speaker info if needed
     } else if (eventType === "broadcast_transcript") {
       // Transcript từ client khác trong cùng session (member nói)
       // Bỏ qua nếu broadcast từ chính mình (tránh hiện 2 lần)
-      if (msg.source_session_id && msg.source_session_id === mySessionIdRef.current) {
+      if (
+        msg.source_session_id &&
+        msg.source_session_id === mySessionIdRef.current
+      ) {
         return;
       }
-      
+
       // Deduplicate: skip if same text was added recently
       if (msg.text && isDuplicateTranscript(msg.text)) {
         return;
       }
-      
+
       // Clear broadcast interim text when final result arrives from that speaker
       setBroadcastInterimText("");
-      
+
       if (msg.text) {
         setTranscript((prev) => [
           ...prev,
@@ -178,7 +187,10 @@ export default function TranscriptPage({
       }
     } else if (eventType === "broadcast_partial") {
       // Partial transcript từ client khác (chữ chạy khi member đang nói)
-      if (msg.source_session_id && msg.source_session_id === mySessionIdRef.current) {
+      if (
+        msg.source_session_id &&
+        msg.source_session_id === mySessionIdRef.current
+      ) {
         return; // Bỏ qua partial từ chính mình
       }
       // Hiển thị chữ chạy với tên speaker - dùng state riêng để không bị ghi đè
@@ -186,7 +198,10 @@ export default function TranscriptPage({
       setBroadcastInterimText(`${speakerName}: ${msg.text || ""}`);
     } else if (eventType === "broadcast_question_started") {
       // Member bắt đầu đặt câu hỏi - dùng toast nhẹ nhàng
-      if (msg.source_session_id && msg.source_session_id === mySessionIdRef.current) {
+      if (
+        msg.source_session_id &&
+        msg.source_session_id === mySessionIdRef.current
+      ) {
         return;
       }
       const speakerName = msg.speaker || "Member";
@@ -195,7 +210,10 @@ export default function TranscriptPage({
     } else if (eventType === "broadcast_question_processing") {
       // Member kết thúc đặt câu hỏi, đang xử lý
       // Dùng toast để thư ký biết nhưng KHÔNG bị chặn làm việc
-      if (msg.source_session_id && msg.source_session_id === mySessionIdRef.current) {
+      if (
+        msg.source_session_id &&
+        msg.source_session_id === mySessionIdRef.current
+      ) {
         return;
       }
       const speakerName = msg.speaker || "Member";
@@ -203,28 +221,39 @@ export default function TranscriptPage({
       swalConfig.toast.info(`Đang xử lý câu hỏi từ ${speakerName}...`);
     } else if (eventType === "broadcast_question_result") {
       // Kết quả câu hỏi từ MEMBER (không phải từ chính mình)
-      if (msg.source_session_id && msg.source_session_id === mySessionIdRef.current) {
+      if (
+        msg.source_session_id &&
+        msg.source_session_id === mySessionIdRef.current
+      ) {
         return; // Bỏ qua broadcast từ chính mình
       }
-      
+
       // Tạo unique ID cho question để tránh duplicate
-      const questionId = `${msg.source_session_id}_${msg.question_text || ""}`.trim();
+      const questionId = `${msg.source_session_id}_${
+        msg.question_text || ""
+      }`.trim();
       if (processedQuestionIdsRef.current.has(questionId)) {
         console.log("🚫 Duplicate question broadcast ignored:", questionId);
         return;
       }
       processedQuestionIdsRef.current.add(questionId);
       // Auto-clear sau 10 giây
-      setTimeout(() => processedQuestionIdsRef.current.delete(questionId), 10000);
-      
+      setTimeout(
+        () => processedQuestionIdsRef.current.delete(questionId),
+        10000
+      );
+
       // Đóng loading popup
       closeSwal();
-      
+
       const speakerName = msg.speaker || "Member";
       const questionText = msg.question_text || "";
-      
+
       if (msg.is_duplicate) {
-        swalConfig.warning("Câu hỏi bị trùng", `Câu hỏi từ ${speakerName} đã được ghi nhận trước đó.`);
+        swalConfig.warning(
+          "Câu hỏi bị trùng",
+          `Câu hỏi từ ${speakerName} đã được ghi nhận trước đó.`
+        );
       } else {
         // Thêm vào danh sách và hiện popup thành công
         if (questionText) {
@@ -233,10 +262,18 @@ export default function TranscriptPage({
             ...prev,
           ]);
         }
-        swalConfig.success("Câu hỏi hợp lệ", `Đã ghi nhận câu hỏi từ ${speakerName}.`);
+        swalConfig.success(
+          "Câu hỏi hợp lệ",
+          `Đã ghi nhận câu hỏi từ ${speakerName}.`
+        );
       }
     } else if (eventType === "connected") {
-      console.log("✅ WebSocket connected:", msg.session_id, "room_size:", msg.room_size);
+      console.log(
+        "✅ WebSocket connected:",
+        msg.session_id,
+        "room_size:",
+        msg.room_size
+      );
       // Lưu session_id của mình để filter broadcast
       if (msg.session_id) {
         setMySessionId(msg.session_id);
@@ -259,8 +296,7 @@ export default function TranscriptPage({
   // Backend automatically identifies speaker, so we don't need to send speaker param
   // REMOVING defense_session_id to match Python script behavior (which works).
   //const WS_URL = `ws://localhost:8000/ws/stt?defense_session_id=${id}`;
-   const WS_URL = `wss://fastapi-service.happyforest-7c6ec975.southeastasia.azurecontainerapps.io/ws/stt?defense_session_id=${id}`;
-
+  const WS_URL = `wss://fastapi-service.happyforest-7c6ec975.southeastasia.azurecontainerapps.io/ws/stt?defense_session_id=${id}`;
 
   const {
     isRecording,
@@ -304,11 +340,14 @@ export default function TranscriptPage({
       if (isRecording) {
         stopRecording();
       }
-      
+
       // 2. Set flag và hiện loading popup
       waitingForQuestionResult.current = true;
-      swalConfig.loading("Đang xử lý câu hỏi...", "Vui lòng chờ hệ thống phân tích câu hỏi");
-      
+      swalConfig.loading(
+        "Đang xử lý câu hỏi...",
+        "Vui lòng chờ hệ thống phân tích câu hỏi"
+      );
+
       // 3. Sau 5s, nếu vẫn chưa có kết quả thì show nút "Tiếp tục"
       // Popup upgrade timeout (separate from enable timer). Use a separate timeout so we don't conflict with earlier stored one
       const upgradePopupTimeout = setTimeout(() => {
@@ -323,7 +362,7 @@ export default function TranscriptPage({
       if (!questionTimeoutRef.current) {
         questionTimeoutRef.current = upgradePopupTimeout;
       }
-      
+
       // 4. Gửi lệnh kết thúc (toggleAsk sẽ gửi q:end)
       toggleAsk();
     }
@@ -337,16 +376,16 @@ export default function TranscriptPage({
     } else {
       console.warn("No session loaded; cannot log Defense Session ID.");
     }
-    
+
     // Broadcast session:end để member biết phiên đã kết thúc
     if (hasStartedSession) {
       broadcastSessionEnd();
       setHasStartedSession(false);
     }
-    
+
     // Kết thúc phiên và đóng WebSocket
     stopSession();
-    
+
     // TODO: Call API to save
     alert("Transcript saved successfully!");
   };
@@ -458,7 +497,9 @@ export default function TranscriptPage({
             ref={transcriptContainerRef}
             className="flex-1 overflow-y-auto bg-white rounded-md border p-4 space-y-3 shadow-inner"
           >
-            {transcript.length === 0 && !interimText && !broadcastInterimText ? (
+            {transcript.length === 0 &&
+            !interimText &&
+            !broadcastInterimText ? (
               <div className="text-gray-400 text-sm space-y-1">
                 <p>- Transcript sẽ hiển thị ở đây...</p>
                 <p>- Ghi âm, chỉnh sửa hoặc thêm nội dung thủ công.</p>
@@ -593,13 +634,13 @@ export default function TranscriptPage({
       )}
 
       <div className="flex justify-end gap-3 mb-8">
-        <button 
+        <button
           onClick={() => window.history.back()}
           className="px-4 py-2 text-gray-600 bg-white border rounded-md hover:bg-gray-50 text-sm font-medium shadow-sm"
         >
           Cancel
         </button>
-        <button 
+        <button
           onClick={handleSaveTranscript}
           disabled={!wsConnected && transcript.length === 0}
           className="px-4 py-2 text-white bg-purple-600 rounded-md hover:bg-purple-700 text-sm font-medium shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
