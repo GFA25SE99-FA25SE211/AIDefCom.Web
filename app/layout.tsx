@@ -1,8 +1,10 @@
+"use client";
+
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import "@/app/globals.css";
-
 import { GoogleOAuthProvider } from "@react-oauth/google";
+import { useEffect, useState } from "react";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -15,27 +17,31 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata = {
-  title: "AIDefCom",
-  icons: {
-    icon: "/favicon-new.ico",
-  },
-};
-
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const [googleClientId, setGoogleClientId] = useState("");
+
+  useEffect(() => {
+    // Fetch config from API at runtime
+    fetch("/api/config")
+      .then((res) => res.json())
+      .then((data) => setGoogleClientId(data.googleClientId))
+      .catch((err) => console.error("Failed to load config:", err));
+  }, []);
+
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <title>AIDefCom</title>
+        <link rel="icon" href="/favicon-new.ico" />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {/* Google OAuth provider */}
-        <GoogleOAuthProvider
-          clientId={process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID!}
-        >
+        <GoogleOAuthProvider clientId={googleClientId}>
           {children}
         </GoogleOAuthProvider>
       </body>

@@ -3,7 +3,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 interface UseAudioRecorderProps {
   wsUrl: string; // ví dụ: ws://localhost:8000/ws/stt?speaker=Khach&defense_session_id=DEF123
   onWsEvent?: (msg: any) => void; // nhận event JSON từ server (partial/final/question_mode_result...)
-  autoConnect?: boolean;
+  autoConnect?: boolean; // Tự động kết nối WS khi load trang (cho member để nhận session_started)
 }
 
 export const useAudioRecorder = ({
@@ -16,13 +16,26 @@ export const useAudioRecorder = ({
   const [wsConnected, setWsConnected] = useState(false); // WebSocket connection status
   const wsRef = useRef<WebSocket | null>(null);
 
+  // Dùng ref để tránh dependency loop - callback không thay đổi reference
+  const onWsEventRef = useRef(onWsEvent);
+  useEffect(() => {
+    onWsEventRef.current = onWsEvent;
+  }, [onWsEvent]);
+
   const streamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
 
-  // Kết nối WebSocket chỉ khi startRecording
+  // Flag để tránh reconnect liên tục
+  const isConnectingRef = useRef(false);
+
+  // Kết nối WebSocket
   const connectWs = useCallback(() => {
+    // Tránh reconnect nếu đang connecting hoặc đã connected
+    if (isConnectingRef.current) {
+      return;
+    }
     if (
       wsRef.current &&
       (wsRef.current.readyState === WebSocket.OPEN ||
@@ -30,18 +43,24 @@ export const useAudioRecorder = ({
     ) {
       return;
     }
+
+    if (!wsUrl) {
+      return;
+    }
+
+    isConnectingRef.current = true;
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
     ws.onopen = () => {
       console.log("WS connected:", wsUrl);
       setWsConnected(true);
+      isConnectingRef.current = false;
     };
     ws.onmessage = (evt) => {
       try {
         const msg = JSON.parse(evt.data);
-        console.log("WS received:", msg); // Debug log
-        onWsEvent?.(msg);
+        onWsEventRef.current?.(msg);
       } catch {
         console.log("WS raw:", evt.data);
       }
@@ -49,29 +68,38 @@ export const useAudioRecorder = ({
     ws.onerror = (e) => {
       console.error("WS error:", e);
       setWsConnected(false);
+      isConnectingRef.current = false;
     };
     ws.onclose = () => {
       console.log("WS closed");
       setWsConnected(false);
+      isConnectingRef.current = false;
+      wsRef.current = null;
     };
-  }, [wsUrl, onWsEvent]);
+  }, [wsUrl]); // Chỉ phụ thuộc wsUrl, không phụ thuộc onWsEvent
 
-  // Tự động connect nếu autoConnect = true
+  // Tự động kết nối WS khi autoConnect=true (cho member để nhận session_started)
   useEffect(() => {
     if (autoConnect && wsUrl) {
-      connectWs();
+      // Delay nhỏ để tránh race condition
+      const timer = setTimeout(() => {
+        connectWs();
+      }, 100);
+      return () => clearTimeout(timer);
     }
+  }, [autoConnect, wsUrl, connectWs]);
+
+  // Cleanup khi unmount
+  useEffect(() => {
     return () => {
-      // Chỉ đóng khi unmount nếu cần, nhưng cẩn thận vì connectWs tạo instance mới
-      // Tốt nhất để cleanup trong connectWs hoặc quản lý state tốt hơn
-      // Ở đây ta giữ kết nối cho đến khi stopSession hoặc unmount
-      if (autoConnect) {
+      if (wsRef.current) {
         try {
-          wsRef.current?.close();
+          wsRef.current.close();
         } catch {}
+        wsRef.current = null;
       }
     };
-  }, [connectWs, autoConnect, wsUrl]);
+  }, []);
 
   const startRecording = useCallback(async () => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
@@ -202,6 +230,38 @@ export const useAudioRecorder = ({
     }
   }, [isRecording, stopRecording]);
 
+  // Broadcast session start (thư ký gọi khi bắt đầu ghi âm)
+  const broadcastSessionStart = useCallback(() => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send("session:start");
+      console.log("Sent session:start to broadcast");
+    }
+  }, []);
+
+  // Broadcast session end (thư ký gọi khi kết thúc phiên)
+  const broadcastSessionEnd = useCallback(() => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send("session:end");
+      console.log("Sent session:end to broadcast");
+    }
+  }, []);
+
+  // Broadcast question started (member bắt đầu đặt câu hỏi)
+  const broadcastQuestionStarted = useCallback(() => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send("question:started");
+      console.log("Sent question:started to broadcast");
+    }
+  }, []);
+
+  // Broadcast question processing (member kết thúc đặt câu hỏi, đang xử lý)
+  const broadcastQuestionProcessing = useCallback(() => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send("question:processing");
+      console.log("Sent question:processing to broadcast");
+    }
+  }, []);
+
   return {
     isRecording,
     isAsking,
@@ -210,5 +270,9 @@ export const useAudioRecorder = ({
     stopRecording,
     toggleAsk,
     stopSession,
+    broadcastSessionStart,
+    broadcastSessionEnd,
+    broadcastQuestionStarted,
+    broadcastQuestionProcessing,
   };
 };

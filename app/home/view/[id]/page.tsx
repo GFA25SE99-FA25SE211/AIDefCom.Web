@@ -1,15 +1,12 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Mic, MicOff, MessageSquare, StopCircle } from "lucide-react";
 import { groupsApi } from "@/lib/api/groups";
 import { studentsApi } from "@/lib/api/students";
 import { defenseSessionsApi } from "@/lib/api/defense-sessions";
 import { rubricsApi } from "@/lib/api/rubrics";
 import { memberNotesApi } from "@/lib/api/member-notes";
-import { useAudioRecorder } from "@/lib/hooks/useAudioRecorder";
-import { swalConfig, closeSwal } from "@/lib/utils/sweetAlert";
 import type {
   GroupDto,
   StudentDto,
@@ -19,7 +16,8 @@ import type {
   ScoreDto,
 } from "@/lib/models";
 import { scoresApi } from "@/lib/api/scores";
-import CreateTaskModal from "../../components/CreateTaskModal";
+import CreateTaskModal from "../../../chair/components/CreateTaskModal";
+import { swalConfig } from "@/lib/utils/sweetAlert";
 
 export default function GroupDetailsPage() {
   const params = useParams();
@@ -35,6 +33,7 @@ export default function GroupDetailsPage() {
   const [memberNotes, setMemberNotes] = useState<MemberNoteDto[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string>("");
   const [isChair, setIsChair] = useState(false);
+  const [hasAccess, setHasAccess] = useState(false);
   const [openTaskModal, setOpenTaskModal] = useState(false);
 
   // Score Table State
@@ -43,186 +42,6 @@ export default function GroupDetailsPage() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  // Mic and session states (giống member)
-  const [sessionStarted, setSessionStarted] = useState(false); // Thư ký đã bắt đầu phiên chưa
-  const [questionResults, setQuestionResults] = useState<any[]>([]);
-  const [hasQuestionFinalText, setHasQuestionFinalText] = useState(false);
-  const [mySessionId, setMySessionId] = useState<string | null>(null);
-  const mySessionIdRef = useRef<string | null>(null);
-  const questionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const waitingForQuestionResult = useRef<boolean>(false);
-
-  // WebSocket event handler (giống member)
-  const handleSTTEvent = (msg: any) => {
-    const eventType = msg.type || msg.event;
-
-    if (eventType === "session_started") {
-      // Thư ký đã bắt đầu phiên
-      console.log("🎤 Session started by secretary - mic enabled");
-      setSessionStarted(true);
-    } else if (eventType === "session_ended") {
-      // Thư ký đã kết thúc phiên
-      console.log("🛑 Session ended by secretary - mic disabled");
-      setSessionStarted(false);
-    } else if (eventType === "question_mode_started") {
-      // Chính mình bắt đầu đặt câu hỏi
-      swalConfig.info("Bắt đầu ghi nhận câu hỏi");
-      setHasQuestionFinalText(false);
-    } else if (eventType === "question_mode_result") {
-      // Kết quả câu hỏi của CHÍNH MÌNH
-      if (questionTimeoutRef.current) {
-        clearTimeout(questionTimeoutRef.current);
-        questionTimeoutRef.current = null;
-      }
-      waitingForQuestionResult.current = false;
-      closeSwal();
-      setHasQuestionFinalText(false);
-
-      if (msg.is_duplicate) {
-        swalConfig.warning(
-          "Câu hỏi bị trùng",
-          "Hệ thống đã ghi nhận câu hỏi này trước đó."
-        );
-      } else {
-        setQuestionResults((prev) => [msg, ...prev]);
-        swalConfig.success("Câu hỏi hợp lệ", "Đã ghi nhận câu hỏi mới.");
-      }
-    } else if (eventType === "error") {
-      console.error("STT Error:", msg.message || msg.error);
-      swalConfig.error(
-        "Lỗi STT",
-        msg.message || msg.error || "Đã xảy ra lỗi không xác định"
-      );
-    } else if (eventType === "broadcast_transcript") {
-      // Transcript từ client khác trong cùng session
-      if (
-        msg.source_session_id &&
-        msg.source_session_id === mySessionIdRef.current
-      ) {
-        console.log("🚫 Ignoring broadcast from self");
-        return;
-      }
-      console.log("📢 Broadcast from other client:", msg.speaker, msg.text);
-    } else if (eventType === "broadcast_question_started") {
-      // Người khác (member/thư ký) bắt đầu đặt câu hỏi - dùng toast nhẹ
-      if (
-        msg.source_session_id &&
-        msg.source_session_id === mySessionIdRef.current
-      ) {
-        return;
-      }
-      const speakerName = msg.speaker || "Member";
-      swalConfig.toast.info(`${speakerName} đang đặt câu hỏi...`);
-    } else if (eventType === "broadcast_question_processing") {
-      // Người khác kết thúc đặt câu hỏi, đang xử lý - dùng toast nhẹ
-      if (
-        msg.source_session_id &&
-        msg.source_session_id === mySessionIdRef.current
-      ) {
-        return;
-      }
-      const speakerName = msg.speaker || "Member";
-      swalConfig.toast.info(`Đang xử lý câu hỏi từ ${speakerName}...`);
-    } else if (eventType === "broadcast_question_result") {
-      // Kết quả câu hỏi từ người khác
-      if (
-        msg.source_session_id &&
-        msg.source_session_id === mySessionIdRef.current
-      ) {
-        return;
-      }
-      const speakerName = msg.speaker || "Member";
-      const questionText = msg.question_text || "";
-
-      if (msg.is_duplicate) {
-        swalConfig.toast.info(`Câu hỏi từ ${speakerName} bị trùng`);
-      } else {
-        if (questionText) {
-          setQuestionResults((prev) => [
-            { ...msg, from_broadcast: true, speaker: speakerName },
-            ...prev,
-          ]);
-        }
-        swalConfig.toast.success(`Câu hỏi từ ${speakerName} đã được ghi nhận`);
-      }
-    } else if (eventType === "connected") {
-      console.log(
-        "✅ WebSocket connected:",
-        msg.session_id,
-        "room_size:",
-        msg.room_size
-      );
-      if (msg.session_id) {
-        setMySessionId(msg.session_id);
-        mySessionIdRef.current = msg.session_id;
-      }
-    }
-  };
-
-  // WebSocket URL - kết nối cùng session với thư ký
-  const WS_URL = defenseSession?.id
-    ? `wss://fastapi-service.happyforest-7c6ec975.southeastasia.azurecontainerapps.io/ws/stt?defense_session_id=${defenseSession.id}&role=chair`
-    : null;
-
-  const {
-    isRecording,
-    isAsking,
-    wsConnected,
-    startRecording,
-    stopRecording,
-    toggleAsk,
-    broadcastQuestionStarted,
-    broadcastQuestionProcessing,
-  } = useAudioRecorder({
-    wsUrl: WS_URL || "",
-    onWsEvent: handleSTTEvent,
-    autoConnect: !!defenseSession?.id,
-  });
-
-  const handleToggleRecording = async () => {
-    if (isRecording) {
-      stopRecording();
-    } else {
-      await startRecording();
-    }
-  };
-
-  const handleToggleQuestion = async () => {
-    if (!isAsking) {
-      // Bắt đầu đặt câu hỏi - broadcast cho thư ký biết
-      broadcastQuestionStarted();
-      toggleAsk();
-    } else {
-      if (isRecording) {
-        stopRecording();
-      }
-
-      // Kết thúc đặt câu hỏi - broadcast cho thư ký biết đang xử lý
-      broadcastQuestionProcessing();
-
-      waitingForQuestionResult.current = true;
-      swalConfig.loading(
-        "Đang xử lý câu hỏi...",
-        "Vui lòng chờ hệ thống phân tích câu hỏi"
-      );
-
-      const upgradePopupTimeout = setTimeout(() => {
-        if (waitingForQuestionResult.current) {
-          swalConfig.warning(
-            "Đang xử lý câu hỏi...",
-            "Hệ thống đang phân tích câu hỏi. Bạn có thể tiếp tục buổi bảo vệ, kết quả sẽ hiển thị khi hoàn tất."
-          );
-        }
-      }, 5000);
-
-      if (!questionTimeoutRef.current) {
-        questionTimeoutRef.current = upgradePopupTimeout;
-      }
-
-      toggleAsk();
-    }
-  };
 
   useEffect(() => {
     if (!id) return;
@@ -250,7 +69,6 @@ export default function GroupDetailsPage() {
           setCurrentUserId(currentUid);
 
           // Check if user has system Chair role (for testing/override)
-          // Case-insensitive check
           if (
             parsedUser.roles &&
             parsedUser.roles.some((r: string) => r.toLowerCase() === "chair")
@@ -264,23 +82,31 @@ export default function GroupDetailsPage() {
           }
         }
 
-        // If system chair, grant access immediately
-        if (isSystemChair) {
-          setIsChair(true);
-        }
-
         if (groupRes.data) {
           setGroup(groupRes.data);
-
-          // 2. Fetch all rubrics
-          try {
-            const rubricsRes = await rubricsApi.getAll();
-            if (rubricsRes.data) {
-              setRubrics(rubricsRes.data);
+          
+          // 2. Fetch rubrics by majorId after getting group
+          if (groupRes.data.majorId) {
+            try {
+              const rubricsRes = await rubricsApi.getByMajorId(groupRes.data.majorId);
+              if (rubricsRes.data) {
+                setRubrics(rubricsRes.data);
+              }
+            } catch (rubricError) {
+              console.error("Error fetching rubrics by major:", rubricError);
+              setRubrics([]);
             }
-          } catch (rubricError) {
-            console.error("Error fetching rubrics:", rubricError);
-            setRubrics([]);
+          } else {
+            // Fallback to getAll if no majorId
+            try {
+              const rubricsRes = await rubricsApi.getAll();
+              if (rubricsRes.data) {
+                setRubrics(rubricsRes.data);
+              }
+            } catch (rubricError) {
+              console.error("Error fetching rubrics:", rubricError);
+              setRubrics([]);
+            }
           }
         }
         if (studentsRes.data) {
@@ -292,7 +118,7 @@ export default function GroupDetailsPage() {
           setMemberNotes(memberNotesRes.data);
         }
 
-        // 2. If session exists, fetch lecturers
+        // 2. If session exists, fetch lecturers and check access
         if (sessionsRes.data && sessionsRes.data.length > 0) {
           const session = sessionsRes.data[0];
           setDefenseSession(session);
@@ -311,26 +137,71 @@ export default function GroupDetailsPage() {
               );
               setLecturers(onlyLecturers);
 
-              // Check if current user is Chair (if not already set by system role)
-              if (currentUid && !isSystemChair) {
+              // Check if current user is in the council
+              if (currentUid) {
                 const currentUserInSession = onlyLecturers.find(
                   (l: any) =>
                     String(l.id).toLowerCase() ===
                     String(currentUid).toLowerCase()
                 );
 
-                if (
-                  currentUserInSession &&
-                  currentUserInSession.role &&
-                  currentUserInSession.role.toLowerCase() === "chair"
-                ) {
-                  setIsChair(true);
+                if (currentUserInSession) {
+                  setHasAccess(true);
+                  
+                  // Check if user is Chair (system role or council role)
+                  if (isSystemChair) {
+                    setIsChair(true);
+                  } else if (
+                    currentUserInSession.role &&
+                    currentUserInSession.role.toLowerCase() === "chair"
+                  ) {
+                    setIsChair(true);
+                  }
+                } else {
+                  setHasAccess(false);
+                  await swalConfig.error(
+                    "Access Denied",
+                    "You do not have access to this group. You must be a member of the defense council."
+                  );
+                  router.push("/home");
+                  return;
                 }
+              } else {
+                setHasAccess(false);
+                await swalConfig.error(
+                  "Authentication Error",
+                  "User information not found. Please login again."
+                );
+                router.push("/home");
+                return;
               }
+            } else {
+              setHasAccess(false);
+              await swalConfig.error(
+                "Access Denied",
+                "No council members found for this session."
+              );
+              router.push("/home");
+              return;
             }
           } catch (lecErr) {
             console.error("Failed to fetch lecturers:", lecErr);
+            setHasAccess(false);
+            await swalConfig.error(
+              "Error",
+              "Failed to verify access. Please try again later."
+            );
+            router.push("/home");
+            return;
           }
+        } else {
+          setHasAccess(false);
+          await swalConfig.error(
+            "Not Found",
+            "No defense session found for this group."
+          );
+          router.push("/home");
+          return;
         }
       } catch (err) {
         console.error("Failed to fetch details:", err);
@@ -378,13 +249,10 @@ export default function GroupDetailsPage() {
     );
   }
 
-  if (error) {
+  if (error || !hasAccess) {
     return (
       <div className="flex flex-col justify-center items-center min-h-[60vh] gap-4">
-        <div className="text-red-500">{error}</div>
-        <button onClick={() => router.back()} className="btn-secondary">
-          Go Back
-        </button>
+        <div className="text-gray-500">Redirecting...</div>
       </div>
     );
   }
@@ -393,8 +261,8 @@ export default function GroupDetailsPage() {
     return (
       <div className="flex flex-col justify-center items-center min-h-[60vh] gap-4">
         <div className="text-gray-500">Group not found.</div>
-        <button onClick={() => router.back()} className="btn-secondary">
-          Go Back
+        <button onClick={() => router.push("/home")} className="btn-secondary">
+          Back to Home
         </button>
       </div>
     );
@@ -408,13 +276,12 @@ export default function GroupDetailsPage() {
         lecturers={lecturers}
         rubrics={rubrics}
         currentUserId={currentUserId}
-        sessionId={defenseSession?.id}
       />
 
       {/* Header with Back Button */}
       <div className="flex items-center gap-4 mb-8">
         <button
-          onClick={() => router.back()}
+          onClick={() => router.push("/home")}
           className="p-2 hover:bg-gray-100 rounded-full transition-colors"
         >
           <svg
@@ -440,73 +307,6 @@ export default function GroupDetailsPage() {
             {group.semesterName} · {group.majorName}
           </p>
         </div>
-
-        {/* Mic Controls - giống member */}
-        {defenseSession && (
-          <div className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg border ml-4">
-            {!isRecording ? (
-              <button
-                onClick={handleToggleRecording}
-                disabled={!defenseSession?.id || !sessionStarted}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-white text-sm font-medium shadow-sm transition ${
-                  !defenseSession?.id || !sessionStarted
-                    ? "bg-gray-400 cursor-not-allowed opacity-50"
-                    : "bg-purple-600 hover:bg-purple-700"
-                }`}
-                title={
-                  !sessionStarted
-                    ? "Chờ thư ký bắt đầu phiên"
-                    : "Bắt đầu ghi âm"
-                }
-              >
-                <Mic className="w-4 h-4" />
-                <span>Start Mic</span>
-              </button>
-            ) : (
-              <>
-                {!isAsking && (
-                  <button
-                    onClick={handleToggleRecording}
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-500 text-white hover:bg-red-600 text-sm font-medium shadow-sm transition"
-                  >
-                    <MicOff className="w-4 h-4" />
-                    <span>Stop Mic</span>
-                  </button>
-                )}
-
-                <button
-                  onClick={handleToggleQuestion}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium shadow-sm transition ${
-                    isAsking
-                      ? "bg-orange-500 text-white hover:bg-orange-600"
-                      : "bg-indigo-500 text-white hover:bg-indigo-600"
-                  }`}
-                >
-                  {isAsking ? (
-                    <>
-                      <StopCircle className="w-4 h-4" />
-                      <span>Kết thúc câu hỏi</span>
-                    </>
-                  ) : (
-                    <>
-                      <MessageSquare className="w-4 h-4" />
-                      <span>Đặt câu hỏi</span>
-                    </>
-                  )}
-                </button>
-              </>
-            )}
-
-            {/* Connection status */}
-            <div
-              className={`w-2 h-2 rounded-full ${
-                wsConnected ? "bg-green-500" : "bg-gray-400"
-              }`}
-              title={wsConnected ? "Đã kết nối" : "Chưa kết nối"}
-            />
-          </div>
-        )}
-
         <div className="ml-auto">
           <span
             className={`px-3 py-1 rounded-full text-sm font-medium ${

@@ -1,20 +1,27 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { useParams, useRouter } from "next/navigation";
+import React, { useState, useEffect, Suspense, useRef } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Save, Mic, MicOff } from "lucide-react";
+import {
+  ArrowLeft,
+  Save,
+  Mic,
+  MicOff,
+  MessageSquare,
+  StopCircle,
+} from "lucide-react";
 import { groupsApi } from "@/lib/api/groups";
 import { studentsApi } from "@/lib/api/students";
 import { memberNotesApi } from "@/lib/api/member-notes";
 import { rubricsApi } from "@/lib/api/rubrics";
 import { scoresApi, type ScoreReadDto } from "@/lib/api/scores";
 import { defenseSessionsApi } from "@/lib/api/defense-sessions";
-import { swalConfig } from "@/lib/utils/sweetAlert";
+import { swalConfig, closeSwal } from "@/lib/utils/sweetAlert";
+import { useAudioRecorder } from "@/lib/hooks/useAudioRecorder";
 import { authUtils } from "@/lib/utils/auth";
 import Swal from "sweetalert2";
 import type { GroupDto, StudentDto, ScoreCreateDto } from "@/lib/models";
-import { useAudioRecorder } from "@/lib/hooks/useAudioRecorder";
 
 interface StudentScore {
   id: string;
@@ -145,6 +152,7 @@ const criteria = [
 export default function GradeGroupPage() {
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
   const groupId = params.id as string;
   const [groupData, setGroupData] = useState<GroupData | null>(null);
   const [studentScores, setStudentScores] = useState<StudentScore[]>([]);
@@ -155,61 +163,229 @@ export default function GradeGroupPage() {
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string>("");
 
-  // Audio Recorder Logic
-  const WS_URL = sessionId
-    ? `ws://localhost:8000/ws/stt?defense_session_id=${sessionId}`
-    : null;
+  // Get sessionId from URL if available
+  const urlSessionId = searchParams?.get("sessionId");
 
+  // Mic and session states
+  const [sessionStarted, setSessionStarted] = useState(false); // Thư ký đã bắt đầu phiên chưa
+  const [questionResults, setQuestionResults] = useState<any[]>([]);
+  const [hasQuestionFinalText, setHasQuestionFinalText] = useState(false);
+  const [mySessionId, setMySessionId] = useState<string | null>(null); // Lưu session_id của chính mình
+  const mySessionIdRef = useRef<string | null>(null); // Ref để tránh stale closure
+  const questionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const waitingForQuestionResult = useRef<boolean>(false);
+
+  // WebSocket event handler
   const handleSTTEvent = (msg: any) => {
     const eventType = msg.type || msg.event;
 
-    if (eventType === "error") {
+    if (eventType === "session_started") {
+      // Thư ký đã bắt đầu phiên
+      setSessionStarted(true);
+    } else if (eventType === "session_ended") {
+      // Thư ký đã kết thúc phiên
+      setSessionStarted(false);
+    } else if (eventType === "question_mode_started") {
+      swalConfig.info("Bắt đầu ghi nhận câu hỏi");
+      setHasQuestionFinalText(false);
+    } else if (eventType === "question_mode_result") {
+      if (questionTimeoutRef.current) {
+        clearTimeout(questionTimeoutRef.current);
+        questionTimeoutRef.current = null;
+      }
+      waitingForQuestionResult.current = false;
+      closeSwal();
+      setHasQuestionFinalText(false);
+
+      if (msg.is_duplicate) {
+        swalConfig.warning(
+          "Câu hỏi bị trùng",
+          "Hệ thống đã ghi nhận câu hỏi này trước đó."
+        );
+      } else {
+        setQuestionResults((prev) => [msg, ...prev]);
+        swalConfig.success("Câu hỏi hợp lệ", "Đã ghi nhận câu hỏi mới.");
+      }
+    } else if (eventType === "error") {
       console.error("STT Error:", msg.message || msg.error);
       swalConfig.error(
         "Lỗi STT",
         msg.message || msg.error || "Đã xảy ra lỗi không xác định"
       );
+    } else if (eventType === "broadcast_transcript") {
+      // Transcript từ client khác trong cùng session (thư ký hoặc member khác nói)
+      // Bỏ qua nếu broadcast từ chính mình
+      if (
+        msg.source_session_id &&
+        msg.source_session_id === mySessionIdRef.current
+      ) {
+        console.log("🚫 Ignoring broadcast from self");
+        return;
+      }
+      console.log("📢 Broadcast from other client:", msg.speaker, msg.text);
+      // Member có thể hiển thị hoặc bỏ qua tùy nhu cầu
+    } else if (eventType === "broadcast_question_started") {
+      // Người khác (chair/thư ký/member khác) bắt đầu đặt câu hỏi - dùng toast nhẹ
+      if (
+        msg.source_session_id &&
+        msg.source_session_id === mySessionIdRef.current
+      ) {
+        return;
+      }
+      const speakerName = msg.speaker || "Member";
+      swalConfig.toast.info(`${speakerName} đang đặt câu hỏi...`);
+    } else if (eventType === "broadcast_question_processing") {
+      // Người khác kết thúc đặt câu hỏi, đang xử lý - dùng toast nhẹ
+      if (
+        msg.source_session_id &&
+        msg.source_session_id === mySessionIdRef.current
+      ) {
+        return;
+      }
+      const speakerName = msg.speaker || "Member";
+      swalConfig.toast.info(`Đang xử lý câu hỏi từ ${speakerName}...`);
+    } else if (eventType === "broadcast_question_result") {
+      // Kết quả câu hỏi từ người khác
+      if (
+        msg.source_session_id &&
+        msg.source_session_id === mySessionIdRef.current
+      ) {
+        return;
+      }
+      const speakerName = msg.speaker || "Member";
+      const questionText = msg.question_text || "";
+
+      if (msg.is_duplicate) {
+        swalConfig.toast.info(`Câu hỏi từ ${speakerName} bị trùng`);
+      } else {
+        if (questionText) {
+          setQuestionResults((prev) => [
+            { ...msg, from_broadcast: true, speaker: speakerName },
+            ...prev,
+          ]);
+        }
+        swalConfig.toast.success(`Câu hỏi từ ${speakerName} đã được ghi nhận`);
+      }
+    } else if (eventType === "connected") {
+      console.log(
+        "✅ WebSocket connected:",
+        msg.session_id,
+        "room_size:",
+        msg.room_size
+      );
+      // Lưu session_id của mình
+      if (msg.session_id) {
+        setMySessionId(msg.session_id);
+        mySessionIdRef.current = msg.session_id; // Cập nhật ref ngay lập tức
+      }
+      // KHÔNG tự động enable mic chỉ dựa vào room_size
+      // Chỉ enable khi nhận được session_started từ thư ký
     } else if (eventType === "session_started") {
-      console.log("Session started:", msg.session_id);
-    } else if (eventType === "speaker_identified") {
-      console.log("Speaker identified:", msg.speaker);
-    } else if (eventType === "partial" || eventType === "result") {
-      // Log these events to verify Mic is working and backend is responding
-      console.log(`[STT ${eventType}]`, msg.text);
+      // Thư ký đã bắt đầu ghi âm - cho phép member sử dụng mic
+      console.log("🎤 Session started by secretary - mic enabled");
+      setSessionStarted(true);
+    } else if (eventType === "session_ended") {
+      // Thư ký đã kết thúc phiên
+      console.log("🛑 Session ended by secretary - mic disabled");
+      setSessionStarted(false);
     }
-    // We ignore 'partial' and 'result' events here as text is displayed on Secretary's screen
   };
 
-  const { isRecording, startRecording, stopRecording, wsConnected } =
-    useAudioRecorder({
-      wsUrl: WS_URL || "",
-      onWsEvent: handleSTTEvent,
-    });
+  // WebSocket URL - kết nối cùng session với thư ký
+  const WS_URL = sessionId
+    ? `wss://fastapi-service.happyforest-7c6ec975.southeastasia.azurecontainerapps.io/ws/stt?defense_session_id=${sessionId}&role=member`
+    : null;
+
+  const {
+    isRecording,
+    isAsking,
+    wsConnected,
+    startRecording,
+    stopRecording,
+    toggleAsk,
+    stopSession,
+    broadcastQuestionStarted,
+    broadcastQuestionProcessing,
+  } = useAudioRecorder({
+    wsUrl: WS_URL || "",
+    onWsEvent: handleSTTEvent,
+    autoConnect: !!sessionId, // Tự động kết nối WS để nhận session_started từ thư ký
+  });
 
   const handleToggleRecording = async () => {
     if (isRecording) {
-      stopRecording();
+      stopRecording(); // Chỉ tạm dừng mic, WebSocket vẫn mở
     } else {
       await startRecording();
     }
   };
 
+  const handleToggleQuestion = async () => {
+    if (!isAsking) {
+      // Bắt đầu đặt câu hỏi - broadcast cho thư ký biết
+      broadcastQuestionStarted();
+      toggleAsk();
+    } else {
+      if (isRecording) {
+        stopRecording();
+      }
+
+      // Kết thúc đặt câu hỏi - broadcast cho thư ký biết đang xử lý
+      broadcastQuestionProcessing();
+
+      waitingForQuestionResult.current = true;
+      swalConfig.loading(
+        "Đang xử lý câu hỏi...",
+        "Vui lòng chờ hệ thống phân tích câu hỏi"
+      );
+
+      const upgradePopupTimeout = setTimeout(() => {
+        if (waitingForQuestionResult.current) {
+          swalConfig.warning(
+            "Đang xử lý câu hỏi...",
+            "Hệ thống đang phân tích câu hỏi. Bạn có thể tiếp tục buổi bảo vệ, kết quả sẽ hiển thị khi hoàn tất."
+          );
+        }
+      }, 5000);
+
+      if (!questionTimeoutRef.current) {
+        questionTimeoutRef.current = upgradePopupTimeout;
+      }
+
+      toggleAsk();
+    }
+  };
+
+  // sessionStarted được điều khiển bởi event session_started/session_ended từ thư ký
+  // Không tự động enable - phải chờ thư ký bấm Start Mic
+
   useEffect(() => {
     const fetchGroupData = async () => {
       try {
         setLoading(true);
-        const [groupRes, studentsRes, rubricsRes, sessionsRes] =
-          await Promise.all([
-            groupsApi.getById(groupId).catch(() => ({ data: null })),
-            studentsApi.getByGroupId(groupId).catch(() => ({ data: [] })),
-            rubricsApi.getAll().catch(() => ({ data: [] })),
-            defenseSessionsApi.getAll().catch(() => ({ data: [] })),
-          ]);
+        const [groupRes, studentsRes, sessionsRes] = await Promise.all([
+          groupsApi.getById(groupId).catch(() => ({ data: null })),
+          studentsApi.getByGroupId(groupId).catch(() => ({ data: [] })),
+          defenseSessionsApi.getAll().catch(() => ({ data: [] })),
+        ]);
 
         const group = groupRes.data;
         const students = studentsRes.data || [];
         const sessions = sessionsRes.data || [];
-        setRubrics(rubricsRes.data || []);
+
+        // Fetch rubrics by majorId
+        if (group?.majorId) {
+          try {
+            const rubricsRes = await rubricsApi.getByMajorId(group.majorId);
+            setRubrics(rubricsRes.data || []);
+          } catch (error) {
+            console.error("Error fetching rubrics by major:", error);
+            setRubrics([]);
+          }
+        } else {
+          console.error("No majorId found for group, cannot fetch rubrics");
+          setRubrics([]);
+        }
 
         // Find session for this group
         const groupSession = sessions.find((s: any) => s.groupId === groupId);
@@ -268,14 +444,14 @@ export default function GradeGroupPage() {
                 : [];
 
               // Create scores array based on rubrics
-              const rubricCount = rubricsRes.data?.length || 5;
+              const rubricCount = rubrics.length || 5;
               const scoresArray = new Array(rubricCount).fill(0);
               const scoreIds = new Array(rubricCount).fill(0);
               const commentsArray = new Array(rubricCount).fill("");
 
               // Map existing scores to rubrics
               sessionScores.forEach((score: ScoreReadDto) => {
-                const rubricIndex = (rubricsRes.data || []).findIndex(
+                const rubricIndex = rubrics.findIndex(
                   (r: any) => r.id === score.rubricId
                 );
                 if (rubricIndex >= 0) {
@@ -443,7 +619,12 @@ export default function GradeGroupPage() {
         "Success",
         "Scores and notes saved successfully!"
       );
-      router.push("/member/groups-to-grade");
+      const finalSessionId = urlSessionId ? parseInt(urlSessionId) : sessionId;
+      if (finalSessionId) {
+        router.push(`/member/defense-sessions?sessionId=${finalSessionId}`);
+      } else {
+        router.push("/member/groups-to-grade");
+      }
     } catch (error: any) {
       console.error("Error saving scores:", error);
       // Close loading dialog if it exists
@@ -454,7 +635,14 @@ export default function GradeGroupPage() {
     }
   };
 
-  const handleCancel = () => router.push("/member/groups-to-grade");
+  const handleCancel = () => {
+    const finalSessionId = urlSessionId ? parseInt(urlSessionId) : sessionId;
+    if (finalSessionId) {
+      router.push(`/member/defense-sessions?sessionId=${finalSessionId}`);
+    } else {
+      router.push("/member/groups-to-grade");
+    }
+  };
 
   return (
     <>
@@ -474,13 +662,83 @@ export default function GradeGroupPage() {
 
             {/* Right section */}
             <div className="flex items-center gap-3 flex-wrap justify-end">
+              {/* Mic Controls */}
+              <div className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg border">
+                {!isRecording ? (
+                  <button
+                    onClick={handleToggleRecording}
+                    disabled={!sessionId || !sessionStarted}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-white text-sm font-medium shadow-sm transition ${
+                      !sessionId || !sessionStarted
+                        ? "bg-gray-400 cursor-not-allowed opacity-50"
+                        : "bg-purple-600 hover:bg-purple-700"
+                    }`}
+                    title={
+                      !sessionStarted
+                        ? "Chờ thư ký bắt đầu phiên"
+                        : "Bắt đầu ghi âm"
+                    }
+                  >
+                    <Mic className="w-4 h-4" />
+                    <span>Start Mic</span>
+                  </button>
+                ) : (
+                  <>
+                    {!isAsking && (
+                      <button
+                        onClick={handleToggleRecording}
+                        className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-500 text-white hover:bg-red-600 text-sm font-medium shadow-sm transition"
+                      >
+                        <MicOff className="w-4 h-4" />
+                        <span>Stop Mic</span>
+                      </button>
+                    )}
+
+                    <button
+                      onClick={handleToggleQuestion}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium shadow-sm transition ${
+                        isAsking
+                          ? "bg-orange-500 text-white hover:bg-orange-600"
+                          : "bg-indigo-500 text-white hover:bg-indigo-600"
+                      }`}
+                    >
+                      {isAsking ? (
+                        <>
+                          <StopCircle className="w-4 h-4" />
+                          <span>Kết thúc câu hỏi</span>
+                        </>
+                      ) : (
+                        <>
+                          <MessageSquare className="w-4 h-4" />
+                          <span>Đặt câu hỏi</span>
+                        </>
+                      )}
+                    </button>
+                  </>
+                )}
+
+                {/* Connection status */}
+                <div
+                  className={`w-2 h-2 rounded-full ${
+                    wsConnected ? "bg-green-500" : "bg-gray-400"
+                  }`}
+                  title={wsConnected ? "Đã kết nối" : "Chưa kết nối"}
+                />
+              </div>
+
               {/* Back to list */}
               <Link
-                href="/member/groups-to-grade"
+                href={
+                  urlSessionId
+                    ? `/member/defense-sessions?sessionId=${urlSessionId}`
+                    : sessionId
+                    ? `/member/defense-sessions?sessionId=${sessionId}`
+                    : "/member/groups-to-grade"
+                }
                 className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 text-gray-700 text-sm font-medium shadow-sm hover:bg-gray-100 transition"
               >
                 <ArrowLeft className="w-4 h-4" />
-                <span>Back to list</span>
+                <span>Back</span>
               </Link>
 
               {/* Language */}
@@ -501,35 +759,6 @@ export default function GradeGroupPage() {
             </div>
 
             <div className="flex items-center gap-3 flex-wrap justify-end">
-              {/* Mic Button */}
-              {sessionId && (
-                <button
-                  onClick={handleToggleRecording}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium shadow-sm transition ${
-                    isRecording
-                      ? "bg-red-50 border-red-200 text-red-600 hover:bg-red-100"
-                      : "bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100"
-                  }`}
-                  title={wsConnected ? "Ready to record" : "Connecting..."}
-                >
-                  {isRecording ? (
-                    <MicOff className="w-4 h-4" />
-                  ) : (
-                    <Mic className="w-4 h-4" />
-                  )}
-                  <span>{isRecording ? "Stop Mic" : "Start Mic"}</span>
-                  {wsConnected && (
-                    <span
-                      className={`w-2 h-2 rounded-full ml-1 ${
-                        isRecording
-                          ? "bg-red-500 animate-pulse"
-                          : "bg-green-500"
-                      }`}
-                    ></span>
-                  )}
-                </button>
-              )}
-
               <button
                 onClick={handleCancel}
                 className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 text-gray-700 text-sm font-medium shadow-sm hover:bg-gray-100 transition"

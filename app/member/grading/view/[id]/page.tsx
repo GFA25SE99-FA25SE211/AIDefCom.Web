@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { useParams, useRouter } from "next/navigation";
+import React, { useState, useEffect, Suspense } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Save } from "lucide-react";
 import { groupsApi } from "@/lib/api/groups";
@@ -124,6 +124,7 @@ const criteria = [
 export default function ViewScorePage() {
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
   const groupId = params.id as string;
   const [groupData, setGroupData] = useState<GroupData | null>(null);
   const [studentScores, setStudentScores] = useState<StudentScore[]>([]);
@@ -131,23 +132,38 @@ export default function ViewScorePage() {
   const [loading, setLoading] = useState(true);
   const [rubrics, setRubrics] = useState<any[]>([]);
   const [sessionId, setSessionId] = useState<number | null>(null);
+  
+  // Get sessionId from URL if available
+  const urlSessionId = searchParams?.get("sessionId");
 
   useEffect(() => {
     const fetchGroupData = async () => {
       try {
         setLoading(true);
-        const [groupRes, studentsRes, rubricsRes, sessionsRes] =
+        const [groupRes, studentsRes, sessionsRes] =
           await Promise.all([
             groupsApi.getById(groupId).catch(() => ({ data: null })),
             studentsApi.getByGroupId(groupId).catch(() => ({ data: [] })),
-            rubricsApi.getAll().catch(() => ({ data: [] })),
             defenseSessionsApi.getAll().catch(() => ({ data: [] })),
           ]);
 
         const group = groupRes.data;
         const students = studentsRes.data || [];
         const sessions = sessionsRes.data || [];
-        setRubrics(rubricsRes.data || []);
+        
+        // Fetch rubrics by majorId
+        if (group?.majorId) {
+          try {
+            const rubricsRes = await rubricsApi.getByMajorId(group.majorId);
+            setRubrics(rubricsRes.data || []);
+          } catch (error) {
+            console.error("Error fetching rubrics by major:", error);
+            setRubrics([]);
+          }
+        } else {
+          console.error("No majorId found for group, cannot fetch rubrics");
+          setRubrics([]);
+        }
 
         // Find session for this group
         const groupSession = sessions.find((s: any) => s.groupId === groupId);
@@ -184,13 +200,13 @@ export default function ViewScorePage() {
                 : [];
 
               // Create scores array based on rubrics
-              const scoresArray = new Array(rubricsRes.data?.length || 5).fill(
+              const scoresArray = new Array(rubrics.length || 5).fill(
                 0
               );
 
               // Map existing scores to rubrics
               sessionScores.forEach((score: ScoreReadDto) => {
-                const rubricIndex = (rubricsRes.data || []).findIndex(
+                const rubricIndex = rubrics.findIndex(
                   (r: any) => r.id === score.rubricId
                 );
                 if (rubricIndex >= 0) {
@@ -304,11 +320,11 @@ export default function ViewScorePage() {
             <div className="flex items-center gap-3 flex-wrap justify-end">
               {/* Back to list */}
               <Link
-                href="/member/groups-to-grade"
+                href={urlSessionId ? `/member/defense-sessions?sessionId=${urlSessionId}` : (sessionId ? `/member/defense-sessions?sessionId=${sessionId}` : "/member/groups-to-grade")}
                 className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 text-gray-700 text-sm font-medium shadow-sm hover:bg-gray-100 transition"
               >
                 <ArrowLeft className="w-4 h-4" />
-                <span>Back to list</span>
+                <span>Back</span>
               </Link>
             </div>
           </div>
@@ -331,11 +347,11 @@ export default function ViewScorePage() {
             <div className="flex items-center gap-3 flex-wrap justify-end">
               {/* Back to list */}
               <Link
-                href="/member/groups-to-grade"
+                href={urlSessionId ? `/member/defense-sessions?sessionId=${urlSessionId}` : (sessionId ? `/member/defense-sessions?sessionId=${sessionId}` : "/member/groups-to-grade")}
                 className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 text-gray-700 text-sm font-medium shadow-sm hover:bg-gray-100 transition"
               >
                 <ArrowLeft className="w-4 h-4" />
-                <span>Back to List</span>
+                <span>Back</span>
               </Link>
             </div>
           </div>

@@ -43,7 +43,7 @@ export default function CreateTaskModal({
         description: formData.description,
         assignedById: currentUserId,
         assignedToId: formData.assignedToId,
-        rubricId: formData.rubricId ? Number(formData.rubricId) : 0,
+        rubricId: formData.rubricId ? Number(formData.rubricId) : null,
         status: "Pending",
         sessionId: sessionId,
       };
