@@ -127,8 +127,8 @@ export default function TranscriptPage({
   // Use local backend URL for debugging
   // Backend automatically identifies speaker, so we don't need to send speaker param
   // REMOVING defense_session_id to match Python script behavior (which works).
-  const WS_URL = `ws://localhost:8000/ws/stt?defense_session_id=${id}`;
-   //const WS_URL = `ws://aidefcom.io.vn/ws/stt?defense_session_id=${id}`;
+  //const WS_URL = `ws://localhost:8000/ws/stt?defense_session_id=${id}`;
+   const WS_URL = `wss://https://fastapi-service.happyforest-7c6ec975.southeastasia.azurecontainerapps.io/ws/stt?defense_session_id=${id}`;
 
 
   const {
