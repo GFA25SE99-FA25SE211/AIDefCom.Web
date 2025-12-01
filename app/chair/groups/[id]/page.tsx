@@ -66,9 +66,11 @@ export default function GroupDetailsPage() {
       console.log("🛑 Session ended by secretary - mic disabled");
       setSessionStarted(false);
     } else if (eventType === "question_mode_started") {
+      // Chính mình bắt đầu đặt câu hỏi
       swalConfig.info("Bắt đầu ghi nhận câu hỏi");
       setHasQuestionFinalText(false);
     } else if (eventType === "question_mode_result") {
+      // Kết quả câu hỏi của CHÍNH MÌNH
       if (questionTimeoutRef.current) {
         clearTimeout(questionTimeoutRef.current);
         questionTimeoutRef.current = null;
@@ -93,6 +95,39 @@ export default function GroupDetailsPage() {
         return;
       }
       console.log("📢 Broadcast from other client:", msg.speaker, msg.text);
+    } else if (eventType === "broadcast_question_started") {
+      // Người khác (member/thư ký) bắt đầu đặt câu hỏi - dùng toast nhẹ
+      if (msg.source_session_id && msg.source_session_id === mySessionIdRef.current) {
+        return;
+      }
+      const speakerName = msg.speaker || "Member";
+      swalConfig.toast.info(`${speakerName} đang đặt câu hỏi...`);
+    } else if (eventType === "broadcast_question_processing") {
+      // Người khác kết thúc đặt câu hỏi, đang xử lý - dùng toast nhẹ
+      if (msg.source_session_id && msg.source_session_id === mySessionIdRef.current) {
+        return;
+      }
+      const speakerName = msg.speaker || "Member";
+      swalConfig.toast.info(`Đang xử lý câu hỏi từ ${speakerName}...`);
+    } else if (eventType === "broadcast_question_result") {
+      // Kết quả câu hỏi từ người khác
+      if (msg.source_session_id && msg.source_session_id === mySessionIdRef.current) {
+        return;
+      }
+      const speakerName = msg.speaker || "Member";
+      const questionText = msg.question_text || "";
+      
+      if (msg.is_duplicate) {
+        swalConfig.toast.info(`Câu hỏi từ ${speakerName} bị trùng`);
+      } else {
+        if (questionText) {
+          setQuestionResults((prev) => [
+            { ...msg, from_broadcast: true, speaker: speakerName },
+            ...prev,
+          ]);
+        }
+        swalConfig.toast.success(`Câu hỏi từ ${speakerName} đã được ghi nhận`);
+      }
     } else if (eventType === "connected") {
       console.log("✅ WebSocket connected:", msg.session_id, "room_size:", msg.room_size);
       if (msg.session_id) {

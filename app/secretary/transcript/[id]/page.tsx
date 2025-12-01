@@ -185,19 +185,22 @@ export default function TranscriptPage({
       const speakerName = msg.speaker || "Member";
       setBroadcastInterimText(`${speakerName}: ${msg.text || ""}`);
     } else if (eventType === "broadcast_question_started") {
-      // Member bắt đầu đặt câu hỏi
+      // Member bắt đầu đặt câu hỏi - dùng toast nhẹ nhàng
       if (msg.source_session_id && msg.source_session_id === mySessionIdRef.current) {
         return;
       }
       const speakerName = msg.speaker || "Member";
-      swalConfig.info("Đang ghi nhận câu hỏi", `${speakerName} đang đặt câu hỏi...`);
+      // Toast notification - không chặn màn hình
+      swalConfig.toast.info(`${speakerName} đang đặt câu hỏi...`);
     } else if (eventType === "broadcast_question_processing") {
       // Member kết thúc đặt câu hỏi, đang xử lý
+      // Dùng toast để thư ký biết nhưng KHÔNG bị chặn làm việc
       if (msg.source_session_id && msg.source_session_id === mySessionIdRef.current) {
         return;
       }
       const speakerName = msg.speaker || "Member";
-      swalConfig.loading("Đang xử lý câu hỏi...", `Hệ thống đang phân tích câu hỏi từ ${speakerName}`);
+      // Toast nhẹ - tự đóng sau 3s, không cần bấm OK
+      swalConfig.toast.info(`Đang xử lý câu hỏi từ ${speakerName}...`);
     } else if (eventType === "broadcast_question_result") {
       // Kết quả câu hỏi từ MEMBER (không phải từ chính mình)
       if (msg.source_session_id && msg.source_session_id === mySessionIdRef.current) {

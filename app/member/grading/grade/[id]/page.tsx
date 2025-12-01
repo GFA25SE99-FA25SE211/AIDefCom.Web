@@ -208,6 +208,39 @@ export default function GradeGroupPage() {
       }
       console.log("📢 Broadcast from other client:", msg.speaker, msg.text);
       // Member có thể hiển thị hoặc bỏ qua tùy nhu cầu
+    } else if (eventType === "broadcast_question_started") {
+      // Người khác (chair/thư ký/member khác) bắt đầu đặt câu hỏi - dùng toast nhẹ
+      if (msg.source_session_id && msg.source_session_id === mySessionIdRef.current) {
+        return;
+      }
+      const speakerName = msg.speaker || "Member";
+      swalConfig.toast.info(`${speakerName} đang đặt câu hỏi...`);
+    } else if (eventType === "broadcast_question_processing") {
+      // Người khác kết thúc đặt câu hỏi, đang xử lý - dùng toast nhẹ
+      if (msg.source_session_id && msg.source_session_id === mySessionIdRef.current) {
+        return;
+      }
+      const speakerName = msg.speaker || "Member";
+      swalConfig.toast.info(`Đang xử lý câu hỏi từ ${speakerName}...`);
+    } else if (eventType === "broadcast_question_result") {
+      // Kết quả câu hỏi từ người khác
+      if (msg.source_session_id && msg.source_session_id === mySessionIdRef.current) {
+        return;
+      }
+      const speakerName = msg.speaker || "Member";
+      const questionText = msg.question_text || "";
+      
+      if (msg.is_duplicate) {
+        swalConfig.toast.info(`Câu hỏi từ ${speakerName} bị trùng`);
+      } else {
+        if (questionText) {
+          setQuestionResults((prev) => [
+            { ...msg, from_broadcast: true, speaker: speakerName },
+            ...prev,
+          ]);
+        }
+        swalConfig.toast.success(`Câu hỏi từ ${speakerName} đã được ghi nhận`);
+      }
     } else if (eventType === "connected") {
       console.log("✅ WebSocket connected:", msg.session_id, "room_size:", msg.room_size);
       // Lưu session_id của mình
