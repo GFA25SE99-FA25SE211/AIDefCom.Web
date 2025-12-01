@@ -218,6 +218,7 @@ export default function GroupDetailsPage() {
         lecturers={lecturers}
         rubrics={rubrics}
         currentUserId={currentUserId}
+        sessionId={defenseSession?.id}
       />
 
       {/* Header with Back Button */}

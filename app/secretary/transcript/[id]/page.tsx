@@ -1,14 +1,12 @@
 "use client";
 
-import { useState, useEffect, useRef, use } from "react";
+import { useState, useEffect, useRef, use, useCallback } from "react";
 import Link from "next/link";
 import { useAudioRecorder } from "@/lib/hooks/useAudioRecorder";
 import { swalConfig, closeSwal } from "@/lib/utils/sweetAlert";
-// import { useSTTWebSocket, STTEvent } from "@/lib/hooks/useSTTWebSocket";
-import { defenseSessionsApi } from "@/lib/api/defense-sessions";
+import { defenseSessionsApi, groupsApi } from "@/lib/api";
 import { DefenseSessionDto } from "@/lib/models";
 
-// Define STTEvent locally if needed or import from a shared types file
 interface STTEvent {
   event: string;
   text?: string;
@@ -47,7 +45,22 @@ export default function TranscriptPage({
       try {
         const response = await defenseSessionsApi.getById(Number(id));
         if (response.data) {
-          setSession(response.data);
+          const sessionData = response.data;
+          // Fetch group details to get topicTitle_EN
+          if (sessionData.groupId) {
+            try {
+              const groupResponse = await groupsApi.getById(
+                sessionData.groupId
+              );
+              if (groupResponse.data) {
+                sessionData.topicTitle_EN = groupResponse.data.topicTitle_EN;
+                sessionData.topicTitle_VN = groupResponse.data.topicTitle_VN;
+              }
+            } catch (groupError) {
+              console.error("Failed to fetch group details:", groupError);
+            }
+          }
+          setSession(sessionData);
         }
       } catch (error) {
         console.error("Failed to fetch session:", error);
@@ -61,7 +74,8 @@ export default function TranscriptPage({
     }
   }, [id]);
 
-  const handleSTTEvent = (msg: any) => {
+  const handleSTTEvent = useCallback((msg: any) => {
+    console.log("handleSTTEvent received:", msg);
     const eventType = msg.type || msg.event;
 
     if (eventType === "partial" || eventType === "recognizing") {
@@ -70,11 +84,12 @@ export default function TranscriptPage({
       setInterimText("");
       // Normalize event structure for state
       setTranscript((prev) => [...prev, { ...msg, event: "recognized" }]);
-      
+
       // If in question mode, mark that we have final text
-      if (isAsking && msg.text) {
-        setHasQuestionFinalText(true);
-      }
+      // Note: isAsking is not available here due to circular dependency with useAudioRecorder
+      // if (isAsking && msg.text) {
+      //   setHasQuestionFinalText(true);
+      // }
     } else if (eventType === "question_mode_started") {
       console.log("Question mode started", msg.session_id);
       swalConfig.info("Bắt đầu ghi nhận câu hỏi");
@@ -82,22 +97,25 @@ export default function TranscriptPage({
       setHasQuestionFinalText(false);
     } else if (eventType === "question_mode_result") {
       console.log("Question mode result", msg);
-      
+
       // Clear timeout and reset waiting flag
       if (questionTimeoutRef.current) {
         clearTimeout(questionTimeoutRef.current);
         questionTimeoutRef.current = null;
       }
       waitingForQuestionResult.current = false;
-      
+
       // Close loading popup if open
       closeSwal();
-      
+
       // Reset flag after getting result
       setHasQuestionFinalText(false);
-      
+
       if (msg.is_duplicate) {
-        swalConfig.warning("Câu hỏi bị trùng", "Hệ thống đã ghi nhận câu hỏi này trước đó.");
+        swalConfig.warning(
+          "Câu hỏi bị trùng",
+          "Hệ thống đã ghi nhận câu hỏi này trước đó."
+        );
         // Do not add duplicate question to UI list
       } else {
         setQuestionResults((prev) => [msg, ...prev]);
@@ -107,12 +125,15 @@ export default function TranscriptPage({
       console.log("Session started:", msg.session_id);
     } else if (eventType === "error") {
       console.error("STT Error:", msg.message || msg.error);
-      swalConfig.error("Lỗi STT", msg.message || msg.error || "Đã xảy ra lỗi không xác định");
+      swalConfig.error(
+        "Lỗi STT",
+        msg.message || msg.error || "Đã xảy ra lỗi không xác định"
+      );
     } else if (eventType === "speaker_identified") {
       console.log("Speaker identified:", msg.speaker);
       // Optional: update UI with speaker info if needed
     }
-  };
+  }, []);
 
   useEffect(() => {
     const el = transcriptContainerRef.current;
@@ -124,11 +145,7 @@ export default function TranscriptPage({
     });
   }, [transcript, interimText]);
 
-  // Use local backend URL for debugging
-  // Backend automatically identifies speaker, so we don't need to send speaker param
-  // REMOVING defense_session_id to match Python script behavior (which works).
-  //const WS_URL = `ws://localhost:8000/ws/stt`;
-   const WS_URL = `ws://localhost:8000/ws/stt?defense_session_id=${id}`;
+  const WS_URL = `ws://localhost:8000/ws/stt?defense_session_id=${id}`;
 
   const {
     isRecording,
@@ -141,6 +158,7 @@ export default function TranscriptPage({
   } = useAudioRecorder({
     wsUrl: WS_URL,
     onWsEvent: handleSTTEvent,
+    autoConnect: true,
   });
 
   const handleToggleRecording = async () => {
@@ -162,22 +180,25 @@ export default function TranscriptPage({
       if (isRecording) {
         stopRecording();
       }
-      
+
       // 2. Set flag và hiện loading popup
       waitingForQuestionResult.current = true;
-      swalConfig.loading("Đang xử lý câu hỏi...", "Vui lòng chờ hệ thống phân tích câu hỏi");
-      
+      swalConfig.loading(
+        "Đang xử lý câu hỏi...",
+        "Vui lòng chờ hệ thống phân tích câu hỏi"
+      );
+
       // 3. Sau 5s, nếu vẫn chưa có kết quả thì show nút "Tiếp tục"
       questionTimeoutRef.current = setTimeout(() => {
         // Chỉ show nếu vẫn đang chờ kết quả
         if (waitingForQuestionResult.current) {
           swalConfig.warning(
-            "Đang xử lý câu hỏi...", 
+            "Đang xử lý câu hỏi...",
             "Hệ thống đang phân tích câu hỏi. Bạn có thể tiếp tục buổi bảo vệ, kết quả sẽ hiển thị khi hoàn tất."
           );
         }
       }, 5000);
-      
+
       // 4. Gửi lệnh kết thúc (toggleAsk sẽ gửi q:end)
       toggleAsk();
     }
@@ -191,10 +212,10 @@ export default function TranscriptPage({
     } else {
       console.warn("No session loaded; cannot log Defense Session ID.");
     }
-    
+
     // Kết thúc phiên và đóng WebSocket
     stopSession();
-    
+
     // TODO: Call API to save
     alert("Transcript saved successfully!");
   };
@@ -213,27 +234,132 @@ export default function TranscriptPage({
 
   return (
     <div className="page-container">
-      <div className="mb-6">
+      <div className="mb-8">
         <Link
           href="/secretary/transcript"
-          className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1"
+          className="inline-flex items-center text-sm text-gray-500 hover:text-gray-900 mb-4 transition-colors"
         >
-          ← Back
+          <svg
+            className="w-4 h-4 mr-1"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M10 19l-7-7m0 0l7-7m-7 7h18"
+            />
+          </svg>
+          Back to Dashboard
         </Link>
-        <h1 className="text-2xl font-semibold text-gray-800 mt-2">
-          Defense Session - Group {session.groupId}
-        </h1>
-        <p className="text-gray-500 text-sm">
-          Currently presenting: Group {session.groupId}{" "}
-          <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded ml-2">
-            {session.location}
-          </span>
-        </p>
-        {/* Debug Info */}
-        <div className="mt-2 p-2 bg-gray-100 rounded text-xs text-gray-600 font-mono">
-          <p>Recording: {isRecording ? "Yes" : "No"}</p>
-          <p>WebSocket: {wsConnected ? "Connected" : "Disconnected"}</p>
-          <p>WS URL: {WS_URL}</p>
+
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+          <div className="flex flex-col md:flex-row justify-between items-start gap-4">
+            <div className="space-y-3 flex-1">
+              <div className="flex items-center gap-3">
+                <h1 className="text-2xl font-bold text-gray-900">
+                  Defense Session{" "}
+                  <span className="text-indigo-600">#{session.groupId}</span>
+                </h1>
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100">
+                  {session.status || "Scheduled"}
+                </span>
+              </div>
+
+              {session.topicTitle_EN && (
+                <p className="text-lg text-gray-700 font-medium leading-relaxed">
+                  {session.topicTitle_EN}
+                </p>
+              )}
+
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-gray-500">
+                <div className="flex items-center gap-1.5">
+                  <svg
+                    className="w-4 h-4 text-gray-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                    />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                    />
+                  </svg>
+                  {session.location}
+                </div>
+                {session.defenseDate && (
+                  <div className="flex items-center gap-1.5">
+                    <svg
+                      className="w-4 h-4 text-gray-400"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                      />
+                    </svg>
+                    {new Date(session.defenseDate).toLocaleDateString()}
+                  </div>
+                )}
+                {session.startTime && session.endTime && (
+                  <div className="flex items-center gap-1.5">
+                    <svg
+                      className="w-4 h-4 text-gray-400"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                      />
+                    </svg>
+                    {session.startTime.slice(0, 5)} -{" "}
+                    {session.endTime.slice(0, 5)}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Technical Status Bar */}
+          <div className="mt-6 pt-4 border-t border-gray-100 flex items-center gap-6 text-xs font-mono text-gray-500">
+            <div className="flex items-center gap-2">
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  wsConnected ? "bg-emerald-500" : "bg-rose-500"
+                }`}
+              ></span>
+              <span>System: {wsConnected ? "Online" : "Offline"}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  isRecording ? "bg-rose-500 animate-pulse" : "bg-slate-300"
+                }`}
+              ></span>
+              <span>Mic: {isRecording ? "Active" : "Standby"}</span>
+            </div>
+            <div className="text-gray-400 truncate max-w-xs" title={WS_URL}>
+              {WS_URL}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -296,7 +422,11 @@ export default function TranscriptPage({
                       ? "bg-orange-600 hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
                       : "bg-indigo-500 hover:bg-indigo-600"
                   }`}
-                  title={isAsking && !hasQuestionFinalText ? "Vui lòng nói câu hỏi hoàn chỉnh" : ""}
+                  title={
+                    isAsking && !hasQuestionFinalText
+                      ? "Vui lòng nói câu hỏi hoàn chỉnh"
+                      : ""
+                  }
                 >
                   {isAsking ? "Kết thúc đặt câu hỏi" : "Đặt câu hỏi"}
                 </button>
@@ -368,7 +498,7 @@ export default function TranscriptPage({
           <li>Click &quot;End&quot; to finish the recording session</li>
           <li>You can edit or take notes at any time</li>
           <li>Nhấn "Đặt câu hỏi" để vào chế độ ghi nhận câu hỏi</li>
-          <li>Nhấn lại để kết thúc, hệ thống sẽ trả về câu hỏi đã bắt được</li>
+          <li>Nhấn lại để kết thúc, hệ thống sẽ trả về câu hỏi đã nhận được</li>
         </ul>
       </div>
 
@@ -414,13 +544,13 @@ export default function TranscriptPage({
       )}
 
       <div className="flex justify-end gap-3 mb-8">
-        <button 
+        <button
           onClick={() => window.history.back()}
           className="px-4 py-2 text-gray-600 bg-white border rounded-md hover:bg-gray-50 text-sm font-medium shadow-sm"
         >
           Cancel
         </button>
-        <button 
+        <button
           onClick={handleSaveTranscript}
           disabled={!wsConnected && transcript.length === 0}
           className="px-4 py-2 text-white bg-purple-600 rounded-md hover:bg-purple-700 text-sm font-medium shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"

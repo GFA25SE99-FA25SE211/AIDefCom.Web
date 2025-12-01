@@ -8,6 +8,7 @@ interface CreateTaskModalProps {
   lecturers: any[];
   rubrics: RubricDto[];
   currentUserId: string;
+  sessionId?: number;
 }
 
 export default function CreateTaskModal({
@@ -16,6 +17,7 @@ export default function CreateTaskModal({
   lecturers,
   rubrics,
   currentUserId,
+  sessionId,
 }: CreateTaskModalProps) {
   const [formData, setFormData] = useState({
     title: "",
@@ -43,6 +45,7 @@ export default function CreateTaskModal({
         assignedToId: formData.assignedToId,
         rubricId: formData.rubricId ? Number(formData.rubricId) : 0,
         status: "Pending",
+        sessionId: sessionId,
       };
 
       console.log("Creating task with payload:", payload);
