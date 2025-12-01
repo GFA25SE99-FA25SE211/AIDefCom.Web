@@ -1,12 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { Mic, MicOff, MessageSquare, StopCircle } from "lucide-react";
 import { groupsApi } from "@/lib/api/groups";
 import { studentsApi } from "@/lib/api/students";
 import { defenseSessionsApi } from "@/lib/api/defense-sessions";
 import { rubricsApi } from "@/lib/api/rubrics";
 import { memberNotesApi } from "@/lib/api/member-notes";
+import { useAudioRecorder } from "@/lib/hooks/useAudioRecorder";
+import { swalConfig, closeSwal } from "@/lib/utils/sweetAlert";
 import type {
   GroupDto,
   StudentDto,
@@ -40,6 +43,125 @@ export default function GroupDetailsPage() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Mic and session states (giống member)
+  const [sessionStarted, setSessionStarted] = useState(false); // Thư ký đã bắt đầu phiên chưa
+  const [questionResults, setQuestionResults] = useState<any[]>([]);
+  const [hasQuestionFinalText, setHasQuestionFinalText] = useState(false);
+  const [mySessionId, setMySessionId] = useState<string | null>(null);
+  const mySessionIdRef = useRef<string | null>(null);
+  const questionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const waitingForQuestionResult = useRef<boolean>(false);
+
+  // WebSocket event handler (giống member)
+  const handleSTTEvent = (msg: any) => {
+    const eventType = msg.type || msg.event;
+
+    if (eventType === "session_started") {
+      // Thư ký đã bắt đầu phiên
+      console.log("🎤 Session started by secretary - mic enabled");
+      setSessionStarted(true);
+    } else if (eventType === "session_ended") {
+      // Thư ký đã kết thúc phiên
+      console.log("🛑 Session ended by secretary - mic disabled");
+      setSessionStarted(false);
+    } else if (eventType === "question_mode_started") {
+      swalConfig.info("Bắt đầu ghi nhận câu hỏi");
+      setHasQuestionFinalText(false);
+    } else if (eventType === "question_mode_result") {
+      if (questionTimeoutRef.current) {
+        clearTimeout(questionTimeoutRef.current);
+        questionTimeoutRef.current = null;
+      }
+      waitingForQuestionResult.current = false;
+      closeSwal();
+      setHasQuestionFinalText(false);
+      
+      if (msg.is_duplicate) {
+        swalConfig.warning("Câu hỏi bị trùng", "Hệ thống đã ghi nhận câu hỏi này trước đó.");
+      } else {
+        setQuestionResults((prev) => [msg, ...prev]);
+        swalConfig.success("Câu hỏi hợp lệ", "Đã ghi nhận câu hỏi mới.");
+      }
+    } else if (eventType === "error") {
+      console.error("STT Error:", msg.message || msg.error);
+      swalConfig.error("Lỗi STT", msg.message || msg.error || "Đã xảy ra lỗi không xác định");
+    } else if (eventType === "broadcast_transcript") {
+      // Transcript từ client khác trong cùng session
+      if (msg.source_session_id && msg.source_session_id === mySessionIdRef.current) {
+        console.log("🚫 Ignoring broadcast from self");
+        return;
+      }
+      console.log("📢 Broadcast from other client:", msg.speaker, msg.text);
+    } else if (eventType === "connected") {
+      console.log("✅ WebSocket connected:", msg.session_id, "room_size:", msg.room_size);
+      if (msg.session_id) {
+        setMySessionId(msg.session_id);
+        mySessionIdRef.current = msg.session_id;
+      }
+    }
+  };
+
+  // WebSocket URL - kết nối cùng session với thư ký
+  const WS_URL = defenseSession?.id
+    ? `wss://fastapi-service.happyforest-7c6ec975.southeastasia.azurecontainerapps.io/ws/stt?defense_session_id=${defenseSession.id}&role=chair`
+    : null;
+
+  const {
+    isRecording,
+    isAsking,
+    wsConnected,
+    startRecording,
+    stopRecording,
+    toggleAsk,
+    broadcastQuestionStarted,
+    broadcastQuestionProcessing,
+  } = useAudioRecorder({
+    wsUrl: WS_URL || "",
+    onWsEvent: handleSTTEvent,
+    autoConnect: !!defenseSession?.id,
+  });
+
+  const handleToggleRecording = async () => {
+    if (isRecording) {
+      stopRecording();
+    } else {
+      await startRecording();
+    }
+  };
+
+  const handleToggleQuestion = async () => {
+    if (!isAsking) {
+      // Bắt đầu đặt câu hỏi - broadcast cho thư ký biết
+      broadcastQuestionStarted();
+      toggleAsk();
+    } else {
+      if (isRecording) {
+        stopRecording();
+      }
+      
+      // Kết thúc đặt câu hỏi - broadcast cho thư ký biết đang xử lý
+      broadcastQuestionProcessing();
+      
+      waitingForQuestionResult.current = true;
+      swalConfig.loading("Đang xử lý câu hỏi...", "Vui lòng chờ hệ thống phân tích câu hỏi");
+      
+      const upgradePopupTimeout = setTimeout(() => {
+        if (waitingForQuestionResult.current) {
+          swalConfig.warning(
+            "Đang xử lý câu hỏi...",
+            "Hệ thống đang phân tích câu hỏi. Bạn có thể tiếp tục buổi bảo vệ, kết quả sẽ hiển thị khi hoàn tất."
+          );
+        }
+      }, 5000);
+      
+      if (!questionTimeoutRef.current) {
+        questionTimeoutRef.current = upgradePopupTimeout;
+      }
+      
+      toggleAsk();
+    }
+  };
 
   useEffect(() => {
     if (!id) return;
@@ -269,6 +391,69 @@ export default function GroupDetailsPage() {
             {group.semesterName} · {group.majorName}
           </p>
         </div>
+
+        {/* Mic Controls - giống member */}
+        {defenseSession && (
+          <div className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg border ml-4">
+            {!isRecording ? (
+              <button
+                onClick={handleToggleRecording}
+                disabled={!defenseSession?.id || !sessionStarted}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-white text-sm font-medium shadow-sm transition ${
+                  !defenseSession?.id || !sessionStarted
+                    ? "bg-gray-400 cursor-not-allowed opacity-50"
+                    : "bg-purple-600 hover:bg-purple-700"
+                }`}
+                title={!sessionStarted ? "Chờ thư ký bắt đầu phiên" : "Bắt đầu ghi âm"}
+              >
+                <Mic className="w-4 h-4" />
+                <span>Start Mic</span>
+              </button>
+            ) : (
+              <>
+                {!isAsking && (
+                  <button
+                    onClick={handleToggleRecording}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-500 text-white hover:bg-red-600 text-sm font-medium shadow-sm transition"
+                  >
+                    <MicOff className="w-4 h-4" />
+                    <span>Stop Mic</span>
+                  </button>
+                )}
+
+                <button
+                  onClick={handleToggleQuestion}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium shadow-sm transition ${
+                    isAsking
+                      ? "bg-orange-500 text-white hover:bg-orange-600"
+                      : "bg-indigo-500 text-white hover:bg-indigo-600"
+                  }`}
+                >
+                  {isAsking ? (
+                    <>
+                      <StopCircle className="w-4 h-4" />
+                      <span>Kết thúc câu hỏi</span>
+                    </>
+                  ) : (
+                    <>
+                      <MessageSquare className="w-4 h-4" />
+                      <span>Đặt câu hỏi</span>
+                    </>
+                  )}
+                </button>
+              </>
+            )}
+
+            {/* Connection status */}
+            <div
+              className={`w-2 h-2 rounded-full ${
+                wsConnected ? "bg-green-500" : "bg-gray-400"
+              }`}
+              title={wsConnected ? "Đã kết nối" : "Chưa kết nối"}
+            />
+          </div>
+        )}
+
         <div className="ml-auto">
           <span
             className={`px-3 py-1 rounded-full text-sm font-medium ${
