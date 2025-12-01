@@ -163,6 +163,8 @@ export default function GradeGroupPage() {
   const [sessionStarted, setSessionStarted] = useState(false); // Thư ký đã bắt đầu phiên chưa
   const [questionResults, setQuestionResults] = useState<any[]>([]);
   const [hasQuestionFinalText, setHasQuestionFinalText] = useState(false);
+  const [mySessionId, setMySessionId] = useState<string | null>(null); // Lưu session_id của chính mình
+  const mySessionIdRef = useRef<string | null>(null); // Ref để tránh stale closure
   const questionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const waitingForQuestionResult = useRef<boolean>(false);
 
@@ -199,20 +201,38 @@ export default function GradeGroupPage() {
       swalConfig.error("Lỗi STT", msg.message || msg.error || "Đã xảy ra lỗi không xác định");
     } else if (eventType === "broadcast_transcript") {
       // Transcript từ client khác trong cùng session (thư ký hoặc member khác nói)
+      // Bỏ qua nếu broadcast từ chính mình
+      if (msg.source_session_id && msg.source_session_id === mySessionIdRef.current) {
+        console.log("🚫 Ignoring broadcast from self");
+        return;
+      }
       console.log("📢 Broadcast from other client:", msg.speaker, msg.text);
       // Member có thể hiển thị hoặc bỏ qua tùy nhu cầu
     } else if (eventType === "connected") {
       console.log("✅ WebSocket connected:", msg.session_id, "room_size:", msg.room_size);
-      // Nếu room_size > 1, có nghĩa thư ký đã kết nối
-      if (msg.room_size > 1) {
-        setSessionStarted(true);
+      // Lưu session_id của mình
+      if (msg.session_id) {
+        setMySessionId(msg.session_id);
+        mySessionIdRef.current = msg.session_id; // Cập nhật ref ngay lập tức
       }
+      // KHÔNG tự động enable mic chỉ dựa vào room_size
+      // Chỉ enable khi nhận được session_started từ thư ký
+    } else if (eventType === "session_started") {
+      // Thư ký đã bắt đầu ghi âm - cho phép member sử dụng mic
+      console.log("🎤 Session started by secretary - mic enabled");
+      setSessionStarted(true);
+    } else if (eventType === "session_ended") {
+      // Thư ký đã kết thúc phiên
+      console.log("🛑 Session ended by secretary - mic disabled");
+      setSessionStarted(false);
     }
   };
 
+  
+
   // WebSocket URL - kết nối cùng session với thư ký
   const WS_URL = sessionId
-    ? `ws://localhost:8000/ws/stt?defense_session_id=${sessionId}&role=member`
+    ? `wss://fastapi-service.happyforest-7c6ec975.southeastasia.azurecontainerapps.io/ws/stt?defense_session_id=${sessionId}&role=member`
     : null;
 
   const {
@@ -223,9 +243,12 @@ export default function GradeGroupPage() {
     stopRecording,
     toggleAsk,
     stopSession,
+    broadcastQuestionStarted,
+    broadcastQuestionProcessing,
   } = useAudioRecorder({
     wsUrl: WS_URL || "",
     onWsEvent: handleSTTEvent,
+    autoConnect: !!sessionId, // Tự động kết nối WS để nhận session_started từ thư ký
   });
 
   const handleToggleRecording = async () => {
@@ -238,11 +261,16 @@ export default function GradeGroupPage() {
 
   const handleToggleQuestion = async () => {
     if (!isAsking) {
+      // Bắt đầu đặt câu hỏi - broadcast cho thư ký biết
+      broadcastQuestionStarted();
       toggleAsk();
     } else {
       if (isRecording) {
         stopRecording();
       }
+      
+      // Kết thúc đặt câu hỏi - broadcast cho thư ký biết đang xử lý
+      broadcastQuestionProcessing();
       
       waitingForQuestionResult.current = true;
       swalConfig.loading("Đang xử lý câu hỏi...", "Vui lòng chờ hệ thống phân tích câu hỏi");
@@ -264,14 +292,8 @@ export default function GradeGroupPage() {
     }
   };
 
-  // Check session status - Tạm thời luôn cho phép (sẽ cần backend hỗ trợ sau)
-  useEffect(() => {
-    // TODO: Implement backend check for session status
-    // Hiện tại, cho phép member sử dụng mic khi đã có sessionId
-    if (sessionId) {
-      setSessionStarted(true);
-    }
-  }, [sessionId]);
+  // sessionStarted được điều khiển bởi event session_started/session_ended từ thư ký
+  // Không tự động enable - phải chờ thư ký bấm Start Mic
 
   useEffect(() => {
     const fetchGroupData = async () => {
