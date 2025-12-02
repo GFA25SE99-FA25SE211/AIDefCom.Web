@@ -26,12 +26,15 @@ const BASE_URL = env.voiceApiUrl;
 
 export const voiceApi = {
   getStatus: async (userId: string): Promise<VoiceEnrollmentStatus> => {
-    const response = await fetch(`${BASE_URL}/voice/users/${userId}/status`, {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-      },
-    });
+    const response = await fetch(
+      `${BASE_URL}/voice/users/${userId}/enrollment-status`,
+      {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+        },
+      }
+    );
 
     if (!response.ok) {
       if (response.status === 404) {

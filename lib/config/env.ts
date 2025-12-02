@@ -20,9 +20,7 @@ export const env = {
   // - Local HTTPS: https://localhost:7143 (set NEXT_PUBLIC_API_URL env var)
   // Set NEXT_PUBLIC_API_URL environment variable to override
   apiUrl: getApiUrl(),
-  voiceApiUrl:
-    process.env.NEXT_PUBLIC_VOICE_API_URL ||
-    "https://aidefcomvoiceapi.azurewebsites.net",
+  voiceApiUrl: process.env.NEXT_PUBLIC_VOICE_API_URL || "http://localhost:8000", // TEMPORARY: Change back to Azure URL before pushing to production
 
   // App Configuration
   appName: process.env.NEXT_PUBLIC_APP_NAME || "AIDefCom",

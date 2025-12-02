@@ -114,8 +114,8 @@ export async function POST(req: Request) {
           role: role,
         };
 
-    // If user doesn't have fullName, fetch from GET /api/auth/users
-    if (!user.fullName || user.fullName === user.email) {
+    // If user doesn't have fullName or ID looks wrong, fetch from GET /api/auth/users
+    if (!user.fullName || user.fullName === user.email || !data?.data?.user) {
       try {
         const userDetailsRes = await fetch(`${API_BASE_URL}/api/auth/users`, {
           headers: {
@@ -125,13 +125,20 @@ export async function POST(req: Request) {
 
         if (userDetailsRes.ok) {
           const userDetailsData = await userDetailsRes.json();
-          // Find current user in the list
+          // Find current user in the list by email (most reliable)
           const currentUser = userDetailsData?.data?.find(
-            (u: any) => u.id === user.id || u.email === user.email
+            (u: any) =>
+              u.email?.toLowerCase() === (decoded.email || email)?.toLowerCase()
           );
 
-          if (currentUser?.fullName) {
-            user.fullName = currentUser.fullName;
+          if (currentUser) {
+            // Update user with correct data from database
+            user.id = currentUser.id;
+            user.fullName =
+              currentUser.fullName || currentUser.name || user.fullName;
+            console.log(
+              `✅ User data fetched from database: ${user.id} (${user.fullName})`
+            );
           }
         }
       } catch (error) {

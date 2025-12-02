@@ -85,8 +85,28 @@ export default function VoiceEnrollPage() {
 
   const startRecording = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
+      // Request microphone with specific constraints for better quality
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          sampleRate: 16000, // Match backend expected sample rate
+        },
+      });
+
+      // Use audio/webm;codecs=opus for better compatibility
+      const options = { mimeType: "audio/webm;codecs=opus" };
+      let mediaRecorder: MediaRecorder;
+
+      try {
+        mediaRecorder = new MediaRecorder(stream, options);
+      } catch (e) {
+        // Fallback to default if codec not supported
+        console.warn("Opus codec not supported, using default");
+        mediaRecorder = new MediaRecorder(stream);
+      }
+
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
 
@@ -97,22 +117,40 @@ export default function VoiceEnrollPage() {
       };
 
       mediaRecorder.onstop = async () => {
-        const webmBlob = new Blob(chunksRef.current, { type: "audio/webm" });
+        const audioBlob = new Blob(chunksRef.current, {
+          type: mediaRecorder.mimeType,
+        });
+
         // Stop all tracks
         stream.getTracks().forEach((track) => track.stop());
 
         // Convert to WAV before uploading
         try {
           const { convertToWav } = await import("@/lib/utils/audioConverter");
-          const wavBlob = await convertToWav(webmBlob);
+          const wavBlob = await convertToWav(audioBlob);
+
+          // Verify WAV blob has content
+          if (wavBlob.size < 100) {
+            throw new Error("WAV file too small - no audio data");
+          }
+
+          console.log(
+            `Audio recorded: ${audioBlob.size} bytes (${mediaRecorder.mimeType}) -> WAV: ${wavBlob.size} bytes`
+          );
+
           await handleUpload(wavBlob);
         } catch (err) {
-          console.error("WAV conversion failed:", err);
-          swalConfig.error("Lỗi", "Không thể xử lý file âm thanh.");
+          console.error("Audio processing failed:", err);
+          swalConfig.error(
+            "Lỗi",
+            "Không thể xử lý file âm thanh. Vui lòng thử lại."
+          );
+          setRecording(false);
         }
       };
 
-      mediaRecorder.start();
+      // Start recording with timeslice for better data capture
+      mediaRecorder.start(100); // Capture data every 100ms
       setRecording(true);
       setTimeLeft(RECORDING_DURATION);
       setShowNextButton(false);
