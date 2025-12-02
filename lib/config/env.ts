@@ -7,7 +7,7 @@ const getApiUrl = () => {
 
 export const env = {
   apiUrl: getApiUrl(),
-  voiceApiUrl: process.env.NEXT_PUBLIC_VOICE_API_URL,
+  voiceApiUrl: process.env.VOICE_API_URL,
 } as const;
 
 export type EnvConfig = typeof env;
