@@ -42,7 +42,7 @@ export default function LoginPage() {
       if (data.user) {
         localStorage.setItem("user", JSON.stringify(data.user));
       }
-      redirectByRole(data.role, router);
+      redirectByRole(data.role, router, data.user);
     } catch {
       setError("Invalid Email or Password");
     } finally {
@@ -75,7 +75,7 @@ export default function LoginPage() {
         localStorage.setItem("user", JSON.stringify(data.user));
       }
 
-      redirectByRole(data.role, router);
+      redirectByRole(data.role, router, data.user);
     } catch {
       setError("Google login failed");
     }
@@ -215,8 +215,28 @@ function extractRole(token: string) {
 // ============================
 // REDIRECT
 // ============================
-function redirectByRole(role: string, router: any) {
+// ============================
+// REDIRECT
+// ============================
+async function redirectByRole(role: string, router: any, user?: any) {
   const r = role?.toLowerCase();
+
+  // Check voice enrollment for non-admin users
+  if (user && r !== "admin" && r !== "administrator") {
+    try {
+      // Import dynamically to avoid circular dependencies if any, or just use global import
+      const { voiceApi } = await import("@/lib/api/voice");
+      const status = await voiceApi.getStatus(user.id);
+
+      if (status.enrollment_status !== "enrolled") {
+        router.push("/voice-enroll");
+        return;
+      }
+    } catch (e) {
+      console.error("Failed to check voice status", e);
+      // Fallback to normal redirect if check fails (or maybe block? defaulting to allow for now)
+    }
+  }
 
   switch (r) {
     case "admin":

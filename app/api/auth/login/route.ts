@@ -99,13 +99,46 @@ export async function POST(req: Request) {
       console.error("❌ Cannot extract User ID from token:", decoded);
     }
 
-    const user = data?.data?.user || {
-      id: userId,
-      email: decoded.email || email,
-      fullName: decoded.name || decoded.unique_name || email,
-      roles: [role],
-      role: role,
-    };
+    // Prioritize backend user data over JWT decoded values
+    let user = data?.data?.user
+      ? {
+          ...data.data.user,
+          roles: data.data.user.roles || [role],
+          role: role,
+        }
+      : {
+          id: userId,
+          email: decoded.email || email,
+          fullName: decoded.name || decoded.unique_name || email,
+          roles: [role],
+          role: role,
+        };
+
+    // If user doesn't have fullName, fetch from GET /api/auth/users
+    if (!user.fullName || user.fullName === user.email) {
+      try {
+        const userDetailsRes = await fetch(`${API_BASE_URL}/api/auth/users`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (userDetailsRes.ok) {
+          const userDetailsData = await userDetailsRes.json();
+          // Find current user in the list
+          const currentUser = userDetailsData?.data?.find(
+            (u: any) => u.id === user.id || u.email === user.email
+          );
+
+          if (currentUser?.fullName) {
+            user.fullName = currentUser.fullName;
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch user details:", error);
+        // Continue with existing user data
+      }
+    }
 
     const res = NextResponse.json({ role, user });
 
