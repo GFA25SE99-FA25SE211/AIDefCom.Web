@@ -137,7 +137,7 @@ export default function GroupDetailsPage() {
               );
               setLecturers(onlyLecturers);
 
-              // Check if current user is in the council
+              // Check if current user is Chair in the council
               if (currentUid) {
                 const currentUserInSession = onlyLecturers.find(
                   (l: any) =>
@@ -145,60 +145,69 @@ export default function GroupDetailsPage() {
                     String(currentUid).toLowerCase()
                 );
 
-                if (currentUserInSession) {
+                // Only allow access if user is Chair (system role or council role)
+                let isUserChair = false;
+                if (isSystemChair) {
+                  isUserChair = true;
+                  setIsChair(true);
+                } else if (
+                  currentUserInSession &&
+                  currentUserInSession.role &&
+                  currentUserInSession.role.toLowerCase() === "chair"
+                ) {
+                  isUserChair = true;
+                  setIsChair(true);
+                }
+
+                if (isUserChair) {
                   setHasAccess(true);
-                  
-                  // Check if user is Chair (system role or council role)
-                  if (isSystemChair) {
-                    setIsChair(true);
-                  } else if (
-                    currentUserInSession.role &&
-                    currentUserInSession.role.toLowerCase() === "chair"
-                  ) {
-                    setIsChair(true);
-                  }
                 } else {
+                  // Not a chair, show error message and redirect
                   setHasAccess(false);
                   await swalConfig.error(
-                    "Access Denied",
-                    "You do not have access to this group. You must be a member of the defense council."
+                    "Không có quyền truy cập",
+                    "Chỉ có Chair mới có quyền xem chi tiết phiên bảo vệ này."
                   );
                   router.push("/home");
                   return;
                 }
               } else {
+                // No user ID, show error and redirect
                 setHasAccess(false);
                 await swalConfig.error(
-                  "Authentication Error",
-                  "User information not found. Please login again."
+                  "Lỗi xác thực",
+                  "Không tìm thấy thông tin người dùng. Vui lòng đăng nhập lại."
                 );
                 router.push("/home");
                 return;
               }
             } else {
+              // No council members, show error and redirect
               setHasAccess(false);
               await swalConfig.error(
-                "Access Denied",
-                "No council members found for this session."
+                "Lỗi",
+                "Không tìm thấy thành viên hội đồng cho phiên bảo vệ này."
               );
               router.push("/home");
               return;
             }
           } catch (lecErr) {
             console.error("Failed to fetch lecturers:", lecErr);
+            // Error fetching lecturers, show error and redirect
             setHasAccess(false);
             await swalConfig.error(
-              "Error",
-              "Failed to verify access. Please try again later."
+              "Lỗi",
+              "Không thể xác minh quyền truy cập. Vui lòng thử lại sau."
             );
             router.push("/home");
             return;
           }
         } else {
+          // No defense session, show error and redirect
           setHasAccess(false);
           await swalConfig.error(
-            "Not Found",
-            "No defense session found for this group."
+            "Không tìm thấy",
+            "Không tìm thấy phiên bảo vệ cho nhóm này."
           );
           router.push("/home");
           return;

@@ -37,19 +37,22 @@ export default function VoiceGuard({
         }
 
         // Check voice status
-        const status = await voiceApi.getStatus(user.id);
+        // TEMPORARILY DISABLED: Voice enrollment check
+        // const status = await voiceApi.getStatus(user.id);
 
-        if (status.enrollment_status !== "enrolled") {
-          router.push("/voice-enroll");
-        } else {
-          setAuthorized(true);
-        }
+        // if (status.enrollment_status !== "enrolled") {
+        //   router.push("/voice-enroll");
+        // } else {
+        //   setAuthorized(true);
+        // }
+        
+        // Allow access without voice enrollment check
+        setAuthorized(true);
       } catch (error) {
         console.error("VoiceGuard check failed:", error);
-        // If check fails (e.g. API down), what to do?
-        // For security, maybe block? Or allow?
-        // Let's block and redirect to enroll to be safe/annoying
-        router.push("/voice-enroll");
+        // TEMPORARILY DISABLED: Allow access even if check fails
+        // router.push("/voice-enroll");
+        setAuthorized(true);
       } finally {
         setChecking(false);
       }
