@@ -33,7 +33,7 @@ const SessionCard: React.FC<SessionCardProps> = ({
   members,
 }) => {
   const router = useRouter();
-  const [isChair, setIsChair] = useState(false);
+  const [sessionRole, setSessionRole] = useState<string | null>(null);
   const [isCheckingRole, setIsCheckingRole] = useState(true);
   const isCompleted = status === "Completed";
   const sessionStatusClass = status.toLowerCase();
@@ -43,9 +43,9 @@ const SessionCard: React.FC<SessionCardProps> = ({
     return date.toLocaleDateString("en-GB");
   };
 
-  // Check if current user is chair in this session
+  // Check user's role in this session
   useEffect(() => {
-    const checkChairRole = async () => {
+    const checkSessionRole = async () => {
       try {
         setIsCheckingRole(true);
         
@@ -59,18 +59,7 @@ const SessionCard: React.FC<SessionCardProps> = ({
         const parsedUser = JSON.parse(storedUser);
         const currentUserId = parsedUser.id;
 
-        // Check if user has system Chair role
-        const isSystemChair = 
-          (parsedUser.roles && parsedUser.roles.some((r: string) => r.toLowerCase() === "chair")) ||
-          (parsedUser.role && parsedUser.role.toLowerCase() === "chair");
-
-        if (isSystemChair) {
-          setIsChair(true);
-          setIsCheckingRole(false);
-          return;
-        }
-
-        // Check role in session
+        // Check role in session (not system role)
         try {
           const lecturersRes = await defenseSessionsApi.getUsersBySessionId(sessionId);
           if (lecturersRes.data) {
@@ -79,16 +68,14 @@ const SessionCard: React.FC<SessionCardProps> = ({
                 String(user.id).toLowerCase() === String(currentUserId).toLowerCase()
             );
 
-            if (
-              currentUserInSession &&
-              currentUserInSession.role &&
-              currentUserInSession.role.toLowerCase() === "chair"
-            ) {
-              setIsChair(true);
+            if (currentUserInSession && currentUserInSession.role) {
+              // Get role from session, not system role
+              const roleInSession = currentUserInSession.role.toLowerCase();
+              setSessionRole(roleInSession);
             }
           }
         } catch (err) {
-          console.error("Failed to check chair role:", err);
+          console.error("Failed to check session role:", err);
         }
       } catch (err) {
         console.error("Error checking role:", err);
@@ -97,14 +84,22 @@ const SessionCard: React.FC<SessionCardProps> = ({
       }
     };
 
-    checkChairRole();
+    checkSessionRole();
   }, [sessionId]);
 
   const handleViewClick = () => {
-    // If user is chair, navigate to chair detail page, otherwise to home detail page
-    if (isChair) {
+    // Redirect based on user's role in this session
+    if (sessionRole === "chair") {
+      // Chair in session -> chair detail page
       router.push(`/chair/groups/${groupId}`);
+    } else if (sessionRole === "member") {
+      // Member in session -> grading page
+      router.push(`/member/grading/view/${groupId}`);
+    } else if (sessionRole === "secretary") {
+      // Secretary in session -> transcript page (using sessionId)
+      router.push(`/secretary/transcript/${sessionId}`);
     } else {
+      // Not in session or no role -> home detail page
       router.push(`/home/view/${groupId}`);
     }
   };

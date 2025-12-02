@@ -342,18 +342,6 @@ export default function ViewScorePage() {
                 View each member's grading results
               </p>
             </div>
-
-            {/* Nút hành động phải */}
-            <div className="flex items-center gap-3 flex-wrap justify-end">
-              {/* Back to list */}
-              <Link
-                href={urlSessionId ? `/member/defense-sessions?sessionId=${urlSessionId}` : (sessionId ? `/member/defense-sessions?sessionId=${sessionId}` : "/member/groups-to-grade")}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 text-gray-700 text-sm font-medium shadow-sm hover:bg-gray-100 transition"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                <span>Back</span>
-              </Link>
-            </div>
           </div>
 
           {loading ? (
