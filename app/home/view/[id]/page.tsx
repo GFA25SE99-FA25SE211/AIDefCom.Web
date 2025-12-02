@@ -17,7 +17,6 @@ import type {
 } from "@/lib/models";
 import { scoresApi } from "@/lib/api/scores";
 import CreateTaskModal from "../../../chair/components/CreateTaskModal";
-import { swalConfig } from "@/lib/utils/sweetAlert";
 
 export default function GroupDetailsPage() {
   const params = useParams();
@@ -162,53 +161,33 @@ export default function GroupDetailsPage() {
                 if (isUserChair) {
                   setHasAccess(true);
                 } else {
-                  // Not a chair, show error message and redirect
+                  // Not a chair, redirect silently
                   setHasAccess(false);
-                  await swalConfig.error(
-                    "Không có quyền truy cập",
-                    "Chỉ có Chair mới có quyền xem chi tiết phiên bảo vệ này."
-                  );
                   router.push("/home");
                   return;
                 }
               } else {
-                // No user ID, show error and redirect
+                // No user ID, redirect silently
                 setHasAccess(false);
-                await swalConfig.error(
-                  "Lỗi xác thực",
-                  "Không tìm thấy thông tin người dùng. Vui lòng đăng nhập lại."
-                );
                 router.push("/home");
                 return;
               }
             } else {
-              // No council members, show error and redirect
+              // No council members, redirect silently
               setHasAccess(false);
-              await swalConfig.error(
-                "Lỗi",
-                "Không tìm thấy thành viên hội đồng cho phiên bảo vệ này."
-              );
               router.push("/home");
               return;
             }
           } catch (lecErr) {
             console.error("Failed to fetch lecturers:", lecErr);
-            // Error fetching lecturers, show error and redirect
+            // Error fetching lecturers, redirect silently
             setHasAccess(false);
-            await swalConfig.error(
-              "Lỗi",
-              "Không thể xác minh quyền truy cập. Vui lòng thử lại sau."
-            );
             router.push("/home");
             return;
           }
         } else {
-          // No defense session, show error and redirect
+          // No defense session, redirect silently
           setHasAccess(false);
-          await swalConfig.error(
-            "Không tìm thấy",
-            "Không tìm thấy phiên bảo vệ cho nhóm này."
-          );
           router.push("/home");
           return;
         }
