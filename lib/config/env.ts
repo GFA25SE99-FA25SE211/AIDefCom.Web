@@ -9,7 +9,7 @@ const getApiUrl = () => {
   }
   // Default to production server
   // For local development, set NEXT_PUBLIC_API_URL=http://localhost:5000
-  return 'https://aidefcomapi.azurewebsites.net';
+  return "https://aidefcomapi.azurewebsites.net";
 };
 
 export const env = {
@@ -20,23 +20,23 @@ export const env = {
   // - Local HTTPS: https://localhost:7143 (set NEXT_PUBLIC_API_URL env var)
   // Set NEXT_PUBLIC_API_URL environment variable to override
   apiUrl: getApiUrl(),
-  
+  voiceApiUrl: process.env.NEXT_PUBLIC_VOICE_API_URL || "http://localhost:8000", // TEMPORARY: Change back to Azure URL before pushing to production
+
   // App Configuration
-  appName: process.env.NEXT_PUBLIC_APP_NAME || 'AIDefCom',
-  appVersion: process.env.NEXT_PUBLIC_APP_VERSION || '1.0.0',
-  
+  appName: process.env.NEXT_PUBLIC_APP_NAME || "AIDefCom",
+  appVersion: process.env.NEXT_PUBLIC_APP_VERSION || "1.0.0",
+
   // Environment
-  nodeEnv: process.env.NODE_ENV || 'development',
-  isDevelopment: process.env.NODE_ENV === 'development',
-  isProduction: process.env.NODE_ENV === 'production',
-  
+  nodeEnv: process.env.NODE_ENV || "development",
+  isDevelopment: process.env.NODE_ENV === "development",
+  isProduction: process.env.NODE_ENV === "production",
+
   // Feature Flags (if needed)
   features: {
-    enableAnalytics: process.env.NEXT_PUBLIC_ENABLE_ANALYTICS === 'true',
-    enableDebug: process.env.NEXT_PUBLIC_ENABLE_DEBUG === 'true',
+    enableAnalytics: process.env.NEXT_PUBLIC_ENABLE_ANALYTICS === "true",
+    enableDebug: process.env.NEXT_PUBLIC_ENABLE_DEBUG === "true",
   },
 } as const;
 
 // Type-safe environment access
 export type EnvConfig = typeof env;
-

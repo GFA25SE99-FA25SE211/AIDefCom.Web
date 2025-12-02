@@ -7,6 +7,7 @@ import { swalConfig, closeSwal } from "@/lib/utils/sweetAlert";
 // import { useSTTWebSocket, STTEvent } from "@/lib/hooks/useSTTWebSocket";
 import { defenseSessionsApi } from "@/lib/api/defense-sessions";
 import { DefenseSessionDto } from "@/lib/models";
+import MeetingMinutesForm from "../../components/MeetingMinutesForm";
 
 // Define STTEvent locally if needed or import from a shared types file
 interface STTEvent {
@@ -647,6 +648,18 @@ export default function TranscriptPage({
         >
           Save Transcript
         </button>
+      </div>
+
+      {/* Meeting Minutes Form */}
+      <div className="mb-12">
+        <div className="flex items-center gap-2 mb-6">
+          <div className="h-px flex-1 bg-gray-200"></div>
+          <span className="text-gray-400 text-sm font-medium uppercase tracking-wider">
+            Meeting Minutes
+          </span>
+          <div className="h-px flex-1 bg-gray-200"></div>
+        </div>
+        <MeetingMinutesForm sessionData={session} />
       </div>
 
       <p className="text-center text-xs text-gray-400 pb-4">
