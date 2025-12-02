@@ -7,6 +7,7 @@ import { defenseSessionsApi } from "@/lib/api/defense-sessions";
 import { groupsApi } from "@/lib/api/groups";
 import { studentsApi } from "@/lib/api/students";
 import type { DefenseSessionDto, GroupDto, StudentDto } from "@/lib/models";
+import { swalConfig } from "@/lib/utils/sweetAlert";
 
 interface SessionWithGroup extends DefenseSessionDto {
   groupName: string;
@@ -34,13 +35,81 @@ export default function HomePage() {
     const fetchSessions = async () => {
       try {
         setLoading(true);
+        
+        // Get current user's lecturerId from localStorage
+        let lecturerId: string | null = null;
+        try {
+          const storedUser = localStorage.getItem("user");
+          if (storedUser) {
+            const parsedUser = JSON.parse(storedUser);
+            lecturerId = parsedUser.id || null;
+          }
+        } catch (err) {
+          console.error("Error parsing user from localStorage:", err);
+        }
+
+        // Fetch sessions by lecturerId if available, otherwise fetch all
+        const sessionsPromise = lecturerId
+          ? defenseSessionsApi
+              .getByLecturerId(lecturerId)
+              .catch(async (error) => {
+                console.error("Error fetching sessions by lecturerId:", error);
+                // Check if it's a network error
+                if (error instanceof TypeError && error.message === 'Failed to fetch') {
+                  console.error("Network error: Backend server may not be running or CORS is not configured");
+                  await swalConfig.error(
+                    "Lỗi kết nối",
+                    "Không thể kết nối đến server. Vui lòng kiểm tra:\n- Server backend có đang chạy không?\n- Cấu hình CORS đã đúng chưa?\n- Kết nối mạng có ổn định không?"
+                  );
+                } else {
+                  await swalConfig.error(
+                    "Lỗi tải dữ liệu",
+                    "Không thể tải danh sách phiên bảo vệ. Vui lòng thử lại sau."
+                  );
+                }
+                return { code: 500, message: "Failed to fetch sessions", data: [] };
+              })
+          : defenseSessionsApi
+              .getAll()
+              .catch(async (error) => {
+                console.error("Error fetching all sessions:", error);
+                // Check if it's a network error
+                if (error instanceof TypeError && error.message === 'Failed to fetch') {
+                  console.error("Network error: Backend server may not be running or CORS is not configured");
+                  await swalConfig.error(
+                    "Lỗi kết nối",
+                    "Không thể kết nối đến server. Vui lòng kiểm tra:\n- Server backend có đang chạy không?\n- Cấu hình CORS đã đúng chưa?\n- Kết nối mạng có ổn định không?"
+                  );
+                } else {
+                  await swalConfig.error(
+                    "Lỗi tải dữ liệu",
+                    "Không thể tải danh sách phiên bảo vệ. Vui lòng thử lại sau."
+                  );
+                }
+                return { code: 500, message: "Failed to fetch sessions", data: [] };
+              });
+
         const [sessionsRes, groupsRes] = await Promise.all([
-          defenseSessionsApi
-            .getAll()
-            .catch(() => ({ code: 500, message: "Failed", data: [] })),
+          sessionsPromise,
           groupsApi
             .getAll(false)
-            .catch(() => ({ code: 500, message: "Failed", data: [] })),
+            .catch(async (error) => {
+              console.error("Error fetching groups:", error);
+              // Check if it's a network error
+              if (error instanceof TypeError && error.message === 'Failed to fetch') {
+                console.error("Network error: Backend server may not be running or CORS is not configured");
+                await swalConfig.error(
+                  "Lỗi kết nối",
+                  "Không thể kết nối đến server. Vui lòng kiểm tra:\n- Server backend có đang chạy không?\n- Cấu hình CORS đã đúng chưa?\n- Kết nối mạng có ổn định không?"
+                );
+              } else {
+                await swalConfig.error(
+                  "Lỗi tải dữ liệu",
+                  "Không thể tải danh sách nhóm. Vui lòng thử lại sau."
+                );
+              }
+              return { code: 500, message: "Failed to fetch groups", data: [] };
+            }),
         ]);
 
         // Extract data from API response structure
@@ -124,6 +193,18 @@ export default function HomePage() {
         setSessionsData(validSessions);
       } catch (error) {
         console.error("Error fetching sessions:", error);
+        // Show error notification if it's a network error
+        if (error instanceof TypeError && error.message === 'Failed to fetch') {
+          await swalConfig.error(
+            "Lỗi kết nối",
+            "Không thể kết nối đến server. Vui lòng kiểm tra:\n- Server backend có đang chạy không?\n- Cấu hình CORS đã đúng chưa?\n- Kết nối mạng có ổn định không?"
+          );
+        } else if (error instanceof Error) {
+          await swalConfig.error(
+            "Lỗi",
+            error.message || "Đã xảy ra lỗi khi tải dữ liệu. Vui lòng thử lại sau."
+          );
+        }
         setSessionsData([]);
       } finally {
         setLoading(false);
