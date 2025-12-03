@@ -17,6 +17,7 @@ import type {
 } from "@/lib/models";
 import { scoresApi } from "@/lib/api/scores";
 import CreateTaskModal from "../../../chair/components/CreateTaskModal";
+import Header from "../../components/Header";
 
 export default function GroupDetailsPage() {
   const params = useParams();
@@ -34,6 +35,8 @@ export default function GroupDetailsPage() {
   const [isChair, setIsChair] = useState(false);
   const [hasAccess, setHasAccess] = useState(false);
   const [openTaskModal, setOpenTaskModal] = useState(false);
+  const [userName, setUserName] = useState<string>("");
+  const [userRole, setUserRole] = useState<string>("");
 
   // Score Table State
   const [selectedStudentId, setSelectedStudentId] = useState<string>("");
@@ -41,6 +44,13 @@ export default function GroupDetailsPage() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Xóa session role khi rời khỏi trang
+  useEffect(() => {
+    return () => {
+      localStorage.removeItem("sessionRole");
+    };
+  }, []);
 
   useEffect(() => {
     if (!id) return;
@@ -62,10 +72,17 @@ export default function GroupDetailsPage() {
 
         let currentUid = "";
         let isSystemChair = false;
+        let currentUserName = "";
+        let currentUserRole = "";
+        
         if (storedUser) {
           const parsedUser = JSON.parse(storedUser);
           currentUid = parsedUser.id;
           setCurrentUserId(currentUid);
+          
+          // Get user name
+          currentUserName = parsedUser.fullName || parsedUser.userName || "";
+          setUserName(currentUserName);
 
           // Check if user has system Chair role (for testing/override)
           if (
@@ -73,11 +90,17 @@ export default function GroupDetailsPage() {
             parsedUser.roles.some((r: string) => r.toLowerCase() === "chair")
           ) {
             isSystemChair = true;
+            currentUserRole = "chair";
           } else if (
             parsedUser.role &&
             parsedUser.role.toLowerCase() === "chair"
           ) {
             isSystemChair = true;
+            currentUserRole = parsedUser.role.toLowerCase();
+          } else if (parsedUser.role) {
+            currentUserRole = parsedUser.role.toLowerCase();
+          } else if (parsedUser.roles && parsedUser.roles.length > 0) {
+            currentUserRole = parsedUser.roles[0].toLowerCase();
           }
         }
 
@@ -143,6 +166,19 @@ export default function GroupDetailsPage() {
                     String(l.id).toLowerCase() ===
                     String(currentUid).toLowerCase()
                 );
+
+                // Update user name and role from session if available
+                if (currentUserInSession) {
+                  if (currentUserInSession.fullName || currentUserInSession.userName) {
+                    setUserName(currentUserInSession.fullName || currentUserInSession.userName);
+                  }
+                  if (currentUserInSession.role) {
+                    const sessionRoleValue = currentUserInSession.role.toLowerCase();
+                    setUserRole(sessionRoleValue);
+                    // Lưu session role vào localStorage để sidebar hiển thị
+                    localStorage.setItem("sessionRole", sessionRoleValue);
+                  }
+                }
 
                 // Only allow access if user is Chair (system role or council role)
                 let isUserChair = false;
@@ -266,47 +302,14 @@ export default function GroupDetailsPage() {
         currentUserId={currentUserId}
       />
 
-      {/* Header with Back Button */}
-      <div className="flex items-center gap-4 mb-8">
-        <button
-          onClick={() => router.push("/home")}
-          className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-            strokeWidth={2}
-            stroke="currentColor"
-            className="w-5 h-5 text-gray-600"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18"
-            />
-          </svg>
-        </button>
-        <div>
-          <h1 className="text-2xl font-bold text-gray-800">
-            {group.groupName || group.projectCode || "Group Details"}
-          </h1>
-          <p className="text-gray-500 text-sm">
-            {group.semesterName} · {group.majorName}
-          </p>
-        </div>
-        <div className="ml-auto">
-          <span
-            className={`px-3 py-1 rounded-full text-sm font-medium ${
-              group.status === "Active"
-                ? "bg-green-100 text-green-700"
-                : "bg-yellow-100 text-yellow-700"
-            }`}
-          >
-            {group.status}
-          </span>
-        </div>
-      </div>
+      {/* Header with User Info */}
+      <Header
+        userName={userName}
+        userRole={userRole}
+        groupName={group.groupName || group.projectCode || "Group Details"}
+        groupInfo={`${group.semesterName} · ${group.majorName}`}
+        showBackButton={true}
+      />
 
       {/* Content Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

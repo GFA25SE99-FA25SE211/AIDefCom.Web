@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { LogOut } from "lucide-react";
+import { useEffect, useState } from "react";
 
 interface SidebarBaseProps {
   role: "Chair" | "Secretary" | "Moderator" | "Member" | "Administrator" | "Lecturer";
@@ -13,6 +14,70 @@ interface SidebarBaseProps {
 export default function SidebarBase({ role, links }: SidebarBaseProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const [userName, setUserName] = useState<string>("");
+  const [userRole, setUserRole] = useState<string>("");
+  const [sessionRole, setSessionRole] = useState<string>("");
+
+  // Lấy thông tin user từ localStorage
+  useEffect(() => {
+    try {
+      const storedUser = localStorage.getItem("user");
+      if (storedUser) {
+        const parsedUser = JSON.parse(storedUser);
+        // Lấy tên user
+        const name = parsedUser.fullName || parsedUser.userName || "";
+        setUserName(name);
+        
+        // Lấy role từ localStorage hoặc từ prop
+        let roleFromStorage = "";
+        if (parsedUser.role) {
+          roleFromStorage = parsedUser.role;
+        } else if (parsedUser.roles && parsedUser.roles.length > 0) {
+          roleFromStorage = parsedUser.roles[0];
+        } else {
+          roleFromStorage = role; // Fallback to prop role
+        }
+        setUserRole(roleFromStorage);
+      }
+
+      // Lấy session role từ localStorage (nếu có)
+      const storedSessionRole = localStorage.getItem("sessionRole");
+      if (storedSessionRole) {
+        setSessionRole(storedSessionRole);
+      } else {
+        setSessionRole("");
+      }
+    } catch (err) {
+      console.error("Error parsing user from localStorage:", err);
+    }
+  }, [role]);
+
+  // Lắng nghe thay đổi localStorage để cập nhật session role
+  useEffect(() => {
+    const handleStorageChange = () => {
+      try {
+        const storedSessionRole = localStorage.getItem("sessionRole");
+        if (storedSessionRole) {
+          setSessionRole(storedSessionRole);
+        } else {
+          setSessionRole("");
+        }
+      } catch (err) {
+        console.error("Error reading session role:", err);
+      }
+    };
+
+    // Lắng nghe sự kiện storage
+    window.addEventListener("storage", handleStorageChange);
+    
+    // Kiểm tra định kỳ (vì storage event chỉ hoạt động giữa các tab)
+    const interval = setInterval(handleStorageChange, 500);
+
+    return () => {
+      window.removeEventListener("storage", handleStorageChange);
+      clearInterval(interval);
+    };
+  }, []);
 
   // Kiểm tra route active
   
@@ -47,6 +112,8 @@ export default function SidebarBase({ role, links }: SidebarBaseProps) {
   // Xử lý logout
   const handleLogout = async () => {
     try {
+      // Xóa session role khi logout
+      localStorage.removeItem("sessionRole");
       await fetch("/api/auth/logout", { method: "POST" });
       router.push("/login");
     } catch (err) {
@@ -58,10 +125,36 @@ export default function SidebarBase({ role, links }: SidebarBaseProps) {
     <aside className="w-64 bg-[#0F1D37] text-white flex flex-col justify-between">
       {/* Header */}
       <div>
-        <Link href="/home" className="flex items-center gap-3 px-6 py-6 border-b border-white/10 hover:bg-white/5 transition-colors cursor-pointer">
+        <Link href="/home" className="flex items-center gap-3 px-6 py-4 border-b border-white/10 hover:bg-white/5 transition-colors cursor-pointer">
           <img src="/favicon-new.ico" alt="logo" className="w-8" />
           <span className="text-lg font-semibold tracking-wide">AIDefCom</span>
         </Link>
+
+        {/* User Info */}
+        {userName && (
+          <div className="px-6 py-4 border-b border-white/10">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                {userName.charAt(0).toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-white truncate">
+                  {userName}
+                </p>
+                {userRole && (
+                  <p className="text-xs text-gray-300 capitalize truncate">
+                    {userRole}
+                  </p>
+                )}
+                {sessionRole && (
+                  <p className="text-xs text-blue-300 capitalize truncate mt-0.5">
+                    {sessionRole} (Session)
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Navigation */}
         <nav className="mt-6 px-4 space-y-2 text-sm font-medium relative">

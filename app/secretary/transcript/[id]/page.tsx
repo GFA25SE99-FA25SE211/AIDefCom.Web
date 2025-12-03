@@ -49,6 +49,14 @@ export default function TranscriptPage({
   // Track processed question IDs to prevent duplicates
   const processedQuestionIdsRef = useRef<Set<string>>(new Set());
 
+  // Xóa session role khi rời khỏi trang (nếu cần)
+  useEffect(() => {
+    return () => {
+      // Không xóa session role ở đây vì user có thể quay lại session
+      // Chỉ xóa khi logout hoặc rời khỏi hoàn toàn
+    };
+  }, []);
+
   // Initialize client-side only to avoid hydration mismatch
   useEffect(() => {
     setIsClient(true);
@@ -58,6 +66,30 @@ export default function TranscriptPage({
         const response = await defenseSessionsApi.getById(Number(id));
         if (response.data) {
           setSession(response.data);
+          
+          // Lấy session role của user hiện tại
+          try {
+            const storedUser = localStorage.getItem("user");
+            if (storedUser) {
+              const parsedUser = JSON.parse(storedUser);
+              const currentUserId = parsedUser.id;
+              
+              const lecturersRes = await defenseSessionsApi.getUsersBySessionId(Number(id));
+              if (lecturersRes.data) {
+                const currentUserInSession = lecturersRes.data.find(
+                  (user: any) => 
+                    String(user.id).toLowerCase() === String(currentUserId).toLowerCase()
+                );
+                
+                if (currentUserInSession && currentUserInSession.role) {
+                  const sessionRoleValue = currentUserInSession.role.toLowerCase();
+                  localStorage.setItem("sessionRole", sessionRoleValue);
+                }
+              }
+            }
+          } catch (err) {
+            console.error("Failed to get session role:", err);
+          }
         }
       } catch (error) {
         console.error("Failed to fetch session:", error);
@@ -388,7 +420,10 @@ export default function TranscriptPage({
     stopSession();
 
     // TODO: Call API to save
-    alert("Transcript saved successfully!");
+    await swalConfig.success(
+      "Transcript saved",
+      "The transcript has been saved successfully."
+    );
   };
 
   if (!isClient) return null;

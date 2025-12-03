@@ -72,6 +72,7 @@ const SessionCard: React.FC<SessionCardProps> = ({
               // Get role from session, not system role
               const roleInSession = currentUserInSession.role.toLowerCase();
               setSessionRole(roleInSession);
+              // KHÔNG lưu session role ở đây - chỉ lưu khi vào trang detail
             }
           }
         } catch (err) {
@@ -88,6 +89,7 @@ const SessionCard: React.FC<SessionCardProps> = ({
   }, [sessionId]);
 
   const handleViewClick = () => {
+    // KHÔNG lưu session role ở đây - chỉ lưu khi vào trang detail cụ thể
     // Redirect based on user's role in this session
     if (sessionRole === "chair") {
       // Chair in session -> chair detail page

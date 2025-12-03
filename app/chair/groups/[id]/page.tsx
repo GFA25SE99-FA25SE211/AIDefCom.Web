@@ -224,6 +224,13 @@ export default function GroupDetailsPage() {
     }
   };
 
+  // Xóa session role khi rời khỏi trang
+  useEffect(() => {
+    return () => {
+      localStorage.removeItem("sessionRole");
+    };
+  }, []);
+
   useEffect(() => {
     if (!id) return;
 
@@ -312,19 +319,21 @@ export default function GroupDetailsPage() {
               setLecturers(onlyLecturers);
 
               // Check if current user is Chair (if not already set by system role)
-              if (currentUid && !isSystemChair) {
+              if (currentUid) {
                 const currentUserInSession = onlyLecturers.find(
                   (l: any) =>
                     String(l.id).toLowerCase() ===
                     String(currentUid).toLowerCase()
                 );
 
-                if (
-                  currentUserInSession &&
-                  currentUserInSession.role &&
-                  currentUserInSession.role.toLowerCase() === "chair"
-                ) {
-                  setIsChair(true);
+                // Lưu session role vào localStorage để sidebar hiển thị
+                if (currentUserInSession && currentUserInSession.role) {
+                  const sessionRoleValue = currentUserInSession.role.toLowerCase();
+                  localStorage.setItem("sessionRole", sessionRoleValue);
+                  
+                  if (!isSystemChair && sessionRoleValue === "chair") {
+                    setIsChair(true);
+                  }
                 }
               }
             }

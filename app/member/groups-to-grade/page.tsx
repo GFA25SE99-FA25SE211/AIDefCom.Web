@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import MemberSidebar from "./components/Sidebar";
 import Header from "./components/Header";
 import GroupCard, { GroupStatus, SessionStatus } from "./components/GroupCard";
@@ -8,14 +9,26 @@ import { groupsApi } from "@/lib/api/groups";
 import { defenseSessionsApi } from "@/lib/api/defense-sessions";
 import { studentsApi } from "@/lib/api/students";
 import { scoresApi } from "@/lib/api/scores";
-import type { GroupDto, DefenseSessionDto, StudentDto } from "@/lib/models";
+import { projectTasksApi } from "@/lib/api/project-tasks";
+import { authUtils } from "@/lib/utils/auth";
+import type {
+  GroupDto,
+  DefenseSessionDto,
+  StudentDto,
+  ProjectTaskDto,
+} from "@/lib/models";
 
-interface GroupWithSession extends GroupDto {
+interface GroupWithSession extends Omit<GroupDto, 'groupName' | 'projectTitle' | 'totalScore'> {
+  groupName: string;
+  projectTitle: string;
   status: GroupStatus;
   members: string;
   sessionTitle: string;
   sessionStatus: SessionStatus;
   sessionDateTime: string;
+  averageScore: number | null;
+  totalScore?: number | null;
+  canGrade: boolean;
 }
 
 const getGroupDisplayName = (group: GroupDto) =>
@@ -47,6 +60,8 @@ const defaultGroupsData: GroupWithSession[] = [
     sessionTitle: "Defense Session 1 - Group A",
     sessionStatus: "Upcoming" as SessionStatus,
     sessionDateTime: "Oct 15, 2025 | 09:00 - 09:30",
+    averageScore: null,
+    canGrade: false,
   },
   {
     id: "8676FFBD-6ED5-4871-887C-FE16A33E1E6A",
@@ -64,6 +79,8 @@ const defaultGroupsData: GroupWithSession[] = [
     sessionTitle: "Defense Session 1 - Group A",
     sessionStatus: "Upcoming" as SessionStatus,
     sessionDateTime: "Oct 15, 2025 | 09:30 - 10:00",
+    averageScore: null,
+    canGrade: false,
   },
   {
     id: "7D142936-BE8F-4F47-853A-5B14A33975A6",
@@ -81,6 +98,8 @@ const defaultGroupsData: GroupWithSession[] = [
     sessionTitle: "Defense Session 1 - Group A",
     sessionStatus: "Upcoming" as SessionStatus,
     sessionDateTime: "Oct 15, 2025 | 10:00 - 10:30",
+    averageScore: null,
+    canGrade: false,
   },
   {
     id: "B348CD22-B7AA-4973-81F4-A2694BE217E3",
@@ -98,6 +117,8 @@ const defaultGroupsData: GroupWithSession[] = [
     sessionTitle: "Defense Session 1 - Group A",
     sessionStatus: "Upcoming" as SessionStatus,
     sessionDateTime: "Oct 15, 2025 | 10:30 - 11:00",
+    averageScore: null,
+    canGrade: false,
   },
   {
     id: "457144B6-D625-4F5B-8BAE-AB1E882DA8DE",
@@ -115,6 +136,8 @@ const defaultGroupsData: GroupWithSession[] = [
     sessionTitle: "Defense Session 1 - Group A",
     sessionStatus: "Upcoming" as SessionStatus,
     sessionDateTime: "Oct 15, 2025 | 11:00 - 11:30",
+    averageScore: null,
+    canGrade: false,
   },
   {
     id: "GFA25SE01",
@@ -135,10 +158,21 @@ const defaultGroupsData: GroupWithSession[] = [
     sessionTitle: "Defense Session 2 - Group B",
     sessionStatus: "Upcoming" as SessionStatus,
     sessionDateTime: "Oct 20, 2025 | 14:00 - 14:30",
+    averageScore: null,
+    canGrade: false,
   },
 ];
 
 export default function GroupsToGradePage() {
+  const searchParams = useSearchParams();
+  const sessionIdParam = searchParams?.get("sessionId");
+  const selectedSessionId = sessionIdParam ? parseInt(sessionIdParam) : null;
+
+  // Xóa session role khi vào trang danh sách (không phải detail)
+  useEffect(() => {
+    localStorage.removeItem("sessionRole");
+  }, []);
+
   const [groupsData, setGroupsData] = useState<GroupWithSession[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -174,12 +208,53 @@ export default function GroupsToGradePage() {
           return;
         }
 
-        const groupsWithSessions: GroupWithSession[] = await Promise.all(
+        // Determine current lecturer (evaluator) from token
+        const userInfo = authUtils.getCurrentUserInfo();
+        let currentUserId = userInfo.userId;
+        if (!currentUserId) {
+          // Fallback: consistent with grading page & sample API data
+          currentUserId = "0EB5D9FB-4389-45B7-A7AE-23AFBAF461CE";
+        }
+
+        // Check if lecturer has any grading task in this session
+        let hasPermissionInSession = true;
+        let tasksBySession: ProjectTaskDto[] = [];
+
+        if (selectedSessionId && currentUserId) {
+          try {
+            const tasksRes = await projectTasksApi.getByAssigneeAndSession(
+              currentUserId,
+              selectedSessionId
+            );
+            tasksBySession = Array.isArray(tasksRes.data) ? tasksRes.data : [];
+            hasPermissionInSession = tasksBySession.length > 0;
+          } catch (error) {
+            console.error(
+              "Error fetching project tasks for permissions:",
+              error
+            );
+            hasPermissionInSession = false;
+          }
+        }
+
+        const groupsWithSessionsRaw = await Promise.all(
           groups.map(async (group: GroupDto) => {
             const groupSessions = sessions.filter(
               (s: DefenseSessionDto) => s.groupId === group.id
             );
-            const latestSession = groupSessions[0];
+
+            // Nếu có sessionId được chọn nhưng group này không thuộc session đó -> bỏ qua
+            if (
+              selectedSessionId &&
+              !groupSessions.some((s) => s.id === selectedSessionId)
+            ) {
+              return null;
+            }
+
+            const latestSession =
+              (selectedSessionId
+                ? groupSessions.find((s) => s.id === selectedSessionId)
+                : groupSessions[0]) || groupSessions[0];
 
             // Get students for this group
             const studentsRes = await studentsApi
@@ -197,13 +272,10 @@ export default function GroupsToGradePage() {
                     .join(", ")
                 : "No members assigned";
 
-            // Check if group has been graded
+            // Check if group has been graded & compute average score
             let isGraded = false;
+            let averageScore: number | null = null;
             if (latestSession && students.length > 0) {
-              // Get current user ID (implement based on your auth system)
-              const currentUserId =
-                localStorage.getItem("currentUserId") || "temp-user-id";
-
               // Check if all students have scores from this evaluator in this session
               const scoresPromises = students.map((student: StudentDto) =>
                 scoresApi.getByStudentId(student.id).catch(() => ({ data: [] }))
@@ -224,6 +296,35 @@ export default function GroupsToGradePage() {
               );
 
               isGraded = hasGradedAllStudents;
+
+              // Compute group average score (average of each student's average)
+              let totalAvg = 0;
+              let studentCountWithScores = 0;
+
+              allStudentScores.forEach((scoresRes) => {
+                const scores = scoresRes.data || [];
+                const evaluatorScores = scores.filter(
+                  (score: any) =>
+                    score.sessionId === latestSession.id &&
+                    score.evaluatorId === currentUserId
+                );
+
+                if (evaluatorScores.length > 0) {
+                  const sum = evaluatorScores.reduce(
+                    (acc: number, s: any) => acc + (s.value || 0),
+                    0
+                  );
+                  const avg = sum / evaluatorScores.length;
+                  totalAvg += avg;
+                  studentCountWithScores += 1;
+                }
+              });
+
+              if (studentCountWithScores > 0) {
+                averageScore = parseFloat(
+                  (totalAvg / studentCountWithScores).toFixed(2)
+                );
+              }
             }
 
             const sessionDate = latestSession
@@ -258,11 +359,25 @@ export default function GroupsToGradePage() {
                       : latestSession.startTime || "TBD"
                   }`
                 : "TBD",
+              averageScore: averageScore ?? null,
+              // Frontend permission flag: only allow grading when lecturer has tasks in this session
+              canGrade: hasPermissionInSession ?? false,
             };
           })
         );
 
-        setGroupsData(groupsWithSessions);
+        const groupsWithSessions = groupsWithSessionsRaw.filter(
+          (g): g is GroupWithSession => g !== null
+        );
+
+        if (groupsWithSessions.length === 0) {
+          console.warn(
+            "No groups matched selected session, falling back to default data"
+          );
+          setGroupsData(defaultGroupsData);
+        } else {
+          setGroupsData(groupsWithSessions);
+        }
       } catch (error) {
         console.error("Error fetching groups:", error);
         setGroupsData(defaultGroupsData);
@@ -272,7 +387,7 @@ export default function GroupsToGradePage() {
     };
 
     fetchGroups();
-  }, []);
+  }, [selectedSessionId]);
 
   const gradedCount = groupsData.filter((g) => g.status === "Graded").length;
   const totalCount = groupsData.length;
@@ -301,6 +416,7 @@ export default function GroupsToGradePage() {
                 sessionTitle={group.sessionTitle}
                 sessionStatus={group.sessionStatus}
                 sessionDateTime={group.sessionDateTime}
+                averageScore={group.averageScore}
               />
             ))}
           </div>

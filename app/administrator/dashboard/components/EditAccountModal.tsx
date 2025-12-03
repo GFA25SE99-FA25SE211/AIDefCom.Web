@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Modal from "../../../moderator/create-sessions/components/Modal";
 import { Save, Eye, EyeOff } from "lucide-react";
+import { swalConfig } from "@/lib/utils/sweetAlert";
 
 interface UserAccount {
   id: number | string;
@@ -65,11 +66,17 @@ const EditAccountModal: React.FC<EditAccountModalProps> = ({
     // Validate password if provided
     if (newPassword || confirmNewPassword) {
       if (newPassword !== confirmNewPassword) {
-        alert("New password and confirm password do not match. Please re-enter.");
+        swalConfig.error(
+          "Password mismatch",
+          "New password and confirm password do not match. Please re-enter."
+        );
         return;
       }
       if (newPassword.length < 6) {
-        alert("Password must be at least 6 characters long.");
+        swalConfig.error(
+          "Password too short",
+          "Password must be at least 6 characters long."
+        );
         return;
       }
     }
