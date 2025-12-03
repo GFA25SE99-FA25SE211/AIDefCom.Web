@@ -6,16 +6,21 @@ import { useAudioRecorder } from "@/lib/hooks/useAudioRecorder";
 import { swalConfig, closeSwal } from "@/lib/utils/sweetAlert";
 // import { useSTTWebSocket, STTEvent } from "@/lib/hooks/useSTTWebSocket";
 import { defenseSessionsApi } from "@/lib/api/defense-sessions";
-import { DefenseSessionDto } from "@/lib/models";
+import { transcriptsApi } from "@/lib/api/transcripts";
+import { DefenseSessionDto, TranscriptDto } from "@/lib/models";
 import MeetingMinutesForm from "../../components/MeetingMinutesForm";
+import { Pencil, Check, X, Trash2, Plus } from "lucide-react";
 
 // Define STTEvent locally if needed or import from a shared types file
 interface STTEvent {
   event: string;
   text?: string;
   speaker?: string;
+  speaker_name?: string;
   session_id?: string;
   message?: string;
+  id?: string; // unique id for editing
+  isNew?: boolean; // flag to mark new entries from STT
 }
 
 export default function TranscriptPage({
@@ -37,6 +42,14 @@ export default function TranscriptPage({
   const mySessionIdRef = useRef<string | null>(null); // Ref để tránh stale closure
   const [hasStartedSession, setHasStartedSession] = useState(false); // Đã broadcast session:start chưa
 
+  // Edit transcript states
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editText, setEditText] = useState("");
+  const [editSpeaker, setEditSpeaker] = useState("");
+  const [existingTranscriptId, setExistingTranscriptId] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
   // Use a ref to keep track of the latest transcript for efficient updates
   const transcriptRef = useRef<STTEvent[]>([]);
   const transcriptContainerRef = useRef<HTMLDivElement | null>(null);
@@ -48,31 +61,87 @@ export default function TranscriptPage({
   const recentTranscriptsRef = useRef<Set<string>>(new Set());
   // Track processed question IDs to prevent duplicates
   const processedQuestionIdsRef = useRef<Set<string>>(new Set());
+  // Auto-save timer
+  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
 
   // Initialize client-side only to avoid hydration mismatch
   useEffect(() => {
     setIsClient(true);
 
-    const fetchSession = async () => {
+    const fetchSessionAndTranscript = async () => {
       try {
+        // Fetch session info
         const response = await defenseSessionsApi.getById(Number(id));
         if (response.data) {
           setSession(response.data);
         }
+
+        // Fetch existing transcript
+        const transcriptRes = await transcriptsApi.getBySessionId(Number(id));
+        if (transcriptRes.data && transcriptRes.data.length > 0) {
+          const existingTranscript = transcriptRes.data[0];
+          setExistingTranscriptId(existingTranscript.id);
+          
+          // Parse stored transcript text (JSON format)
+          if (existingTranscript.transcriptText) {
+            try {
+              const parsed = JSON.parse(existingTranscript.transcriptText);
+              if (Array.isArray(parsed)) {
+                // Convert to STTEvent format with unique IDs
+                const loadedTranscript: STTEvent[] = parsed.map((item: any, index: number) => ({
+                  event: "recognized",
+                  text: item.text || item.content || "",
+                  speaker: item.speaker || item.speaker_name || "Unknown",
+                  id: item.id || `loaded_${index}_${Date.now()}`,
+                  isNew: false,
+                }));
+                setTranscript(loadedTranscript);
+                console.log("✅ Loaded existing transcript:", loadedTranscript.length, "entries");
+              }
+            } catch (parseError) {
+              // If not JSON, treat as plain text with "Speaker: Text" format
+              const lines = existingTranscript.transcriptText.split("\n").filter((l: string) => l.trim());
+              const loadedTranscript: STTEvent[] = lines.map((line: string, index: number) => {
+                // Parse "Speaker: Text" format
+                const colonIndex = line.indexOf(":");
+                let speaker = "Unknown";
+                let text = line;
+                
+                if (colonIndex > 0 && colonIndex < 50) {
+                  // Likely "Speaker: Text" format
+                  speaker = line.substring(0, colonIndex).trim();
+                  text = line.substring(colonIndex + 1).trim();
+                }
+                
+                return {
+                  event: "recognized",
+                  text: text,
+                  speaker: speaker,
+                  id: `loaded_${index}_${Date.now()}`,
+                  isNew: false,
+                };
+              });
+              setTranscript(loadedTranscript);
+              console.log("✅ Loaded existing transcript (plain text format):", loadedTranscript.length, "entries");
+            }
+          }
+        }
       } catch (error) {
-        console.error("Failed to fetch session:", error);
+        console.error("Failed to fetch session/transcript:", error);
       } finally {
         setLoading(false);
       }
     };
 
     if (id) {
-      fetchSession();
+      fetchSessionAndTranscript();
     }
   }, [id]);
 
   const handleSTTEvent = (msg: any) => {
     const eventType = msg.type || msg.event;
+    console.log("📨 [Secretary] STT Event:", eventType, msg);
 
     // Helper: Check if transcript is duplicate (same text within 2 seconds)
     const isDuplicateTranscript = (text: string): boolean => {
@@ -100,8 +169,15 @@ export default function TranscriptPage({
         return;
       }
 
-      // Normalize event structure for state
-      setTranscript((prev) => [...prev, { ...msg, event: "recognized" }]);
+      // Normalize event structure for state with unique ID
+      const newEntry: STTEvent = {
+        ...msg,
+        event: "recognized",
+        id: `stt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        isNew: true,
+      };
+      setTranscript((prev) => [...prev, newEntry]);
+      setHasUnsavedChanges(true);
 
       // If in question mode, mark that we have final text
       if (isAsking && msg.text) {
@@ -173,18 +249,15 @@ export default function TranscriptPage({
       setBroadcastInterimText("");
 
       if (msg.text) {
-        setTranscript((prev) => [
-          ...prev,
-          {
-            event: "recognized",
-            type: "result",
-            text: msg.text,
-            speaker: msg.speaker || "Member",
-            user_id: msg.user_id,
-            timestamp: msg.timestamp,
-            from_broadcast: true, // Đánh dấu là từ broadcast
-          },
-        ]);
+        const newEntry: STTEvent = {
+          event: "recognized",
+          text: msg.text,
+          speaker: msg.speaker_name || msg.speaker || "Đang xác định",
+          id: `broadcast_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          isNew: true,
+        };
+        setTranscript((prev) => [...prev, newEntry]);
+        setHasUnsavedChanges(true);
       }
     } else if (eventType === "broadcast_partial") {
       // Partial transcript từ client khác (chữ chạy khi member đang nói)
@@ -195,7 +268,7 @@ export default function TranscriptPage({
         return; // Bỏ qua partial từ chính mình
       }
       // Hiển thị chữ chạy với tên speaker - dùng state riêng để không bị ghi đè
-      const speakerName = msg.speaker || "Member";
+      const speakerName = msg.speaker_name || msg.speaker || "Đang xác định";
       setBroadcastInterimText(`${speakerName}: ${msg.text || ""}`);
     } else if (eventType === "broadcast_question_started") {
       // Member bắt đầu đặt câu hỏi - dùng toast nhẹ nhàng
@@ -205,7 +278,7 @@ export default function TranscriptPage({
       ) {
         return;
       }
-      const speakerName = msg.speaker || "Member";
+      const speakerName = msg.speaker_name || msg.speaker || "Thành viên";
       // Toast notification - không chặn màn hình
       swalConfig.toast.info(`${speakerName} đang đặt câu hỏi...`);
     } else if (eventType === "broadcast_question_processing") {
@@ -217,7 +290,7 @@ export default function TranscriptPage({
       ) {
         return;
       }
-      const speakerName = msg.speaker || "Member";
+      const speakerName = msg.speaker_name || msg.speaker || "Thành viên";
       // Toast nhẹ - tự đóng sau 3s, không cần bấm OK
       swalConfig.toast.info(`Đang xử lý câu hỏi từ ${speakerName}...`);
     } else if (eventType === "broadcast_question_result") {
@@ -247,7 +320,7 @@ export default function TranscriptPage({
       // Đóng loading popup
       closeSwal();
 
-      const speakerName = msg.speaker || "Member";
+      const speakerName = msg.speaker_name || msg.speaker || "Thành viên";
       const questionText = msg.question_text || "";
 
       if (msg.is_duplicate) {
@@ -369,27 +442,182 @@ export default function TranscriptPage({
     }
   };
 
-  const handleSaveTranscript = async () => {
-    // TODO: Lưu transcript vào database
-    console.log("Saving transcript...", transcript);
-    if (session) {
-      console.log("Defense Session ID:", session.id);
-    } else {
-      console.warn("No session loaded; cannot log Defense Session ID.");
-    }
-
-    // Broadcast session:end để member biết phiên đã kết thúc
-    if (hasStartedSession) {
-      broadcastSessionEnd();
-      setHasStartedSession(false);
-    }
-
-    // Kết thúc phiên và đóng WebSocket
-    stopSession();
-
-    // TODO: Call API to save
-    alert("Transcript saved successfully!");
+  // Edit transcript functions
+  const handleStartEdit = (index: number) => {
+    setEditingIndex(index);
+    setEditText(transcript[index].text || "");
+    setEditSpeaker(transcript[index].speaker || "");
   };
+
+  const handleCancelEdit = () => {
+    setEditingIndex(null);
+    setEditText("");
+    setEditSpeaker("");
+  };
+
+  const handleSaveEdit = () => {
+    if (editingIndex === null) return;
+    
+    setTranscript((prev) => {
+      const newTranscript = [...prev];
+      newTranscript[editingIndex] = {
+        ...newTranscript[editingIndex],
+        text: editText,
+        speaker: editSpeaker,
+      };
+      return newTranscript;
+    });
+    setHasUnsavedChanges(true);
+    setEditingIndex(null);
+    setEditText("");
+    setEditSpeaker("");
+  };
+
+  const handleDeleteEntry = (index: number) => {
+    setTranscript((prev) => prev.filter((_, i) => i !== index));
+    setHasUnsavedChanges(true);
+  };
+
+  const handleAddEntry = () => {
+    const newEntry: STTEvent = {
+      event: "recognized",
+      text: "",
+      speaker: "Thư ký",
+      id: `manual_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      isNew: true,
+    };
+    setTranscript((prev) => [...prev, newEntry]);
+    setHasUnsavedChanges(true);
+    // Auto-edit the new entry
+    setTimeout(() => {
+      handleStartEdit(transcript.length);
+    }, 100);
+  };
+
+  const handleSaveTranscript = async () => {
+    if (!session) {
+      swalConfig.error("Lỗi", "Không tìm thấy phiên bảo vệ");
+      return;
+    }
+
+    try {
+      setSaving(true);
+      
+      // Prepare transcript data as JSON
+      const transcriptData = transcript.map((item) => ({
+        id: item.id,
+        text: item.text,
+        speaker: item.speaker,
+        speaker_name: item.speaker_name,
+      }));
+      
+      const transcriptText = JSON.stringify(transcriptData);
+
+      if (existingTranscriptId) {
+        // Update existing transcript
+        await transcriptsApi.update(existingTranscriptId, {
+          transcriptText: transcriptText,
+          status: "Completed",
+        });
+      } else {
+        // Create new transcript
+        const result = await transcriptsApi.create({
+          sessionId: session.id,
+          transcriptText: transcriptText,
+          status: "Completed",
+        });
+        if (result.data) {
+          setExistingTranscriptId(result.data.id);
+        }
+      }
+
+      setHasUnsavedChanges(false);
+      swalConfig.success("Thành công", "Đã lưu transcript!");
+
+      // Broadcast session:end để member biết phiên đã kết thúc
+      if (hasStartedSession) {
+        broadcastSessionEnd();
+        setHasStartedSession(false);
+      }
+
+      // Kết thúc phiên và đóng WebSocket
+      stopSession();
+    } catch (error: any) {
+      console.error("Failed to save transcript:", error);
+      swalConfig.error("Lỗi", error.message || "Không thể lưu transcript");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Auto-save without notification (silent save)
+  const handleAutoSave = async (showToast: boolean = false) => {
+    if (!session || transcript.length === 0) return;
+
+    try {
+      setSaving(true);
+      
+      const transcriptData = transcript.map((item) => ({
+        id: item.id,
+        text: item.text,
+        speaker: item.speaker,
+        speaker_name: item.speaker_name,
+      }));
+      
+      const transcriptText = JSON.stringify(transcriptData);
+
+      if (existingTranscriptId) {
+        await transcriptsApi.update(existingTranscriptId, {
+          transcriptText: transcriptText,
+          status: "Draft",
+        });
+      } else {
+        const result = await transcriptsApi.create({
+          sessionId: session.id,
+          transcriptText: transcriptText,
+          status: "Draft",
+        });
+        if (result.data) {
+          setExistingTranscriptId(result.data.id);
+        }
+      }
+
+      setHasUnsavedChanges(false);
+      setLastSavedAt(new Date());
+      if (showToast) {
+        swalConfig.toast.success("Đã lưu");
+      }
+      console.log("✅ Auto-saved transcript");
+    } catch (error: any) {
+      console.error("Failed to auto save:", error);
+      if (showToast) {
+        swalConfig.toast.error("Không thể lưu");
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Auto-save effect: trigger save after 3 seconds of inactivity when there are unsaved changes
+  useEffect(() => {
+    if (hasUnsavedChanges && transcript.length > 0 && session) {
+      // Clear existing timer
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+      
+      // Set new timer for auto-save after 3 seconds
+      autoSaveTimerRef.current = setTimeout(() => {
+        handleAutoSave(false);
+      }, 3000);
+    }
+    
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+    };
+  }, [hasUnsavedChanges, transcript, session]);
 
   if (!isClient) return null;
   if (loading)
@@ -405,90 +633,93 @@ export default function TranscriptPage({
 
   return (
     <div className="page-container">
-      <div className="mb-6">
+      <div className="mb-4">
         <Link
           href="/secretary/transcript"
           className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1"
         >
           ← Back
         </Link>
-        <h1 className="text-2xl font-semibold text-gray-800 mt-2">
-          Defense Session - Group {session.groupId}
-        </h1>
-        <p className="text-gray-500 text-sm">
-          Currently presenting: Group {session.groupId}{" "}
-          <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded ml-2">
-            {session.location}
-          </span>
-        </p>
-        {/* Debug Info */}
-        <div className="mt-2 p-2 bg-gray-100 rounded text-xs text-gray-600 font-mono">
-          <p>Recording: {isRecording ? "Yes" : "No"}</p>
-          <p>WebSocket: {wsConnected ? "Connected" : "Disconnected"}</p>
-          <p>WS URL: {WS_URL}</p>
+        <div className="flex items-center justify-between mt-2">
+          <div>
+            <h1 className="text-xl font-semibold text-gray-800">
+              Phiên bảo vệ - Nhóm {session.groupId}
+            </h1>
+            <p className="text-gray-500 text-sm flex items-center gap-2">
+              <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2 py-0.5 rounded">
+                {session.location}
+              </span>
+              <span className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-green-500' : 'bg-gray-400'}`}></span>
+              <span className="text-xs text-gray-400">
+                {wsConnected ? 'Đã kết nối' : 'Chưa kết nối'}
+              </span>
+            </p>
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
         {/* Transcript Section */}
         <div className="bg-white rounded-lg shadow-sm border p-4 flex flex-col h-[500px]">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-semibold text-gray-800">Transcript</h2>
             <div className="flex items-center gap-2">
-              <span
-                className={`text-xs px-2 py-1 rounded-full ${
-                  wsConnected && isRecording
-                    ? "bg-green-100 text-green-800"
-                    : wsConnected
-                    ? "bg-yellow-100 text-yellow-800"
-                    : "bg-gray-100 text-gray-800"
-                }`}
+              <h2 className="text-lg font-semibold text-gray-800">Transcript</h2>
+              {transcript.length > 0 && (
+                <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
+                  {transcript.length} dòng
+                </span>
+              )}
+              {/* Auto-save status */}
+              {saving ? (
+                <span className="text-xs text-gray-400 italic">Đang lưu...</span>
+              ) : hasUnsavedChanges ? (
+                <span className="text-xs text-yellow-600">●</span>
+              ) : lastSavedAt ? (
+                <span className="text-xs text-green-600">✓</span>
+              ) : null}
+            </div>
+            <div className="flex items-center gap-2">
+              {/* Add entry button */}
+              <button
+                onClick={handleAddEntry}
+                className="p-1.5 text-gray-500 hover:text-purple-600 hover:bg-purple-50 rounded transition-colors"
+                title="Thêm dòng"
               >
-                {wsConnected && isRecording
-                  ? "Recording"
-                  : wsConnected
-                  ? "Connected"
-                  : "Offline"}
-              </span>
+                <Plus className="w-4 h-4" />
+              </button>
+              {/* Mic button - compact */}
               {!isAsking && (
                 <button
                   onClick={handleToggleRecording}
-                  className={`px-4 py-2 rounded-md text-white text-sm font-medium transition-colors flex items-center gap-2 ${
+                  className={`p-2 rounded-lg transition-colors ${
                     isRecording
-                      ? "bg-red-500 hover:bg-red-600"
-                      : "bg-purple-600 hover:bg-purple-700"
+                      ? "bg-red-500 hover:bg-red-600 text-white"
+                      : "bg-purple-600 hover:bg-purple-700 text-white"
                   }`}
+                  title={isRecording ? "Dừng ghi âm" : "Bắt đầu ghi âm"}
                 >
-                  {isRecording ? (
-                    <>
-                      <span>Stop Mic</span>
-                    </>
-                  ) : (
-                    <>
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        viewBox="0 0 24 24"
-                        fill="currentColor"
-                        className="w-4 h-4"
-                      >
-                        <path d="M8.25 4.5a3.75 3.75 0 117.5 0v8.25a3.75 3.75 0 11-7.5 0V4.5z" />
-                        <path d="M6 10.5a.75.75 0 01.75.75v1.5a5.25 5.25 0 1010.5 0v-1.5a.75.75 0 011.5 0v1.5a6.751 6.751 0 01-6 6.709v2.291h3a.75.75 0 010 1.5h-7.5a.75.75 0 010-1.5h3v-2.291a6.751 6.751 0 01-6-6.709v-1.5A.75.75 0 016 10.5z" />
-                      </svg>
-                      <span>Start Mic</span>
-                    </>
-                  )}
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    className="w-4 h-4"
+                  >
+                    <path d="M8.25 4.5a3.75 3.75 0 117.5 0v8.25a3.75 3.75 0 11-7.5 0V4.5z" />
+                    <path d="M6 10.5a.75.75 0 01.75.75v1.5a5.25 5.25 0 1010.5 0v-1.5a.75.75 0 011.5 0v1.5a6.751 6.751 0 01-6 6.709v2.291h3a.75.75 0 010 1.5h-7.5a.75.75 0 010-1.5h3v-2.291a6.751 6.751 0 01-6-6.709v-1.5A.75.75 0 016 10.5z" />
+                  </svg>
                 </button>
               )}
+              {/* Question button - only show when recording */}
               {wsConnected && isRecording && (
                 <button
                   onClick={handleToggleQuestion}
-                  className={`px-3 py-2 rounded-md text-white text-xs font-medium transition-colors ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                     isAsking
-                      ? "bg-orange-600 hover:bg-orange-700"
-                      : "bg-indigo-500 hover:bg-indigo-600"
+                      ? "bg-orange-500 hover:bg-orange-600 text-white"
+                      : "bg-gray-100 hover:bg-gray-200 text-gray-700"
                   }`}
                 >
-                  {isAsking ? "Kết thúc đặt câu hỏi" : "Đặt câu hỏi"}
+                  {isAsking ? "Xong" : "❓"}
                 </button>
               )}
             </div>
@@ -496,47 +727,95 @@ export default function TranscriptPage({
 
           <div
             ref={transcriptContainerRef}
-            className="flex-1 overflow-y-auto bg-white rounded-md border p-4 space-y-3 shadow-inner"
+            className="flex-1 overflow-y-auto bg-gray-50 rounded-lg p-3 space-y-2"
           >
             {transcript.length === 0 &&
             !interimText &&
             !broadcastInterimText ? (
-              <div className="text-gray-400 text-sm space-y-1">
-                <p>- Transcript sẽ hiển thị ở đây...</p>
-                <p>- Ghi âm, chỉnh sửa hoặc thêm nội dung thủ công.</p>
+              <div className="text-gray-400 text-sm text-center py-8">
+                <p>Nhấn 🎤 để bắt đầu ghi âm</p>
+                <p className="text-xs mt-1">hoặc nhấn + để thêm nội dung thủ công</p>
               </div>
             ) : (
               <>
                 {transcript.map((item, index) => (
-                  <div key={index} className="flex flex-col">
-                    <span className="text-xs font-bold text-blue-600 mb-0.5">
-                      {item.speaker || "Unknown"}
-                    </span>
-                    <p className="text-gray-800 text-sm bg-gray-50 p-2 rounded border border-gray-100">
-                      {item.text}
-                    </p>
+                  <div key={item.id || index} className="flex flex-col group">
+                    {editingIndex === index ? (
+                      // Edit mode
+                      <div className="bg-blue-50 p-3 rounded border border-blue-200 space-y-2">
+                        <input
+                          type="text"
+                          value={editSpeaker}
+                          onChange={(e) => setEditSpeaker(e.target.value)}
+                          className="w-full text-xs font-medium text-purple-600 bg-white border border-purple-200 rounded px-2 py-1"
+                          placeholder="Người nói..."
+                        />
+                        <textarea
+                          value={editText}
+                          onChange={(e) => setEditText(e.target.value)}
+                          className="w-full text-sm bg-white border rounded px-2 py-1.5 min-h-[50px] resize-none"
+                          placeholder="Nội dung..."
+                          autoFocus
+                        />
+                        <div className="flex gap-1">
+                          <button
+                            onClick={handleSaveEdit}
+                            className="p-1.5 bg-green-500 text-white rounded hover:bg-green-600"
+                            title="Lưu"
+                          >
+                            <Check className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={handleCancelEdit}
+                            className="p-1.5 bg-gray-400 text-white rounded hover:bg-gray-500"
+                            title="Hủy"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      // View mode - compact
+                      <div className="relative bg-white rounded-lg px-3 py-2 border border-gray-100 hover:border-gray-200 transition-colors">
+                        <span className="text-xs font-medium text-purple-600">
+                          {item.speaker || "Unknown"}
+                        </span>
+                        <p className="text-gray-800 text-sm mt-0.5 pr-12">
+                          {item.text}
+                        </p>
+                        {/* Edit/Delete - show on hover */}
+                        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-0.5">
+                          <button
+                            onClick={() => handleStartEdit(index)}
+                            className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
+                            title="Sửa"
+                          >
+                            <Pencil className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteEntry(index)}
+                            className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
+                            title="Xóa"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
                 {/* Broadcast interim - chữ chạy từ member khác */}
                 {broadcastInterimText && (
-                  <div className="flex flex-col opacity-70">
-                    <span className="text-xs font-bold text-green-600 mb-0.5">
-                      (đang nói...)
-                    </span>
-                    <p className="text-gray-600 text-sm bg-green-50 p-2 rounded border border-green-100 italic">
-                      {broadcastInterimText}
-                    </p>
+                  <div className="bg-green-50 rounded-lg px-3 py-2 border border-green-100 animate-pulse">
+                    <span className="text-xs font-medium text-green-600">đang nói...</span>
+                    <p className="text-gray-600 text-sm mt-0.5 italic">{broadcastInterimText}</p>
                   </div>
                 )}
                 {/* Self interim - chữ chạy của chính mình */}
                 {interimText && (
-                  <div className="flex flex-col opacity-70">
-                    <span className="text-xs font-bold text-gray-500 mb-0.5">
-                      ...
-                    </span>
-                    <p className="text-gray-600 text-sm bg-gray-50 p-2 rounded border border-gray-100 italic">
-                      {interimText}
-                    </p>
+                  <div className="bg-purple-50 rounded-lg px-3 py-2 border border-purple-100 animate-pulse">
+                    <span className="text-xs font-medium text-purple-500">...</span>
+                    <p className="text-gray-600 text-sm mt-0.5 italic">{interimText}</p>
                   </div>
                 )}
               </>
@@ -558,27 +837,9 @@ export default function TranscriptPage({
         </div>
       </div>
 
-      {/* Usage Instructions */}
-      <div className="bg-white rounded-lg shadow-sm border p-6 mb-6">
-        <h3 className="text-sm font-semibold text-gray-800 mb-2">
-          Usage Instructions:
-        </h3>
-        <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
-          <li>Click &quot;Start Mic&quot; to begin recording</li>
-          <li>
-            Use &quot;Pause&quot; to temporarily stop and &quot;Resume&quot; to
-            continue
-          </li>
-          <li>Click &quot;End&quot; to finish the recording session</li>
-          <li>You can edit or take notes at any time</li>
-          <li>Nhấn "Đặt câu hỏi" để vào chế độ ghi nhận câu hỏi</li>
-          <li>Nhấn lại để kết thúc, hệ thống sẽ trả về câu hỏi đã bắt được</li>
-        </ul>
-      </div>
-
       {/* Question Results */}
       {questionResults.length > 0 && (
-        <div className="bg-white rounded-lg shadow-sm border p-6 mb-6">
+        <div className="bg-white rounded-lg shadow-sm border p-4 mb-4">
           <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
             Câu hỏi đã ghi nhận
             <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded">
@@ -598,7 +859,7 @@ export default function TranscriptPage({
                     {/* Hiển thị người đặt câu hỏi */}
                     {q.from_member && (
                       <span className="text-xs font-medium text-green-700 mb-1 block">
-                        👤 {q.speaker || "Member"}
+                        👤 {q.speaker_name || q.speaker || "Thành viên"}
                       </span>
                     )}
                     <p className="text-sm text-gray-800 whitespace-pre-line">
@@ -641,12 +902,12 @@ export default function TranscriptPage({
         >
           Cancel
         </button>
-        <button
+<button
           onClick={handleSaveTranscript}
-          disabled={!wsConnected && transcript.length === 0}
+          disabled={saving || transcript.length === 0}
           className="px-4 py-2 text-white bg-purple-600 rounded-md hover:bg-purple-700 text-sm font-medium shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Save Transcript
+          {saving ? "Đang lưu..." : "Hoàn tất phiên"}
         </button>
       </div>
 

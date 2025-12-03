@@ -232,7 +232,7 @@ export default function GradeGroupPage() {
       ) {
         return;
       }
-      const speakerName = msg.speaker || "Member";
+      const speakerName = msg.speaker_name || msg.speaker || "Thành viên";
       swalConfig.toast.info(`${speakerName} đang đặt câu hỏi...`);
     } else if (eventType === "broadcast_question_processing") {
       // Người khác kết thúc đặt câu hỏi, đang xử lý - dùng toast nhẹ
@@ -242,7 +242,7 @@ export default function GradeGroupPage() {
       ) {
         return;
       }
-      const speakerName = msg.speaker || "Member";
+      const speakerName = msg.speaker_name || msg.speaker || "Thành viên";
       swalConfig.toast.info(`Đang xử lý câu hỏi từ ${speakerName}...`);
     } else if (eventType === "broadcast_question_result") {
       // Kết quả câu hỏi từ người khác
@@ -252,7 +252,7 @@ export default function GradeGroupPage() {
       ) {
         return;
       }
-      const speakerName = msg.speaker || "Member";
+      const speakerName = msg.speaker_name || msg.speaker || "Thành viên";
       const questionText = msg.question_text || "";
 
       if (msg.is_duplicate) {
