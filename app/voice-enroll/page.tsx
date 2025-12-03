@@ -68,12 +68,36 @@ export default function VoiceEnrollPage() {
     try {
       const data = await voiceApi.getStatus(userId);
       setStatus(data);
+
+      // Restore progress based on enrollment_count
+      const enrolledCount = data.enrollment_count || 0;
+
       if (data.enrollment_status === "enrolled") {
         swalConfig.success(
           "Đã hoàn tất!",
           "Bạn đã đăng ký giọng nói thành công."
         );
         router.push("/dashboard");
+      } else if (enrolledCount > 0) {
+        // User has partial enrollment, restore their progress
+        setCurrentSampleIndex(enrolledCount);
+
+        // Mark completed samples
+        setSamples((prev) => {
+          const updated = [...prev];
+          for (let i = 0; i < enrolledCount && i < 3; i++) {
+            updated[i] = { ...updated[i], status: "completed" };
+          }
+          return updated;
+        });
+
+        // Notify user about resuming
+        swalConfig.info(
+          "Tiếp tục ghi âm",
+          `Bạn đã ghi ${enrolledCount}/3 mẫu. Hãy tiếp tục ghi mẫu ${
+            enrolledCount + 1
+          }.`
+        );
       }
     } catch (error) {
       console.error("Failed to fetch status:", error);
@@ -374,172 +398,366 @@ export default function VoiceEnrollPage() {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 relative">
-      <div className="absolute top-4 right-4 flex gap-2">
-        <button
-          onClick={handleLogout}
-          className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 bg-white shadow-sm rounded-md border hover:bg-gray-50"
-        >
-          Logout
-        </button>
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-blue-50 flex flex-col relative">
+      {/* Header Bar */}
+      <div className="w-full bg-white/80 backdrop-blur-sm border-b border-gray-200 sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-gradient-to-br from-purple-600 to-blue-600 rounded-lg flex items-center justify-center">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="white"
+                className="w-6 h-6"
+              >
+                <path d="M8.25 4.5a3.75 3.75 0 117.5 0v8.25a3.75 3.75 0 11-7.5 0V4.5z" />
+                <path d="M6 10.5a.75.75 0 01.75.75v1.5a5.25 5.25 0 1010.5 0v-1.5a.75.75 0 011.5 0v1.5a6.751 6.751 0 01-6 6.709v2.291h3a.75.75 0 010 1.5h-7.5a.75.75 0 010-1.5h3v-2.291a6.751 6.751 0 01-6-6.709v-1.5A.75.75 0 016 10.5z" />
+              </svg>
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-gray-800">
+                Voice Registration
+              </h1>
+              <p className="text-sm text-gray-500">
+                Thiết lập bảo mật giọng nói
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={handleLogout}
+            className="px-5 py-2.5 text-sm font-medium text-gray-700 hover:text-gray-900 bg-white hover:bg-gray-50 border border-gray-300 rounded-lg transition-all shadow-sm hover:shadow"
+          >
+            Đăng xuất
+          </button>
+        </div>
       </div>
 
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-xl overflow-hidden">
-        {/* Header */}
-        <div className="bg-purple-600 p-6 text-center">
-          <h1 className="text-2xl font-bold text-white mb-2">
-            Voice Registration
-          </h1>
-          <p className="text-purple-100 text-sm">
-            Thiết lập bảo mật giọng nói cho tài khoản của bạn
-          </p>
-        </div>
-
-        {/* Progress */}
-        <div className="px-6 pt-6">
-          <div className="flex justify-between text-sm text-gray-500 mb-2">
-            <span>Tiến độ</span>
-            <span>
-              {completedCount}/{maxCount} samples đã lưu
-            </span>
-          </div>
-          <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-purple-500 transition-all duration-500 ease-out"
-              style={{ width: `${Math.min(progress, 100)}%` }}
-            />
-          </div>
-
-          {/* Sample indicator dots */}
-          <div className="flex justify-center gap-3 mt-4">
-            {samples.map((sample, idx) => (
-              <div
-                key={idx}
-                className={`w-5 h-5 rounded-full transition-all duration-300 ${
-                  sample.status === "completed"
-                    ? "bg-green-500"
-                    : sample.status === "recording"
-                    ? "bg-purple-500 animate-pulse"
-                    : sample.status === "processing"
-                    ? "bg-yellow-500"
-                    : sample.status === "failed"
-                    ? "bg-red-500"
-                    : "bg-gray-300"
-                }`}
-                title={`Sample ${idx + 1}: ${sample.status}`}
-              />
-            ))}
-          </div>
-        </div>
-
-        {/* Content */}
-        <div className="p-6 space-y-6">
-          <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
-            <div className="flex items-start gap-3">
-              <span className="text-xl">🔊</span>
+      {/* Main Content */}
+      <div className="flex-1 flex items-center justify-center p-8">
+        <div className="max-w-6xl w-full">
+          {/* Progress Section */}
+          <div className="bg-white rounded-2xl shadow-lg p-8 mb-6">
+            <div className="flex items-center justify-between mb-6">
               <div>
-                <p className="text-blue-800 font-medium text-sm mb-2">
-                  Vui lòng đọc to và rõ ràng đoạn văn sau:
-                </p>
-                <p className="text-gray-700 text-sm leading-relaxed italic">
-                  &quot;{displayText}&quot;
+                <h2 className="text-2xl font-bold text-gray-800 mb-1">
+                  Tiến độ đăng ký
+                </h2>
+                <p className="text-gray-600">
+                  {completedCount}/{maxCount} mẫu giọng nói đã hoàn thành
                 </p>
               </div>
+              <div className="text-right">
+                <div className="text-4xl font-bold text-purple-600">
+                  {Math.round(progress)}%
+                </div>
+                <p className="text-sm text-gray-500 mt-1">Hoàn thành</p>
+              </div>
+            </div>
+
+            {/* Progress Bar */}
+            <div className="h-3 bg-gray-100 rounded-full overflow-hidden mb-6">
+              <div
+                className="h-full bg-gradient-to-r from-purple-600 to-blue-600 transition-all duration-500 ease-out rounded-full"
+                style={{ width: `${Math.min(progress, 100)}%` }}
+              />
+            </div>
+
+            {/* Sample Indicators */}
+            <div className="grid grid-cols-3 gap-4">
+              {samples.map((sample, idx) => (
+                <div
+                  key={idx}
+                  className={`p-4 rounded-xl border-2 transition-all duration-300 ${
+                    sample.status === "completed"
+                      ? "bg-green-50 border-green-500"
+                      : sample.status === "recording"
+                      ? "bg-purple-50 border-purple-500 animate-pulse"
+                      : sample.status === "processing"
+                      ? "bg-yellow-50 border-yellow-500"
+                      : sample.status === "failed"
+                      ? "bg-red-50 border-red-500"
+                      : "bg-gray-50 border-gray-300"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-lg ${
+                        sample.status === "completed"
+                          ? "bg-green-500"
+                          : sample.status === "recording"
+                          ? "bg-purple-500"
+                          : sample.status === "processing"
+                          ? "bg-yellow-500"
+                          : sample.status === "failed"
+                          ? "bg-red-500"
+                          : "bg-gray-300"
+                      }`}
+                    >
+                      {sample.status === "completed" ? (
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 24 24"
+                          fill="currentColor"
+                          className="w-6 h-6"
+                        >
+                          <path
+                            fillRule="evenodd"
+                            d="M19.916 4.626a.75.75 0 01.208 1.04l-9 13.5a.75.75 0 01-1.154.114l-6-6a.75.75 0 011.06-1.06l5.353 5.353 8.493-12.739a.75.75 0 011.04-.208z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                      ) : (
+                        idx + 1
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-semibold text-gray-800">
+                        Mẫu {idx + 1}
+                      </p>
+                      <p className="text-sm text-gray-600 capitalize">
+                        {sample.status === "completed"
+                          ? "Hoàn thành"
+                          : sample.status === "recording"
+                          ? "Đang ghi âm"
+                          : sample.status === "processing"
+                          ? "Đang xử lý"
+                          : sample.status === "failed"
+                          ? "Thất bại"
+                          : "Chờ ghi âm"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 
-          {/* Timer Visualizer */}
-          <div className="flex justify-center py-4">
-            {recording ? (
-              <div className="flex flex-col items-center gap-2">
-                <div className="text-4xl font-bold text-purple-600 tabular-nums">
-                  {timeLeft}s
+          {/* Recording Section */}
+          <div className="grid lg:grid-cols-2 gap-6">
+            {/* Left: Instructions */}
+            <div className="bg-white rounded-2xl shadow-lg p-8">
+              <div className="flex items-start gap-4 mb-6">
+                <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <span className="text-2xl">🔊</span>
                 </div>
-                <div className="flex items-center gap-1 h-4">
-                  {[...Array(5)].map((_, i) => (
-                    <div
-                      key={i}
-                      className="w-1 bg-red-500 rounded-full animate-pulse"
-                      style={{
-                        height: `${Math.random() * 100}%`,
-                        animationDelay: `${i * 0.1}s`,
-                      }}
-                    />
-                  ))}
-                  <span className="ml-2 text-red-500 font-medium text-xs">
-                    Đang ghi âm...
-                  </span>
+                <div>
+                  <h3 className="text-xl font-bold text-gray-800 mb-2">
+                    Hướng dẫn ghi âm
+                  </h3>
+                  <p className="text-gray-600 text-sm">
+                    Vui lòng đọc to và rõ ràng đoạn văn bản dưới đây
+                  </p>
                 </div>
-                <p className="text-xs text-gray-400">
-                  Hệ thống sẽ tự động lưu sau khi hết giờ
-                </p>
               </div>
-            ) : (
-              <div className="text-gray-400 text-sm">
-                {showNextButton
-                  ? "Đã lưu mẫu. Nhấn tiếp tục để sang mẫu tiếp theo."
-                  : "Sẵn sàng ghi âm (15 giây)"}
-              </div>
-            )}
-          </div>
 
-          {/* Action Button */}
-          <div className="flex justify-center">
-            {processing ? (
-              <button
-                disabled
-                className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center cursor-not-allowed"
-              >
-                <div className="w-6 h-6 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
-              </button>
-            ) : recording ? (
-              // Disabled button during recording
-              <button
-                disabled
-                className="w-16 h-16 rounded-full bg-gray-300 text-white flex items-center justify-center shadow-inner cursor-not-allowed"
-              >
-                <span className="font-bold text-lg">{timeLeft}</span>
-              </button>
-            ) : (
-              <button
-                onClick={startRecording}
-                className="w-16 h-16 rounded-full bg-purple-600 hover:bg-purple-700 text-white flex items-center justify-center shadow-lg transition-transform hover:scale-105 active:scale-95"
-              >
-                {showNextButton ? (
+              <div className="bg-gradient-to-br from-blue-50 to-purple-50 p-6 rounded-xl border border-blue-200">
+                <div className="flex items-start gap-2 mb-3">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     viewBox="0 0 24 24"
                     fill="currentColor"
-                    className="w-8 h-8"
+                    className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5"
                   >
                     <path
                       fillRule="evenodd"
-                      d="M4.5 5.653c0-1.426 1.529-2.33 2.779-1.643l11.54 6.348c1.295.712 1.295 2.573 0 3.285L7.28 19.991c-1.25.687-2.779-.217-2.779-1.643V5.653z"
+                      d="M4.848 2.771A49.144 49.144 0 0112 2.25c2.43 0 4.817.178 7.152.52 1.978.292 3.348 2.024 3.348 3.97v6.02c0 1.946-1.37 3.678-3.348 3.97a48.901 48.901 0 01-3.476.383.39.39 0 00-.297.17l-2.755 4.133a.75.75 0 01-1.248 0l-2.755-4.133a.39.39 0 00-.297-.17 48.9 48.9 0 01-3.476-.384c-1.978-.29-3.348-2.024-3.348-3.97V6.741c0-1.946 1.37-3.68 3.348-3.97z"
                       clipRule="evenodd"
                     />
                   </svg>
-                ) : (
+                  <p className="text-sm font-semibold text-blue-800">
+                    Văn bản mẫu {currentSampleIndex + 1}:
+                  </p>
+                </div>
+                <p className="text-gray-700 leading-relaxed italic text-base">
+                  &quot;{displayText}&quot;
+                </p>
+              </div>
+
+              <div className="mt-6 space-y-3">
+                <div className="flex items-start gap-3">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     viewBox="0 0 24 24"
                     fill="currentColor"
-                    className="w-8 h-8"
+                    className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5"
                   >
-                    <path d="M8.25 4.5a3.75 3.75 0 117.5 0v8.25a3.75 3.75 0 11-7.5 0V4.5z" />
-                    <path d="M6 10.5a.75.75 0 01.75.75v1.5a5.25 5.25 0 1010.5 0v-1.5a.75.75 0 011.5 0v1.5a6.751 6.751 0 01-6 6.709v2.291h3a.75.75 0 010 1.5h-7.5a.75.75 0 010-1.5h3v-2.291a6.751 6.751 0 01-6-6.709v-1.5A.75.75 0 016 10.5z" />
+                    <path
+                      fillRule="evenodd"
+                      d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12zm13.36-1.814a.75.75 0 10-1.22-.872l-3.236 4.53L9.53 12.22a.75.75 0 00-1.06 1.06l2.25 2.25a.75.75 0 001.14-.094l3.75-5.25z"
+                      clipRule="evenodd"
+                    />
                   </svg>
-                )}
-              </button>
-            )}
-          </div>
+                  <p className="text-sm text-gray-600">
+                    Đọc với giọng tự nhiên, tốc độ vừa phải
+                  </p>
+                </div>
+                <div className="flex items-start gap-3">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12zm13.36-1.814a.75.75 0 10-1.22-.872l-3.236 4.53L9.53 12.22a.75.75 0 00-1.06 1.06l2.25 2.25a.75.75 0 001.14-.094l3.75-5.25z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                  <p className="text-sm text-gray-600">
+                    Đảm bảo môi trường yên tĩnh khi ghi âm
+                  </p>
+                </div>
+                <div className="flex items-start gap-3">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12zm13.36-1.814a.75.75 0 10-1.22-.872l-3.236 4.53L9.53 12.22a.75.75 0 00-1.06 1.06l2.25 2.25a.75.75 0 001.14-.094l3.75-5.25z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                  <p className="text-sm text-gray-600">
+                    Thời gian ghi âm: 15 giây (tự động dừng)
+                  </p>
+                </div>
+              </div>
+            </div>
 
-          <p className="text-center text-xs text-gray-400">
-            {recording
-              ? "Vui lòng đọc đoạn văn trên"
-              : showNextButton
-              ? "Nhấn để tiếp tục"
-              : "Nhấn để bắt đầu ghi âm (15s)"}
-          </p>
+            {/* Right: Recording Controls */}
+            <div className="bg-white rounded-2xl shadow-lg p-8 flex flex-col">
+              <div className="flex-1 flex flex-col items-center justify-center">
+                {/* Timer Display */}
+                {recording ? (
+                  <div className="flex flex-col items-center gap-6 mb-8">
+                    <div className="relative">
+                      <div className="w-40 h-40 rounded-full bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center shadow-2xl animate-pulse">
+                        <div className="text-6xl font-bold text-white tabular-nums">
+                          {timeLeft}
+                        </div>
+                      </div>
+                      <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 bg-white px-4 py-1 rounded-full shadow-lg">
+                        <span className="text-sm font-medium text-gray-600">
+                          giây
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1 h-8">
+                        {[...Array(5)].map((_, i) => (
+                          <div
+                            key={i}
+                            className="w-2 bg-red-500 rounded-full animate-pulse"
+                            style={{
+                              height: `${Math.random() * 100}%`,
+                              animationDelay: `${i * 0.1}s`,
+                            }}
+                          />
+                        ))}
+                      </div>
+                      <span className="text-red-600 font-semibold text-lg">
+                        Đang ghi âm...
+                      </span>
+                    </div>
+
+                    <p className="text-gray-500 text-center max-w-xs">
+                      Hệ thống sẽ tự động lưu khi hết thời gian. Vui lòng đọc
+                      đoạn văn bên trái.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center gap-6 mb-8">
+                    <div className="w-40 h-40 rounded-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center shadow-lg">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                        className="w-20 h-20 text-gray-400"
+                      >
+                        <path d="M8.25 4.5a3.75 3.75 0 117.5 0v8.25a3.75 3.75 0 11-7.5 0V4.5z" />
+                        <path d="M6 10.5a.75.75 0 01.75.75v1.5a5.25 5.25 0 1010.5 0v-1.5a.75.75 0 011.5 0v1.5a6.751 6.751 0 01-6 6.709v2.291h3a.75.75 0 010 1.5h-7.5a.75.75 0 010-1.5h3v-2.291a6.751 6.751 0 01-6-6.709v-1.5A.75.75 0 016 10.5z" />
+                      </svg>
+                    </div>
+
+                    <div className="text-center">
+                      <p className="text-xl font-semibold text-gray-700 mb-2">
+                        {showNextButton
+                          ? "Mẫu đã được lưu thành công!"
+                          : "Sẵn sàng ghi âm"}
+                      </p>
+                      <p className="text-gray-500">
+                        {showNextButton
+                          ? "Nhấn nút bên dưới để tiếp tục mẫu tiếp theo"
+                          : "Thời gian ghi âm: 15 giây"}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Action Button */}
+                <div className="flex flex-col items-center gap-4">
+                  {processing ? (
+                    <button
+                      disabled
+                      className="w-24 h-24 rounded-full bg-gray-200 flex items-center justify-center cursor-not-allowed shadow-lg"
+                    >
+                      <div className="w-10 h-10 border-4 border-gray-400 border-t-transparent rounded-full animate-spin" />
+                    </button>
+                  ) : recording ? (
+                    <button
+                      disabled
+                      className="w-24 h-24 rounded-full bg-gray-300 text-white flex items-center justify-center shadow-lg cursor-not-allowed"
+                    >
+                      <span className="font-bold text-2xl">{timeLeft}</span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={startRecording}
+                      className="w-24 h-24 rounded-full bg-gradient-to-br from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white flex items-center justify-center shadow-2xl transition-all hover:scale-110 active:scale-95 group"
+                    >
+                      {showNextButton ? (
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 24 24"
+                          fill="currentColor"
+                          className="w-12 h-12 group-hover:translate-x-1 transition-transform"
+                        >
+                          <path
+                            fillRule="evenodd"
+                            d="M4.5 5.653c0-1.426 1.529-2.33 2.779-1.643l11.54 6.348c1.295.712 1.295 2.573 0 3.285L7.28 19.991c-1.25.687-2.779-.217-2.779-1.643V5.653z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                      ) : (
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 24 24"
+                          fill="currentColor"
+                          className="w-12 h-12"
+                        >
+                          <path d="M8.25 4.5a3.75 3.75 0 117.5 0v8.25a3.75 3.75 0 11-7.5 0V4.5z" />
+                          <path d="M6 10.5a.75.75 0 01.75.75v1.5a5.25 5.25 0 1010.5 0v-1.5a.75.75 0 011.5 0v1.5a6.751 6.751 0 01-6 6.709v2.291h3a.75.75 0 010 1.5h-7.5a.75.75 0 010-1.5h3v-2.291a6.751 6.751 0 01-6-6.709v-1.5A.75.75 0 016 10.5z" />
+                        </svg>
+                      )}
+                    </button>
+                  )}
+
+                  <p className="text-center text-sm font-medium text-gray-600">
+                    {recording
+                      ? "Đang ghi âm - Vui lòng đọc đoạn văn"
+                      : showNextButton
+                      ? "Nhấn để tiếp tục"
+                      : "Nhấn để bắt đầu ghi âm"}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

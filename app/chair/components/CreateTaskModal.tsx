@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { projectTasksApi } from "@/lib/api/project-tasks";
 import type { RubricDto } from "@/lib/models";
+import { swalConfig } from "@/lib/utils/sweetAlert";
 
 interface CreateTaskModalProps {
   open: boolean;
@@ -60,7 +61,13 @@ export default function CreateTaskModal({
       });
 
       onClose();
-      alert("Task created successfully!");
+      swalConfig.success(
+        "Tạo Task Thành Công!",
+        `Task "${formData.title}" đã được tạo và giao cho ${
+          lecturers.find((l) => l.id === formData.assignedToId)?.fullName ||
+          "thành viên"
+        }.`
+      );
     } catch (err: any) {
       console.error("Failed to create task:", err);
       setError(err.message || "Failed to create task. Please try again.");
