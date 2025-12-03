@@ -143,6 +143,45 @@ export default function TranscriptPage({
     const eventType = msg.type || msg.event;
     console.log("📨 [Secretary] STT Event:", eventType, msg);
 
+    // Handle WebSocket connected event
+    if (eventType === "connected") {
+      console.log("✅ WebSocket connected:", msg);
+      if (msg.session_id) {
+        setMySessionId(msg.session_id);
+        mySessionIdRef.current = msg.session_id;
+      }
+      return;
+    }
+
+    // Handle cached transcript from Redis (sent on reconnect)
+    if (eventType === "cached_transcript") {
+      console.log("📂 Received cached transcript from Redis:", msg);
+      const cachedLines = msg.lines || [];
+      if (cachedLines.length > 0) {
+        // Convert cached lines to STTEvent format
+        const loadedTranscript: STTEvent[] = cachedLines.map((line: any, index: number) => ({
+          event: "recognized",
+          text: line.text || "",
+          speaker: line.speaker || "Unknown",
+          speaker_name: line.speaker_name || line.speaker,
+          user_id: line.user_id,
+          id: line.id || `cached_${index}_${Date.now()}`,
+          isNew: false,
+        }));
+        
+        // Replace current transcript with cached version (Redis has latest)
+        setTranscript(loadedTranscript);
+        console.log("✅ Loaded", loadedTranscript.length, "lines from Redis cache");
+        swalConfig.toast.success(`Đã khôi phục ${loadedTranscript.length} dòng transcript`);
+      }
+      return;
+    }
+
+    // Handle ping (keepalive)
+    if (eventType === "ping") {
+      return;
+    }
+
     // Helper: Check if transcript is duplicate (same text within 2 seconds)
     const isDuplicateTranscript = (text: string): boolean => {
       if (!text) return false;
