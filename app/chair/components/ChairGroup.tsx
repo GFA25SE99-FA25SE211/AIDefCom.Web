@@ -12,6 +12,11 @@ export default function ChairGroups() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Xóa session role khi vào trang danh sách (không phải detail)
+  useEffect(() => {
+    localStorage.removeItem("sessionRole");
+  }, []);
+
   useEffect(() => {
     const fetchSessions = async () => {
       try {

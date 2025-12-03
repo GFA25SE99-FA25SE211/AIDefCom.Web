@@ -3,6 +3,7 @@
 import React from "react";
 import { useRouter } from "next/navigation";
 import { Users, Calendar, ClipboardList } from "lucide-react";
+import { swalConfig } from "@/lib/utils/sweetAlert";
 
 export type GroupStatus = "Graded" | "Not Graded";
 export type SessionStatus = "Upcoming" | "Completed";
@@ -16,6 +17,8 @@ interface GroupCardProps {
   sessionTitle: string;
   sessionStatus: SessionStatus;
   sessionDateTime: string;
+  averageScore?: number | null;
+  canGrade?: boolean;
 }
 
 const GroupCard: React.FC<GroupCardProps> = ({
@@ -27,13 +30,24 @@ const GroupCard: React.FC<GroupCardProps> = ({
   sessionTitle,
   sessionStatus,
   sessionDateTime,
+  averageScore,
+  canGrade = true,
 }) => {
   const router = useRouter();
   const isGraded = status === "Graded";
   const isSessionCompleted = sessionStatus === "Completed";
   const sessionStatusClass = sessionStatus.toLowerCase();
+  const canGradeThisGroup = canGrade && !isSessionCompleted;
 
   const handleGradeClick = () => {
+    if (!canGradeThisGroup) {
+      swalConfig.warning(
+        "Không thể chấm nhóm này",
+        "Bạn không được phân công chấm điểm cho nhóm trong phiên bảo vệ này."
+      );
+      return;
+    }
+
     router.push(
       isGraded || isSessionCompleted
         ? `/member/grading/view/${groupId}`
@@ -65,12 +79,19 @@ const GroupCard: React.FC<GroupCardProps> = ({
           <button
             onClick={handleGradeClick}
             className={`px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm font-medium rounded-md sm:rounded-lg transition flex-shrink-0 whitespace-nowrap min-w-0 ${
-              isGraded || isSessionCompleted
+              !canGradeThisGroup
+                ? "border border-gray-200 text-gray-400 cursor-not-allowed bg-gray-50"
+                : isGraded || isSessionCompleted
                 ? "bg-gradient-to-r from-purple-500 to-blue-500 text-white hover:opacity-90"
                 : "border border-gray-300 text-gray-700 hover:bg-gray-100"
             }`}
+            disabled={!canGradeThisGroup}
           >
-            {isGraded || isSessionCompleted ? "View" : "Grade"}
+            {!canGradeThisGroup
+              ? "No Permission"
+              : isGraded || isSessionCompleted
+              ? "View"
+              : "Grade"}
           </button>
         </div>
       </header>
@@ -81,6 +102,12 @@ const GroupCard: React.FC<GroupCardProps> = ({
           <h3 className="font-medium text-gray-800 break-words">
             {projectTitle}
           </h3>
+          {typeof averageScore === "number" && (
+            <p className="text-xs text-gray-500 mt-1">
+              Average score:{" "}
+              <span className="font-semibold">{averageScore.toFixed(2)}</span>
+            </p>
+          )}
         </div>
 
         <div className="flex items-center gap-2 text-gray-600">

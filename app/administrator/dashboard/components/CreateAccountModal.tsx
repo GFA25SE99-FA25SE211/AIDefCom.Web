@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import Modal from "../../../moderator/create-sessions/components/Modal";
 import { Plus, Eye, EyeOff } from "lucide-react"; // Icon thống nhất UI
+import { swalConfig } from "@/lib/utils/sweetAlert";
 
 export interface AccountFormData {
   fullName: string;
@@ -35,7 +36,10 @@ const CreateAccountModal: React.FC<CreateAccountModalProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (password !== confirmPassword) {
-      alert("Passwords do not match. Please re-enter.");
+      swalConfig.error(
+        "Password mismatch",
+        "Passwords do not match. Please re-enter."
+      );
       return;
     }
     onSubmit({ fullName, email, role, password, phoneNumber });

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { projectTasksApi } from "@/lib/api/project-tasks";
+import { swalConfig } from "@/lib/utils/sweetAlert";
 import type { RubricDto } from "@/lib/models";
 
 interface CreateTaskModalProps {
@@ -60,7 +61,10 @@ export default function CreateTaskModal({
       });
 
       onClose();
-      alert("Task created successfully!");
+      await swalConfig.success(
+        "Task created",
+        "The grading task has been created successfully."
+      );
     } catch (err: any) {
       console.error("Failed to create task:", err);
       setError(err.message || "Failed to create task. Please try again.");

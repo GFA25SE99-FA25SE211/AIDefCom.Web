@@ -46,7 +46,9 @@ export default function TranscriptPage({
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editText, setEditText] = useState("");
   const [editSpeaker, setEditSpeaker] = useState("");
-  const [existingTranscriptId, setExistingTranscriptId] = useState<number | null>(null);
+  const [existingTranscriptId, setExistingTranscriptId] = useState<
+    number | null
+  >(null);
   const [saving, setSaving] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
@@ -67,6 +69,14 @@ export default function TranscriptPage({
   // Flag to track if Redis cache was loaded (to prevent further overwrites during session)
   const transcriptLoadedRef = useRef<boolean>(false);
 
+  // Xóa session role khi rời khỏi trang (nếu cần)
+  useEffect(() => {
+    return () => {
+      // Không xóa session role ở đây vì user có thể quay lại session
+      // Chỉ xóa khi logout hoặc rời khỏi hoàn toàn
+    };
+  }, []);
+
   // Initialize client-side only to avoid hydration mismatch
   useEffect(() => {
     setIsClient(true);
@@ -77,6 +87,34 @@ export default function TranscriptPage({
         const response = await defenseSessionsApi.getById(Number(id));
         if (response.data) {
           setSession(response.data);
+
+          // Lấy session role của user hiện tại
+          try {
+            const storedUser = localStorage.getItem("user");
+            if (storedUser) {
+              const parsedUser = JSON.parse(storedUser);
+              const currentUserId = parsedUser.id;
+
+              const lecturersRes = await defenseSessionsApi.getUsersBySessionId(
+                Number(id)
+              );
+              if (lecturersRes.data) {
+                const currentUserInSession = lecturersRes.data.find(
+                  (user: any) =>
+                    String(user.id).toLowerCase() ===
+                    String(currentUserId).toLowerCase()
+                );
+
+                if (currentUserInSession && currentUserInSession.role) {
+                  const sessionRoleValue =
+                    currentUserInSession.role.toLowerCase();
+                  localStorage.setItem("sessionRole", sessionRoleValue);
+                }
+              }
+            }
+          } catch (err) {
+            console.error("Failed to get session role:", err);
+          }
         }
 
         // Fetch existing transcript
@@ -84,52 +122,66 @@ export default function TranscriptPage({
         if (transcriptRes.data && transcriptRes.data.length > 0) {
           const existingTranscript = transcriptRes.data[0];
           setExistingTranscriptId(existingTranscript.id);
-          
+
           // Parse stored transcript text (JSON format)
           if (existingTranscript.transcriptText) {
             try {
               const parsed = JSON.parse(existingTranscript.transcriptText);
               if (Array.isArray(parsed)) {
                 // Convert to STTEvent format with unique IDs
-                const loadedTranscript: STTEvent[] = parsed.map((item: any, index: number) => ({
-                  event: "recognized",
-                  text: item.text || item.content || "",
-                  speaker: item.speaker || item.speaker_name || "Unknown",
-                  id: item.id || `loaded_${index}_${Date.now()}`,
-                  isNew: false,
-                }));
+                const loadedTranscript: STTEvent[] = parsed.map(
+                  (item: any, index: number) => ({
+                    event: "recognized",
+                    text: item.text || item.content || "",
+                    speaker: item.speaker || item.speaker_name || "Unknown",
+                    id: item.id || `loaded_${index}_${Date.now()}`,
+                    isNew: false,
+                  })
+                );
                 // Load from DB - this is saved/finalized data
                 setTranscript(loadedTranscript);
                 transcriptLoadedRef.current = true; // Mark as loaded to prevent Redis overwrite
-                console.log("📦 Loaded transcript from DB:", loadedTranscript.length, "entries");
+                console.log(
+                  "📦 Loaded transcript from DB:",
+                  loadedTranscript.length,
+                  "entries"
+                );
               }
             } catch (parseError) {
               // If not JSON, treat as plain text with "Speaker: Text" format
-              const lines = existingTranscript.transcriptText.split("\n").filter((l: string) => l.trim());
-              const loadedTranscript: STTEvent[] = lines.map((line: string, index: number) => {
-                // Parse "Speaker: Text" format
-                const colonIndex = line.indexOf(":");
-                let speaker = "Unknown";
-                let text = line;
-                
-                if (colonIndex > 0 && colonIndex < 50) {
-                  // Likely "Speaker: Text" format
-                  speaker = line.substring(0, colonIndex).trim();
-                  text = line.substring(colonIndex + 1).trim();
+              const lines = existingTranscript.transcriptText
+                .split("\n")
+                .filter((l: string) => l.trim());
+              const loadedTranscript: STTEvent[] = lines.map(
+                (line: string, index: number) => {
+                  // Parse "Speaker: Text" format
+                  const colonIndex = line.indexOf(":");
+                  let speaker = "Unknown";
+                  let text = line;
+
+                  if (colonIndex > 0 && colonIndex < 50) {
+                    // Likely "Speaker: Text" format
+                    speaker = line.substring(0, colonIndex).trim();
+                    text = line.substring(colonIndex + 1).trim();
+                  }
+
+                  return {
+                    event: "recognized",
+                    text: text,
+                    speaker: speaker,
+                    id: `loaded_${index}_${Date.now()}`,
+                    isNew: false,
+                  };
                 }
-                
-                return {
-                  event: "recognized",
-                  text: text,
-                  speaker: speaker,
-                  id: `loaded_${index}_${Date.now()}`,
-                  isNew: false,
-                };
-              });
+              );
               // Load from DB - this is saved/finalized data
               setTranscript(loadedTranscript);
               transcriptLoadedRef.current = true; // Mark as loaded to prevent Redis overwrite
-              console.log("📦 Loaded transcript (plain text) from DB:", loadedTranscript.length, "entries");
+              console.log(
+                "📦 Loaded transcript (plain text) from DB:",
+                loadedTranscript.length,
+                "entries"
+              );
             }
           }
         }
@@ -163,27 +215,39 @@ export default function TranscriptPage({
     if (eventType === "cached_transcript") {
       console.log("📂 Received cached transcript from Redis:", msg);
       const cachedLines = msg.lines || [];
-      
+
       // Only use Redis cache if we don't already have data loaded from DB
       // DB data = saved/finalized transcript, Redis = working draft
       if (cachedLines.length > 0 && !transcriptLoadedRef.current) {
         // Convert cached lines to STTEvent format
-        const loadedTranscript: STTEvent[] = cachedLines.map((line: any, index: number) => ({
-          event: "recognized",
-          text: line.text || "",
-          speaker: line.speaker || "Unknown",
-          speaker_name: line.speaker_name || line.speaker,
-          user_id: line.user_id,
-          id: line.id || `cached_${index}_${Date.now()}`,
-          isNew: false,
-        }));
-        
+        const loadedTranscript: STTEvent[] = cachedLines.map(
+          (line: any, index: number) => ({
+            event: "recognized",
+            text: line.text || "",
+            speaker: line.speaker || "Unknown",
+            speaker_name: line.speaker_name || line.speaker,
+            user_id: line.user_id,
+            id: line.id || `cached_${index}_${Date.now()}`,
+            isNew: false,
+          })
+        );
+
         setTranscript(loadedTranscript);
         transcriptLoadedRef.current = true;
-        console.log("✅ Loaded", loadedTranscript.length, "lines from Redis cache (no DB data)");
-        swalConfig.toast.success(`Đã khôi phục ${loadedTranscript.length} dòng transcript từ cache`);
+        console.log(
+          "✅ Loaded",
+          loadedTranscript.length,
+          "lines from Redis cache (no DB data)"
+        );
+        swalConfig.toast.success(
+          `Đã khôi phục ${loadedTranscript.length} dòng transcript từ cache`
+        );
       } else if (cachedLines.length > 0) {
-        console.log("⏭️ Skipped Redis cache - already have DB data:", transcript.length, "entries");
+        console.log(
+          "⏭️ Skipped Redis cache - already have DB data:",
+          transcript.length,
+          "entries"
+        );
       } else {
         console.log("📂 Redis cache is empty");
       }
@@ -305,7 +369,9 @@ export default function TranscriptPage({
           event: "recognized",
           text: msg.text,
           speaker: msg.speaker_name || msg.speaker || "Đang xác định",
-          id: `broadcast_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          id: `broadcast_${Date.now()}_${Math.random()
+            .toString(36)
+            .substr(2, 9)}`,
           isNew: true,
         };
         setTranscript((prev) => [...prev, newEntry]);
@@ -509,7 +575,7 @@ export default function TranscriptPage({
 
   const handleSaveEdit = () => {
     if (editingIndex === null) return;
-    
+
     setTranscript((prev) => {
       const newTranscript = [...prev];
       newTranscript[editingIndex] = {
@@ -563,7 +629,7 @@ export default function TranscriptPage({
       console.log("   existingTranscriptId:", existingTranscriptId);
       console.log("   session.id:", session.id);
       console.log("   transcript.length:", transcript.length);
-      
+
       // Prepare transcript data as JSON
       const transcriptData = transcript.map((item) => ({
         id: item.id,
@@ -571,13 +637,16 @@ export default function TranscriptPage({
         speaker: item.speaker,
         speaker_name: item.speaker_name,
       }));
-      
+
       const transcriptText = JSON.stringify(transcriptData);
       console.log("   transcriptText length:", transcriptText.length);
 
       if (existingTranscriptId) {
         // Update existing transcript
-        console.log("📝 Updating existing transcript ID:", existingTranscriptId);
+        console.log(
+          "📝 Updating existing transcript ID:",
+          existingTranscriptId
+        );
         const updateResult = await transcriptsApi.update(existingTranscriptId, {
           transcriptText: transcriptText,
           status: "Completed",
@@ -613,8 +682,10 @@ export default function TranscriptPage({
       console.error("❌ Failed to save transcript:", error);
       console.error("   Error details:", JSON.stringify(error, null, 2));
       swalConfig.error(
-        "Lỗi lưu transcript", 
-        error.message || error.response?.data?.message || "Không thể lưu vào Database. Kiểm tra Console để biết chi tiết."
+        "Lỗi lưu transcript",
+        error.message ||
+          error.response?.data?.message ||
+          "Không thể lưu vào Database. Kiểm tra Console để biết chi tiết."
       );
     } finally {
       setSaving(false);
@@ -627,14 +698,14 @@ export default function TranscriptPage({
 
     try {
       setSaving(true);
-      
+
       const transcriptData = transcript.map((item) => ({
         id: item.id,
         text: item.text,
         speaker: item.speaker,
         speaker_name: item.speaker_name,
       }));
-      
+
       const transcriptText = JSON.stringify(transcriptData);
 
       if (existingTranscriptId) {
@@ -676,13 +747,13 @@ export default function TranscriptPage({
       if (autoSaveTimerRef.current) {
         clearTimeout(autoSaveTimerRef.current);
       }
-      
+
       // Set new timer for auto-save after 3 seconds
       autoSaveTimerRef.current = setTimeout(() => {
         handleAutoSave(false);
       }, 3000);
     }
-    
+
     return () => {
       if (autoSaveTimerRef.current) {
         clearTimeout(autoSaveTimerRef.current);
@@ -720,9 +791,13 @@ export default function TranscriptPage({
               <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2 py-0.5 rounded">
                 {session.location}
               </span>
-              <span className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-green-500' : 'bg-gray-400'}`}></span>
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  wsConnected ? "bg-green-500" : "bg-gray-400"
+                }`}
+              ></span>
               <span className="text-xs text-gray-400">
-                {wsConnected ? 'Đã kết nối' : 'Chưa kết nối'}
+                {wsConnected ? "Đã kết nối" : "Chưa kết nối"}
               </span>
             </p>
           </div>
@@ -734,7 +809,9 @@ export default function TranscriptPage({
         <div className="bg-white rounded-lg shadow-sm border p-4 flex flex-col h-[500px]">
           <div className="flex justify-between items-center mb-4">
             <div className="flex items-center gap-2">
-              <h2 className="text-lg font-semibold text-gray-800">Transcript</h2>
+              <h2 className="text-lg font-semibold text-gray-800">
+                Transcript
+              </h2>
               {transcript.length > 0 && (
                 <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
                   {transcript.length} dòng
@@ -742,7 +819,9 @@ export default function TranscriptPage({
               )}
               {/* Auto-save status */}
               {saving ? (
-                <span className="text-xs text-gray-400 italic">Đang lưu...</span>
+                <span className="text-xs text-gray-400 italic">
+                  Đang lưu...
+                </span>
               ) : hasUnsavedChanges ? (
                 <span className="text-xs text-yellow-600">●</span>
               ) : lastSavedAt ? (
@@ -805,7 +884,9 @@ export default function TranscriptPage({
             !broadcastInterimText ? (
               <div className="text-gray-400 text-sm text-center py-8">
                 <p>Nhấn 🎤 để bắt đầu ghi âm</p>
-                <p className="text-xs mt-1">hoặc nhấn + để thêm nội dung thủ công</p>
+                <p className="text-xs mt-1">
+                  hoặc nhấn + để thêm nội dung thủ công
+                </p>
               </div>
             ) : (
               <>
@@ -878,15 +959,23 @@ export default function TranscriptPage({
                 {/* Broadcast interim - chữ chạy từ member khác */}
                 {broadcastInterimText && (
                   <div className="bg-green-50 rounded-lg px-3 py-2 border border-green-100 animate-pulse">
-                    <span className="text-xs font-medium text-green-600">đang nói...</span>
-                    <p className="text-gray-600 text-sm mt-0.5 italic">{broadcastInterimText}</p>
+                    <span className="text-xs font-medium text-green-600">
+                      đang nói...
+                    </span>
+                    <p className="text-gray-600 text-sm mt-0.5 italic">
+                      {broadcastInterimText}
+                    </p>
                   </div>
                 )}
                 {/* Self interim - chữ chạy của chính mình */}
                 {interimText && (
                   <div className="bg-purple-50 rounded-lg px-3 py-2 border border-purple-100 animate-pulse">
-                    <span className="text-xs font-medium text-purple-500">...</span>
-                    <p className="text-gray-600 text-sm mt-0.5 italic">{interimText}</p>
+                    <span className="text-xs font-medium text-purple-500">
+                      ...
+                    </span>
+                    <p className="text-gray-600 text-sm mt-0.5 italic">
+                      {interimText}
+                    </p>
                   </div>
                 )}
               </>
@@ -973,7 +1062,7 @@ export default function TranscriptPage({
         >
           Cancel
         </button>
-<button
+        <button
           onClick={handleSaveTranscript}
           disabled={saving || transcript.length === 0}
           className="px-4 py-2 text-white bg-purple-600 rounded-md hover:bg-purple-700 text-sm font-medium shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"

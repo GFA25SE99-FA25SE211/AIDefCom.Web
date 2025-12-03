@@ -4,8 +4,11 @@ import type { RubricDto } from '@/lib/models';
 export interface MajorRubricReadDto {
   id: number;
   majorId: number;
+  majorName?: string;
   rubricId: number;
-  rubric?: RubricDto;
+  rubricName?: string;
+  // Note: Backend returns RubricId and RubricName, not full Rubric object
+  // To get full Rubric info, call rubricsApi.getById(rubricId)
 }
 
 export const majorRubricsApi = {
@@ -21,4 +24,5 @@ export const majorRubricsApi = {
     return apiClient.get<MajorRubricReadDto[]>(`/api/major-rubrics/rubric/${rubricId}`);
   },
 };
+
 

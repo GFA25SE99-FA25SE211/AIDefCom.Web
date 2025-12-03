@@ -1,8 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect } from "react";
 
 export default function SecretaryReportDashboard() {
+  // Xóa session role khi vào trang danh sách (không phải detail)
+  useEffect(() => {
+    localStorage.removeItem("sessionRole");
+  }, []);
   const groups = [
     {
       group: "Group 1",
