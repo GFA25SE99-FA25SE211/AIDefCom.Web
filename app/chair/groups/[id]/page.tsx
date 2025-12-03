@@ -56,12 +56,13 @@ export default function GroupDetailsPage() {
   // WebSocket event handler (giống member)
   const handleSTTEvent = (msg: any) => {
     const eventType = msg.type || msg.event;
+    console.log("📨 [Chair] Received WS event:", eventType, msg);
 
-    if (eventType === "session_started") {
+    if (eventType === "session_started" || eventType === "broadcast_session_started") {
       // Thư ký đã bắt đầu phiên
       console.log("🎤 Session started by secretary - mic enabled");
       setSessionStarted(true);
-    } else if (eventType === "session_ended") {
+    } else if (eventType === "session_ended" || eventType === "broadcast_session_ended") {
       // Thư ký đã kết thúc phiên
       console.log("🛑 Session ended by secretary - mic disabled");
       setSessionStarted(false);
@@ -112,7 +113,7 @@ export default function GroupDetailsPage() {
       ) {
         return;
       }
-      const speakerName = msg.speaker || "Member";
+      const speakerName = msg.speaker_name || msg.speaker || "Thành viên";
       swalConfig.toast.info(`${speakerName} đang đặt câu hỏi...`);
     } else if (eventType === "broadcast_question_processing") {
       // Người khác kết thúc đặt câu hỏi, đang xử lý - dùng toast nhẹ
@@ -122,7 +123,7 @@ export default function GroupDetailsPage() {
       ) {
         return;
       }
-      const speakerName = msg.speaker || "Member";
+      const speakerName = msg.speaker_name || msg.speaker || "Thành viên";
       swalConfig.toast.info(`Đang xử lý câu hỏi từ ${speakerName}...`);
     } else if (eventType === "broadcast_question_result") {
       // Kết quả câu hỏi từ người khác
@@ -132,7 +133,7 @@ export default function GroupDetailsPage() {
       ) {
         return;
       }
-      const speakerName = msg.speaker || "Member";
+      const speakerName = msg.speaker_name || msg.speaker || "Thành viên";
       const questionText = msg.question_text || "";
 
       if (msg.is_duplicate) {

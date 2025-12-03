@@ -12,11 +12,13 @@ export interface TranscriptCreateDto {
   sessionId: number;
   transcriptText?: string;
   audioFilePath?: string;
+  status?: string;
 }
 
 export interface TranscriptUpdateDto {
   transcriptText?: string;
   audioFilePath?: string;
   isApproved?: boolean;
+  status?: string;
 }
 
