@@ -20,11 +20,22 @@ export const rubricsApi = {
     try {
       const majorRubricsRes = await majorRubricsApi.getByMajorId(majorId);
       const majorRubrics = majorRubricsRes.data || [];
-      // Extract rubrics from major-rubric relationships
-      const rubrics: RubricDto[] = majorRubrics
-        .map((mr) => mr.rubric)
-        .filter((r): r is RubricDto => r !== undefined);
-      return { data: rubrics };
+      
+      // Get full rubric details for each rubricId
+      const rubricPromises = majorRubrics.map(async (mr) => {
+        try {
+          const rubricRes = await rubricsApi.getById(mr.rubricId);
+          return rubricRes.data;
+        } catch (error) {
+          console.error(`Error fetching rubric ${mr.rubricId}:`, error);
+          return null;
+        }
+      });
+      
+      const rubrics = await Promise.all(rubricPromises);
+      const validRubrics: RubricDto[] = rubrics.filter((r): r is RubricDto => r !== null);
+      
+      return { data: validRubrics };
     } catch (error) {
       console.error('Error fetching rubrics by major:', error);
       return { data: [] };
