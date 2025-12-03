@@ -155,10 +155,19 @@ Please check:
 2. Is the API URL correct? (Current: ${this.baseUrl})
 3. Are CORS settings configured in the backend?`;
         
+        console.error('Network Error Details:', {
+          endpoint,
+          url,
+          baseUrl: this.baseUrl,
+          error: error.message,
+          stack: error instanceof Error ? error.stack : undefined
+        });
+        
         const networkError = new Error(errorMessage);
         (networkError as any).isNetworkError = true;
         (networkError as any).url = url;
         (networkError as any).baseUrl = this.baseUrl;
+        (networkError as any).originalError = error;
         throw networkError;
       }
       throw error;

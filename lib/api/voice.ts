@@ -1,4 +1,4 @@
-import { env } from "@/lib/config";
+import { getVoiceApiUrl } from "@/lib/config";
 
 export interface VoiceEnrollmentStatus {
   id: string;
@@ -22,10 +22,9 @@ export interface VoiceEnrollmentResponse {
   error?: string;
 }
 
-const BASE_URL = env.voiceApiUrl;
-
 export const voiceApi = {
   getStatus: async (userId: string): Promise<VoiceEnrollmentStatus> => {
+    const BASE_URL = await getVoiceApiUrl();
     const response = await fetch(
       `${BASE_URL}/voice/users/${userId}/enrollment-status`,
       {
@@ -55,6 +54,7 @@ export const voiceApi = {
     userId: string,
     audioBlob: Blob
   ): Promise<VoiceEnrollmentResponse> => {
+    const BASE_URL = await getVoiceApiUrl();
     const formData = new FormData();
     // Append blob with a filename so backend treats it as a file
     formData.append("audio_file", audioBlob, "recording.wav");
@@ -75,10 +75,10 @@ export const voiceApi = {
     }
 
     return data;
-    return data;
   },
 
   deleteProfile: async (userId: string): Promise<any> => {
+    const BASE_URL = await getVoiceApiUrl();
     const response = await fetch(`${BASE_URL}/voice/users/${userId}`, {
       method: "DELETE",
       headers: {

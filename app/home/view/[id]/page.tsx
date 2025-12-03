@@ -17,7 +17,6 @@ import type {
 } from "@/lib/models";
 import { scoresApi } from "@/lib/api/scores";
 import CreateTaskModal from "../../../chair/components/CreateTaskModal";
-import { swalConfig } from "@/lib/utils/sweetAlert";
 
 export default function GroupDetailsPage() {
   const params = useParams();
@@ -137,7 +136,7 @@ export default function GroupDetailsPage() {
               );
               setLecturers(onlyLecturers);
 
-              // Check if current user is in the council
+              // Check if current user is Chair in the council
               if (currentUid) {
                 const currentUserInSession = onlyLecturers.find(
                   (l: any) =>
@@ -145,61 +144,50 @@ export default function GroupDetailsPage() {
                     String(currentUid).toLowerCase()
                 );
 
-                if (currentUserInSession) {
+                // Only allow access if user is Chair (system role or council role)
+                let isUserChair = false;
+                if (isSystemChair) {
+                  isUserChair = true;
+                  setIsChair(true);
+                } else if (
+                  currentUserInSession &&
+                  currentUserInSession.role &&
+                  currentUserInSession.role.toLowerCase() === "chair"
+                ) {
+                  isUserChair = true;
+                  setIsChair(true);
+                }
+
+                if (isUserChair) {
                   setHasAccess(true);
-                  
-                  // Check if user is Chair (system role or council role)
-                  if (isSystemChair) {
-                    setIsChair(true);
-                  } else if (
-                    currentUserInSession.role &&
-                    currentUserInSession.role.toLowerCase() === "chair"
-                  ) {
-                    setIsChair(true);
-                  }
                 } else {
+                  // Not a chair, redirect silently
                   setHasAccess(false);
-                  await swalConfig.error(
-                    "Access Denied",
-                    "You do not have access to this group. You must be a member of the defense council."
-                  );
                   router.push("/home");
                   return;
                 }
               } else {
+                // No user ID, redirect silently
                 setHasAccess(false);
-                await swalConfig.error(
-                  "Authentication Error",
-                  "User information not found. Please login again."
-                );
                 router.push("/home");
                 return;
               }
             } else {
+              // No council members, redirect silently
               setHasAccess(false);
-              await swalConfig.error(
-                "Access Denied",
-                "No council members found for this session."
-              );
               router.push("/home");
               return;
             }
           } catch (lecErr) {
             console.error("Failed to fetch lecturers:", lecErr);
+            // Error fetching lecturers, redirect silently
             setHasAccess(false);
-            await swalConfig.error(
-              "Error",
-              "Failed to verify access. Please try again later."
-            );
             router.push("/home");
             return;
           }
         } else {
+          // No defense session, redirect silently
           setHasAccess(false);
-          await swalConfig.error(
-            "Not Found",
-            "No defense session found for this group."
-          );
           router.push("/home");
           return;
         }
