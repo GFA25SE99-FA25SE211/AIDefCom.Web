@@ -64,6 +64,8 @@ export default function TranscriptPage({
   // Auto-save timer
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  // Flag to track if Redis cache was loaded (to prevent further overwrites during session)
+  const transcriptLoadedRef = useRef<boolean>(false);
 
   // Initialize client-side only to avoid hydration mismatch
   useEffect(() => {
@@ -96,8 +98,10 @@ export default function TranscriptPage({
                   id: item.id || `loaded_${index}_${Date.now()}`,
                   isNew: false,
                 }));
+                // Load from DB - this is saved/finalized data
                 setTranscript(loadedTranscript);
-                console.log("✅ Loaded existing transcript:", loadedTranscript.length, "entries");
+                transcriptLoadedRef.current = true; // Mark as loaded to prevent Redis overwrite
+                console.log("📦 Loaded transcript from DB:", loadedTranscript.length, "entries");
               }
             } catch (parseError) {
               // If not JSON, treat as plain text with "Speaker: Text" format
@@ -122,8 +126,10 @@ export default function TranscriptPage({
                   isNew: false,
                 };
               });
+              // Load from DB - this is saved/finalized data
               setTranscript(loadedTranscript);
-              console.log("✅ Loaded existing transcript (plain text format):", loadedTranscript.length, "entries");
+              transcriptLoadedRef.current = true; // Mark as loaded to prevent Redis overwrite
+              console.log("📦 Loaded transcript (plain text) from DB:", loadedTranscript.length, "entries");
             }
           }
         }
@@ -157,7 +163,10 @@ export default function TranscriptPage({
     if (eventType === "cached_transcript") {
       console.log("📂 Received cached transcript from Redis:", msg);
       const cachedLines = msg.lines || [];
-      if (cachedLines.length > 0) {
+      
+      // Only use Redis cache if we don't already have data loaded from DB
+      // DB data = saved/finalized transcript, Redis = working draft
+      if (cachedLines.length > 0 && !transcriptLoadedRef.current) {
         // Convert cached lines to STTEvent format
         const loadedTranscript: STTEvent[] = cachedLines.map((line: any, index: number) => ({
           event: "recognized",
@@ -169,10 +178,14 @@ export default function TranscriptPage({
           isNew: false,
         }));
         
-        // Replace current transcript with cached version (Redis has latest)
         setTranscript(loadedTranscript);
-        console.log("✅ Loaded", loadedTranscript.length, "lines from Redis cache");
-        swalConfig.toast.success(`Đã khôi phục ${loadedTranscript.length} dòng transcript`);
+        transcriptLoadedRef.current = true;
+        console.log("✅ Loaded", loadedTranscript.length, "lines from Redis cache (no DB data)");
+        swalConfig.toast.success(`Đã khôi phục ${loadedTranscript.length} dòng transcript từ cache`);
+      } else if (cachedLines.length > 0) {
+        console.log("⏭️ Skipped Redis cache - already have DB data:", transcript.length, "entries");
+      } else {
+        console.log("📂 Redis cache is empty");
       }
       return;
     }
@@ -539,8 +552,17 @@ export default function TranscriptPage({
       return;
     }
 
+    if (transcript.length === 0) {
+      swalConfig.error("Lỗi", "Không có nội dung transcript để lưu");
+      return;
+    }
+
     try {
       setSaving(true);
+      console.log("📤 Starting save transcript to DB...");
+      console.log("   existingTranscriptId:", existingTranscriptId);
+      console.log("   session.id:", session.id);
+      console.log("   transcript.length:", transcript.length);
       
       // Prepare transcript data as JSON
       const transcriptData = transcript.map((item) => ({
@@ -551,27 +573,33 @@ export default function TranscriptPage({
       }));
       
       const transcriptText = JSON.stringify(transcriptData);
+      console.log("   transcriptText length:", transcriptText.length);
 
       if (existingTranscriptId) {
         // Update existing transcript
-        await transcriptsApi.update(existingTranscriptId, {
+        console.log("📝 Updating existing transcript ID:", existingTranscriptId);
+        const updateResult = await transcriptsApi.update(existingTranscriptId, {
           transcriptText: transcriptText,
           status: "Completed",
         });
+        console.log("✅ Update result:", updateResult);
       } else {
         // Create new transcript
+        console.log("📝 Creating new transcript for session:", session.id);
         const result = await transcriptsApi.create({
           sessionId: session.id,
           transcriptText: transcriptText,
           status: "Completed",
         });
+        console.log("✅ Create result:", result);
         if (result.data) {
           setExistingTranscriptId(result.data.id);
+          console.log("   New transcript ID:", result.data.id);
         }
       }
 
       setHasUnsavedChanges(false);
-      swalConfig.success("Thành công", "Đã lưu transcript!");
+      swalConfig.success("Thành công", "Đã lưu transcript vào Database!");
 
       // Broadcast session:end để member biết phiên đã kết thúc
       if (hasStartedSession) {
@@ -582,8 +610,12 @@ export default function TranscriptPage({
       // Kết thúc phiên và đóng WebSocket
       stopSession();
     } catch (error: any) {
-      console.error("Failed to save transcript:", error);
-      swalConfig.error("Lỗi", error.message || "Không thể lưu transcript");
+      console.error("❌ Failed to save transcript:", error);
+      console.error("   Error details:", JSON.stringify(error, null, 2));
+      swalConfig.error(
+        "Lỗi lưu transcript", 
+        error.message || error.response?.data?.message || "Không thể lưu vào Database. Kiểm tra Console để biết chi tiết."
+      );
     } finally {
       setSaving(false);
     }
