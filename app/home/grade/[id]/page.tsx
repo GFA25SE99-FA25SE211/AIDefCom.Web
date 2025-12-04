@@ -579,12 +579,7 @@ export default function ViewScorePage() {
         "Success",
         "Scores and notes saved successfully!"
       );
-      const finalSessionId = urlSessionId ? parseInt(urlSessionId) : sessionId;
-      if (finalSessionId) {
-        router.push(`/member/defense-sessions?sessionId=${finalSessionId}`);
-      } else {
-        router.push("/member/defense-sessions");
-      }
+      router.push("/home");
     } catch (error: any) {
       console.error("Error saving scores:", error);
       // Close loading dialog if it exists
@@ -596,12 +591,7 @@ export default function ViewScorePage() {
   };
 
   const handleCancel = () => {
-    const finalSessionId = urlSessionId ? parseInt(urlSessionId) : sessionId;
-    if (finalSessionId) {
-      router.push(`/member/defense-sessions?sessionId=${finalSessionId}`);
-    } else {
-      router.push("/member/defense-sessions");
-    }
+    router.push("/home");
   };
 
   return (
@@ -622,15 +612,9 @@ export default function ViewScorePage() {
 
             {/* Right section */}
             <div className="flex items-center gap-3 flex-wrap justify-end">
-              {/* Back to defense sessions list */}
+              {/* Back to home */}
               <Link
-                href={
-                  urlSessionId
-                    ? `/member/defense-sessions?sessionId=${urlSessionId}`
-                    : sessionId
-                    ? `/member/defense-sessions?sessionId=${sessionId}`
-                    : "/member/defense-sessions"
-                }
+                href="/home"
                 className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 text-gray-700 text-sm font-medium shadow-sm hover:bg-gray-100 transition"
               >
                 <ArrowLeft className="w-4 h-4" />
