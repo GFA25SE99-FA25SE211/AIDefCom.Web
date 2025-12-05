@@ -45,82 +45,7 @@ type NotesVisibility = {
 };
 
 // SỬA ĐỔI: Dùng type 'AllGroupsData' thay cho 'any'
-const allGroupsData: AllGroupsData = {
-  "1": {
-    name: "Group 1",
-    project: "Smart Learning Management System",
-    students: [
-      {
-        id: "SV001",
-        name: "Nguyen Van A",
-        role: "Team Leader",
-        scores: [8.5, 9.0, 7.5, 8.0, 8.5],
-        note: "Good leadership skills, but presentation needs work.",
-      },
-      {
-        id: "SV002",
-        name: "Tran Thi B",
-        role: "Designer",
-        scores: [9.0, 8.5, 8.0, 9.0, 8.5],
-        note: "Excellent design, clear presentation.",
-      },
-      {
-        id: "SV003",
-        name: "Le Van C",
-        role: "Developer",
-        scores: [8.0, 8.5, 9.0, 8.5, 7.5],
-        note: "Strong technical skills.",
-      },
-    ],
-  },
-  "5": {
-    name: "Group 5",
-    project: "Face Recognition System",
-    students: [
-      {
-        id: "SV010",
-        name: "Cao Van L",
-        role: "Developer",
-        scores: [9.0, 9.0, 8.5, 9.0, 8.0],
-        note: "",
-      },
-      {
-        id: "SV011",
-        name: "Ly Thi M",
-        role: "Developer",
-        scores: [8.5, 8.5, 8.5, 8.5, 8.5],
-        note: "",
-      },
-      {
-        id: "SV012",
-        name: "Phan Van N",
-        role: "Developer",
-        scores: [9.0, 8.0, 8.5, 9.0, 8.5],
-        note: "",
-      },
-    ],
-  },
-  "7": {
-    name: "Group 7",
-    project: "Hotel Booking System",
-    students: [
-      {
-        id: "SV015",
-        name: "An Van Z",
-        role: "Developer",
-        scores: [9.0, 9.0, 9.0, 9.0, 9.0],
-        note: "",
-      },
-      {
-        id: "SV016",
-        name: "Binh Thi AA",
-        role: "Developer",
-        scores: [8.5, 9.0, 8.0, 8.5, 9.0],
-        note: "",
-      },
-    ],
-  },
-};
+const allGroupsData: AllGroupsData = {};
 const criteria = [
   "Innovation",
   "Feasibility",
@@ -128,6 +53,30 @@ const criteria = [
   "Technical",
   "Q&A",
 ];
+
+// Chuẩn hóa dữ liệu sinh viên fallback (tránh thiếu field)
+const buildFallbackStudents = (students: any[], rubricCount: number): StudentScore[] =>
+  students.map((s, index) => {
+    const scores = Array.from({ length: rubricCount }, (_, i) => s.scores?.[i] ?? 0);
+    const criterionComments = Array.from(
+      { length: rubricCount },
+      (_, i) => s.criterionComments?.[i] ?? ""
+    );
+    const existingScoreIds = Array.from(
+      { length: rubricCount },
+      (_, i) => s.existingScoreIds?.[i] ?? 0
+    );
+
+    return {
+      id: s.id ?? `student-${index + 1}`,
+      name: s.name ?? s.fullName ?? "Unknown",
+      role: s.role ?? "Member",
+      scores,
+      criterionComments,
+      note: s.note ?? "",
+      existingScoreIds,
+    };
+  });
 
 export default function ViewScorePage() {
   const router = useRouter();
@@ -156,6 +105,9 @@ export default function ViewScorePage() {
 
   useEffect(() => {
     const fetchGroupData = async () => {
+      // Rubrics list cần dùng cho cả try/catch
+      let rubricsList: any[] = [];
+
       try {
         setLoading(true);
         const [groupRes, studentsRes, sessionsRes] =
@@ -221,7 +173,6 @@ export default function ViewScorePage() {
         }
 
         // Fetch rubrics: ưu tiên từ project tasks (theo session và user), sau đó theo majorId
-        let rubricsList: any[] = [];
         const storedUser = localStorage.getItem("user");
         let currentUserId = "";
         
@@ -435,14 +386,26 @@ export default function ViewScorePage() {
           setStudentScores(groupData.students);
         } else {
           const defaultData = allGroupsData[groupId] || allGroupsData["1"];
-          setGroupData(defaultData);
-          setStudentScores(defaultData.students);
+          const rubricCountFallback =
+            rubricsList.length > 0 ? rubricsList.length : criteria.length;
+          const normalizedStudents = buildFallbackStudents(
+            defaultData.students || [],
+            rubricCountFallback
+          );
+          setGroupData({ ...defaultData, students: normalizedStudents });
+          setStudentScores(normalizedStudents);
         }
       } catch (error) {
         console.error("Error fetching group data:", error);
         const defaultData = allGroupsData[groupId] || allGroupsData["1"];
-        setGroupData(defaultData);
-        setStudentScores(defaultData.students);
+        const rubricCountFallback =
+          rubricsList.length > 0 ? rubricsList.length : criteria.length;
+        const normalizedStudents = buildFallbackStudents(
+          defaultData.students || [],
+          rubricCountFallback
+        );
+        setGroupData({ ...defaultData, students: normalizedStudents });
+        setStudentScores(normalizedStudents);
       } finally {
         setLoading(false);
       }
