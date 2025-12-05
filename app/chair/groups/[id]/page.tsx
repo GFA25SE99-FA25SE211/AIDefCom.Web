@@ -58,11 +58,17 @@ export default function GroupDetailsPage() {
     const eventType = msg.type || msg.event;
     console.log("📨 [Chair] Received WS event:", eventType, msg);
 
-    if (eventType === "session_started" || eventType === "broadcast_session_started") {
+    if (
+      eventType === "session_started" ||
+      eventType === "broadcast_session_started"
+    ) {
       // Thư ký đã bắt đầu phiên
       console.log("🎤 Session started by secretary - mic enabled");
       setSessionStarted(true);
-    } else if (eventType === "session_ended" || eventType === "broadcast_session_ended") {
+    } else if (
+      eventType === "session_ended" ||
+      eventType === "broadcast_session_ended"
+    ) {
       // Thư ký đã kết thúc phiên
       console.log("🛑 Session ended by secretary - mic disabled");
       setSessionStarted(false);
@@ -225,6 +231,13 @@ export default function GroupDetailsPage() {
     }
   };
 
+  // Xóa session role khi rời khỏi trang
+  useEffect(() => {
+    return () => {
+      localStorage.removeItem("sessionRole");
+    };
+  }, []);
+
   useEffect(() => {
     if (!id) return;
 
@@ -313,19 +326,22 @@ export default function GroupDetailsPage() {
               setLecturers(onlyLecturers);
 
               // Check if current user is Chair (if not already set by system role)
-              if (currentUid && !isSystemChair) {
+              if (currentUid) {
                 const currentUserInSession = onlyLecturers.find(
                   (l: any) =>
                     String(l.id).toLowerCase() ===
                     String(currentUid).toLowerCase()
                 );
 
-                if (
-                  currentUserInSession &&
-                  currentUserInSession.role &&
-                  currentUserInSession.role.toLowerCase() === "chair"
-                ) {
-                  setIsChair(true);
+                // Lưu session role vào localStorage để sidebar hiển thị
+                if (currentUserInSession && currentUserInSession.role) {
+                  const sessionRoleValue =
+                    currentUserInSession.role.toLowerCase();
+                  localStorage.setItem("sessionRole", sessionRoleValue);
+
+                  if (!isSystemChair && sessionRoleValue === "chair") {
+                    setIsChair(true);
+                  }
                 }
               }
             }
@@ -402,434 +418,438 @@ export default function GroupDetailsPage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto">
-      <CreateTaskModal
-        open={openTaskModal}
-        onClose={() => setOpenTaskModal(false)}
-        lecturers={lecturers}
-        rubrics={rubrics}
-        currentUserId={currentUserId}
-        sessionId={defenseSession?.id}
-      />
+    <div className="min-h-screen bg-gray-50 p-6">
+      <div className="max-w-6xl mx-auto">
+        <CreateTaskModal
+          open={openTaskModal}
+          onClose={() => setOpenTaskModal(false)}
+          lecturers={lecturers}
+          rubrics={rubrics}
+          currentUserId={currentUserId}
+          sessionId={defenseSession?.id}
+        />
 
-      {/* Header with Back Button */}
-      <div className="flex items-center gap-4 mb-8">
-        <button
-          onClick={() => router.back()}
-          className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-            strokeWidth={2}
-            stroke="currentColor"
-            className="w-5 h-5 text-gray-600"
+        {/* Header with Back Button */}
+        <div className="flex items-center gap-4 mb-8">
+          <button
+            onClick={() => router.back()}
+            className="p-2 hover:bg-white rounded-lg transition-colors shadow-sm border border-gray-200"
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18"
-            />
-          </svg>
-        </button>
-        <div>
-          <h1 className="text-2xl font-bold text-gray-800">
-            {group.groupName || group.projectCode || "Group Details"}
-          </h1>
-          <p className="text-gray-500 text-sm">
-            {group.semesterName} · {group.majorName}
-          </p>
-        </div>
-
-        {/* Mic Controls - giống member */}
-        {defenseSession && (
-          <div className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg border ml-4">
-            {!isRecording ? (
-              <button
-                onClick={handleToggleRecording}
-                disabled={!defenseSession?.id || !sessionStarted}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-white text-sm font-medium shadow-sm transition ${
-                  !defenseSession?.id || !sessionStarted
-                    ? "bg-gray-400 cursor-not-allowed opacity-50"
-                    : "bg-purple-600 hover:bg-purple-700"
-                }`}
-                title={
-                  !sessionStarted
-                    ? "Chờ thư ký bắt đầu phiên"
-                    : "Bắt đầu ghi âm"
-                }
-              >
-                <Mic className="w-4 h-4" />
-                <span>Start Mic</span>
-              </button>
-            ) : (
-              <>
-                {!isAsking && (
-                  <button
-                    onClick={handleToggleRecording}
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-500 text-white hover:bg-red-600 text-sm font-medium shadow-sm transition"
-                  >
-                    <MicOff className="w-4 h-4" />
-                    <span>Stop Mic</span>
-                  </button>
-                )}
-
-                <button
-                  onClick={handleToggleQuestion}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium shadow-sm transition ${
-                    isAsking
-                      ? "bg-orange-500 text-white hover:bg-orange-600"
-                      : "bg-indigo-500 text-white hover:bg-indigo-600"
-                  }`}
-                >
-                  {isAsking ? (
-                    <>
-                      <StopCircle className="w-4 h-4" />
-                      <span>Kết thúc câu hỏi</span>
-                    </>
-                  ) : (
-                    <>
-                      <MessageSquare className="w-4 h-4" />
-                      <span>Đặt câu hỏi</span>
-                    </>
-                  )}
-                </button>
-              </>
-            )}
-
-            {/* Connection status */}
-            <div
-              className={`w-2 h-2 rounded-full ${
-                wsConnected ? "bg-green-500" : "bg-gray-400"
-              }`}
-              title={wsConnected ? "Đã kết nối" : "Chưa kết nối"}
-            />
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              strokeWidth={2}
+              stroke="currentColor"
+              className="w-5 h-5 text-gray-600"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18"
+              />
+            </svg>
+          </button>
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">
+              {group.groupName || group.projectCode || "Group Details"}
+            </h1>
+            <p className="text-gray-600">
+              {group.semesterName} · {group.majorName}
+            </p>
           </div>
-        )}
 
-        <div className="ml-auto">
-          <span
-            className={`px-3 py-1 rounded-full text-sm font-medium ${
-              group.status === "Active"
-                ? "bg-green-100 text-green-700"
-                : "bg-yellow-100 text-yellow-700"
-            }`}
-          >
-            {group.status}
-          </span>
+          {/* Mic Controls - giống member */}
+          {defenseSession && (
+            <div className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg border ml-4">
+              {!isRecording ? (
+                <button
+                  onClick={handleToggleRecording}
+                  disabled={!defenseSession?.id || !sessionStarted}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-white text-sm font-medium shadow-sm transition ${
+                    !defenseSession?.id || !sessionStarted
+                      ? "bg-gray-400 cursor-not-allowed opacity-50"
+                      : "bg-purple-600 hover:bg-purple-700"
+                  }`}
+                  title={
+                    !sessionStarted
+                      ? "Chờ thư ký bắt đầu phiên"
+                      : "Bắt đầu ghi âm"
+                  }
+                >
+                  <Mic className="w-4 h-4" />
+                  <span>Start Mic</span>
+                </button>
+              ) : (
+                <>
+                  {!isAsking && (
+                    <button
+                      onClick={handleToggleRecording}
+                      className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-500 text-white hover:bg-red-600 text-sm font-medium shadow-sm transition"
+                    >
+                      <MicOff className="w-4 h-4" />
+                      <span>Stop Mic</span>
+                    </button>
+                  )}
+
+                  <button
+                    onClick={handleToggleQuestion}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium shadow-sm transition ${
+                      isAsking
+                        ? "bg-orange-500 text-white hover:bg-orange-600"
+                        : "bg-indigo-500 text-white hover:bg-indigo-600"
+                    }`}
+                  >
+                    {isAsking ? (
+                      <>
+                        <StopCircle className="w-4 h-4" />
+                        <span>Kết thúc câu hỏi</span>
+                      </>
+                    ) : (
+                      <>
+                        <MessageSquare className="w-4 h-4" />
+                        <span>Đặt câu hỏi</span>
+                      </>
+                    )}
+                  </button>
+                </>
+              )}
+
+              {/* Connection status */}
+              <div
+                className={`w-2 h-2 rounded-full ${
+                  wsConnected ? "bg-green-500" : "bg-gray-400"
+                }`}
+                title={wsConnected ? "Đã kết nối" : "Chưa kết nối"}
+              />
+            </div>
+          )}
+
+          <div className="ml-auto">
+            <span
+              className={`px-3 py-1 rounded-full text-sm font-medium ${
+                group.status === "Active"
+                  ? "bg-green-100 text-green-700"
+                  : "bg-yellow-100 text-yellow-700"
+              }`}
+            >
+              {group.status}
+            </span>
+          </div>
         </div>
-      </div>
 
-      {/* Content Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Main Info */}
-        <div className="md:col-span-2 space-y-6">
-          {/* Project Info Card */}
-          <div className="card-base p-6">
-            <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                strokeWidth={1.5}
-                stroke="currentColor"
-                className="w-5 h-5 text-purple-600"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"
-                />
-              </svg>
-              Project Information
-            </h2>
-            <div className="space-y-4">
-              <div>
-                <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Project Code
-                </label>
-                <p className="text-gray-900 font-medium">
-                  {group.projectCode || "N/A"}
-                </p>
+        {/* Content Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Main Info */}
+          <div className="md:col-span-2 space-y-6">
+            {/* Project Info Card */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              <div className="bg-gradient-to-r from-purple-600 to-purple-700 px-6 py-4">
+                <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="currentColor"
+                    viewBox="0 0 24 24"
+                    className="w-5 h-5"
+                  >
+                    <path d="M11.25 4.533A9.707 9.707 0 006 3a9.735 9.735 0 00-3.25.555.75.75 0 00-.5.707v14.25a.75.75 0 001 .707A8.237 8.237 0 016 18.75c1.995 0 3.823.707 5.25 1.886V4.533zM12.75 20.636A8.214 8.214 0 0118 18.75c.966 0 1.89.166 2.75.47a.75.75 0 001-.708V4.262a.75.75 0 00-.5-.707A9.735 9.735 0 0018 3a9.707 9.707 0 00-5.25 1.533v16.103z" />
+                  </svg>
+                  Project Information
+                </h2>
               </div>
-              <div>
-                <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  English Title
-                </label>
-                <p className="text-gray-900 font-medium">
-                  {group.topicTitle_EN || "N/A"}
-                </p>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Vietnamese Title
-                </label>
-                <p className="text-gray-900 font-medium">
-                  {group.topicTitle_VN || "N/A"}
-                </p>
+              <div className="p-6">
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Project Code
+                    </label>
+                    <p className="text-gray-900 font-medium">
+                      {group.projectCode || "N/A"}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      English Title
+                    </label>
+                    <p className="text-gray-900 font-medium">
+                      {group.topicTitle_EN || "N/A"}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Vietnamese Title
+                    </label>
+                    <p className="text-gray-900 font-medium">
+                      {group.topicTitle_VN || "N/A"}
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Members Card */}
-          <div className="card-base p-6">
-            <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                strokeWidth={1.5}
-                stroke="currentColor"
-                className="w-5 h-5 text-blue-600"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z"
-                />
-              </svg>
-              Group Students
-            </h2>
-            {students.length > 0 ? (
-              <div className="space-y-4">
-                {students.map((student) => (
-                  <div
-                    key={student.id}
-                    className="flex items-center gap-4 p-3 rounded-lg bg-gray-50 border border-gray-100"
-                  >
-                    <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold">
-                      {student.userName
-                        ? student.userName.charAt(0).toUpperCase()
-                        : "S"}
-                    </div>
-                    <div>
-                      <p className="font-medium text-gray-900">
-                        {student.userName || "Unknown Name"}
-                      </p>
-                      <p className="text-sm text-gray-500">{student.email}</p>
-                    </div>
-                    {student.studentCode && (
-                      <div className="ml-auto">
-                        <span className="badge badge-info text-xs">
-                          {student.studentCode}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-gray-500 text-sm italic">
-                No members found in this group.
-              </p>
-            )}
-          </div>
-
-          {/* Individual Scores Card */}
-          <div className="card-base p-6">
-            <h2 className="text-lg font-semibold text-gray-800 mb-6">
-              Individual Scores from Committee Members
-            </h2>
-
-            {/* Student Tabs */}
-            {students.length > 0 ? (
-              <>
-                <div className="flex flex-wrap gap-2 mb-6 border-b border-gray-100 pb-1">
+            {/* Members Card */}
+            <div className="card-base p-6">
+              <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={1.5}
+                  stroke="currentColor"
+                  className="w-5 h-5 text-blue-600"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z"
+                  />
+                </svg>
+                Group Students
+              </h2>
+              {students.length > 0 ? (
+                <div className="space-y-4">
                   {students.map((student) => (
-                    <button
+                    <div
                       key={student.id}
-                      onClick={() => setSelectedStudentId(student.id)}
-                      className={`px-6 py-2 rounded-t-lg text-sm font-medium transition-colors relative top-[1px] ${
-                        selectedStudentId === student.id
-                          ? "bg-white text-blue-600 border border-gray-200 border-b-white shadow-sm"
-                          : "bg-gray-50 text-gray-500 hover:text-gray-700 hover:bg-gray-100"
-                      }`}
+                      className="flex items-center gap-4 p-3 rounded-lg bg-gray-50 border border-gray-100"
                     >
-                      {student.userName || student.email}
-                    </button>
+                      <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold">
+                        {student.userName
+                          ? student.userName.charAt(0).toUpperCase()
+                          : "S"}
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-900">
+                          {student.userName || "Unknown Name"}
+                        </p>
+                        <p className="text-sm text-gray-500">{student.email}</p>
+                      </div>
+                      {student.studentCode && (
+                        <div className="ml-auto">
+                          <span className="badge badge-info text-xs">
+                            {student.studentCode}
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   ))}
                 </div>
-
-                {/* Scores Table */}
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm text-left">
-                    <thead className="text-xs text-gray-500 uppercase bg-gray-50 border-b border-gray-100">
-                      <tr>
-                        <th className="px-4 py-3 font-medium">Criteria</th>
-                        <th className="px-4 py-3 font-medium text-center">
-                          Score
-                        </th>
-                        <th className="px-4 py-3 font-medium text-right">
-                          Evaluator
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {studentScores.length > 0 ? (
-                        studentScores.map((score) => (
-                          <tr key={score.id} className="hover:bg-gray-50">
-                            <td className="px-4 py-3 font-medium text-gray-900">
-                              {score.rubricName || "Unknown Criteria"}
-                            </td>
-                            <td className="px-4 py-3 text-center font-semibold text-gray-900">
-                              {score.value}
-                            </td>
-                            <td className="px-4 py-3 text-right text-gray-600">
-                              {score.evaluatorName || "Unknown Evaluator"}
-                            </td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td
-                            colSpan={3}
-                            className="px-4 py-8 text-center text-gray-500 italic"
-                          >
-                            No scores available for this student.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </>
-            ) : (
-              <p className="text-sm text-gray-500 italic">
-                No students found in this group.
-              </p>
-            )}
-          </div>
-
-          {/* Member Notes Card */}
-          <div className="card-base p-6">
-            <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                strokeWidth={1.5}
-                stroke="currentColor"
-                className="w-5 h-5 text-orange-500"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"
-                />
-              </svg>
-              Committee Member Note
-            </h2>
-            {memberNotes.length > 0 ? (
-              <div className="space-y-3">
-                {memberNotes.map((note) => (
-                  <div
-                    key={note.id}
-                    className="p-4 bg-gray-50 rounded-lg border border-gray-100"
-                  >
-                    <p className="text-sm font-semibold text-blue-600 mb-1">
-                      {note.userName || "Unknown User"}
-                    </p>
-                    <p className="text-sm text-gray-600">{note.noteContent}</p>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-gray-500 italic">
-                No notes found for this group.
-              </p>
-            )}
-          </div>
-        </div>
-
-        {/* Sidebar Info */}
-        <div className="space-y-6">
-          {/* Defense Council Card */}
-          <div className="card-base p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">
-                Defense Council
-              </h2>
-              {isChair && (
-                <button
-                  onClick={() => setOpenTaskModal(true)}
-                  className="btn-gradient"
-                >
-                  + Create Task
-                </button>
+              ) : (
+                <p className="text-gray-500 text-sm italic">
+                  No members found in this group.
+                </p>
               )}
             </div>
 
-            {defenseSession ? (
-              <div className="space-y-4">
-                <div className="p-3 bg-purple-50 rounded-lg border border-purple-100">
-                  <p className="text-xs text-purple-600 font-medium mb-1">
-                    Session Info
-                  </p>
-                  <div className="flex items-center gap-2 text-sm text-gray-700">
-                    <span>
-                      📅{" "}
-                      {new Date(
-                        defenseSession.defenseDate
-                      ).toLocaleDateString()}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm text-gray-700 mt-1">
-                    <span>
-                      ⏰ {defenseSession.startTime} - {defenseSession.endTime}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm text-gray-700 mt-1">
-                    <span>📍 {defenseSession.location}</span>
-                  </div>
-                </div>
+            {/* Individual Scores Card */}
+            <div className="card-base p-6">
+              <h2 className="text-lg font-semibold text-gray-800 mb-6">
+                Individual Scores from Committee Members
+              </h2>
 
-                <div className="h-px bg-gray-100 my-2"></div>
-
-                <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">
-                  Council Members
-                </p>
-                {lecturers.length > 0 ? (
-                  <div className="space-y-3">
-                    {lecturers.map((lecturer) => (
-                      <div
-                        key={lecturer.id}
-                        className="flex items-center gap-3"
+              {/* Student Tabs */}
+              {students.length > 0 ? (
+                <>
+                  <div className="flex flex-wrap gap-2 mb-6 border-b border-gray-100 pb-1">
+                    {students.map((student) => (
+                      <button
+                        key={student.id}
+                        onClick={() => setSelectedStudentId(student.id)}
+                        className={`px-6 py-2 rounded-t-lg text-sm font-medium transition-colors relative top-[1px] ${
+                          selectedStudentId === student.id
+                            ? "bg-white text-blue-600 border border-gray-200 border-b-white shadow-sm"
+                            : "bg-gray-50 text-gray-500 hover:text-gray-700 hover:bg-gray-100"
+                        }`}
                       >
-                        <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 text-xs font-bold">
-                          {lecturer.fullName
-                            ? lecturer.fullName.charAt(0).toUpperCase()
-                            : "L"}
-                        </div>
-                        <div className="overflow-hidden">
-                          <p className="text-sm font-medium text-gray-900 truncate">
-                            {lecturer.fullName ||
-                              lecturer.userName ||
-                              "Unknown Lecturer"}
-                            {lecturer.role && (
-                              <span className="text-gray-500 font-normal ml-1">
-                                ({lecturer.role})
-                              </span>
-                            )}
-                          </p>
-                          <p className="text-xs text-gray-500 truncate">
-                            {lecturer.email}
-                          </p>
-                        </div>
-                      </div>
+                        {student.userName || student.email}
+                      </button>
                     ))}
+                  </div>
+
+                  {/* Scores Table */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left">
+                      <thead className="text-xs text-gray-500 uppercase bg-gray-50 border-b border-gray-100">
+                        <tr>
+                          <th className="px-4 py-3 font-medium">Criteria</th>
+                          <th className="px-4 py-3 font-medium text-center">
+                            Score
+                          </th>
+                          <th className="px-4 py-3 font-medium text-right">
+                            Evaluator
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {studentScores.length > 0 ? (
+                          studentScores.map((score) => (
+                            <tr key={score.id} className="hover:bg-gray-50">
+                              <td className="px-4 py-3 font-medium text-gray-900">
+                                {score.rubricName || "Unknown Criteria"}
+                              </td>
+                              <td className="px-4 py-3 text-center font-semibold text-gray-900">
+                                {score.value}
+                              </td>
+                              <td className="px-4 py-3 text-right text-gray-600">
+                                {score.evaluatorName || "Unknown Evaluator"}
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td
+                              colSpan={3}
+                              className="px-4 py-8 text-center text-gray-500 italic"
+                            >
+                              No scores available for this student.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm text-gray-500 italic">
+                  No students found in this group.
+                </p>
+              )}
+            </div>
+
+            {/* Member Notes Card */}
+            <div className="card-base p-6">
+              <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={1.5}
+                  stroke="currentColor"
+                  className="w-5 h-5 text-orange-500"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"
+                  />
+                </svg>
+                Committee Member Note
+              </h2>
+              {memberNotes.length > 0 ? (
+                <div className="space-y-3">
+                  {memberNotes.map((note) => (
+                    <div
+                      key={note.id}
+                      className="p-4 bg-gray-50 rounded-lg border border-gray-100"
+                    >
+                      <p className="text-sm font-semibold text-blue-600 mb-1">
+                        {note.userName || "Unknown User"}
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        {note.noteContent}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500 italic">
+                  No notes found for this group.
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Sidebar Info */}
+          <div className="space-y-6">
+            {/* Defense Council Card */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4 flex justify-between items-center">
+                <h2 className="text-lg font-semibold text-white">
+                  Defense Council
+                </h2>
+                {isChair && (
+                  <button
+                    onClick={() => setOpenTaskModal(true)}
+                    className="px-4 py-2 bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-lg transition-colors text-sm font-medium text-white"
+                  >
+                    + Create Task
+                  </button>
+                )}
+              </div>
+              <div className="p-6">
+                {defenseSession ? (
+                  <div className="space-y-4">
+                    <div className="p-3 bg-purple-50 rounded-lg border border-purple-100">
+                      <p className="text-xs text-purple-600 font-medium mb-1">
+                        Session Info
+                      </p>
+                      <div className="flex items-center gap-2 text-sm text-gray-700">
+                        <span>
+                          📅{" "}
+                          {new Date(
+                            defenseSession.defenseDate
+                          ).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-gray-700 mt-1">
+                        <span>
+                          ⏰ {defenseSession.startTime} -{" "}
+                          {defenseSession.endTime}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-gray-700 mt-1">
+                        <span>📍 {defenseSession.location}</span>
+                      </div>
+                    </div>
+
+                    <div className="h-px bg-gray-100 my-2"></div>
+
+                    <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">
+                      Council Members
+                    </p>
+                    {lecturers.length > 0 ? (
+                      <div className="space-y-3">
+                        {lecturers.map((lecturer) => (
+                          <div
+                            key={lecturer.id}
+                            className="flex items-center gap-3"
+                          >
+                            <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 text-xs font-bold">
+                              {lecturer.fullName
+                                ? lecturer.fullName.charAt(0).toUpperCase()
+                                : "L"}
+                            </div>
+                            <div className="overflow-hidden">
+                              <p className="text-sm font-medium text-gray-900 truncate">
+                                {lecturer.fullName ||
+                                  lecturer.userName ||
+                                  "Unknown Lecturer"}
+                                {lecturer.role && (
+                                  <span className="text-gray-500 font-normal ml-1">
+                                    ({lecturer.role})
+                                  </span>
+                                )}
+                              </p>
+                              <p className="text-xs text-gray-500 truncate">
+                                {lecturer.email}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-500 italic">
+                        No lecturers assigned yet.
+                      </p>
+                    )}
                   </div>
                 ) : (
                   <p className="text-sm text-gray-500 italic">
-                    No lecturers assigned yet.
+                    No defense session scheduled for this group.
                   </p>
                 )}
               </div>
-            ) : (
-              <p className="text-sm text-gray-500 italic">
-                No defense session scheduled for this group.
-              </p>
-            )}
+            </div>
           </div>
 
           {/* Status Card */}

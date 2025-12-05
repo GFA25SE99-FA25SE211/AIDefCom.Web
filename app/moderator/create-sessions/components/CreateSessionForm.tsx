@@ -75,6 +75,7 @@ const CreateSessionForm: React.FC<CreateSessionFormProps> = ({
   const [endTime, setEndTime] = useState("");
   const [location, setLocation] = useState("");
   const [status, setStatus] = useState("Scheduled");
+  const [locationError, setLocationError] = useState<string | null>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -90,6 +91,13 @@ const CreateSessionForm: React.FC<CreateSessionFormProps> = ({
       return;
     }
 
+    // Backend validation: Location must be between 5 and 500 characters
+    const trimmedLocation = location.trim();
+    if (trimmedLocation.length < 5 || trimmedLocation.length > 500) {
+      setLocationError("Location must be between 5 and 500 characters.");
+      return;
+    }
+
     // Validate end time is after start time
     if (startTime && endTime && startTime >= endTime) {
       alert("End time must be after start time");
@@ -102,7 +110,7 @@ const CreateSessionForm: React.FC<CreateSessionFormProps> = ({
       defenseDate,
       startTime,
       endTime,
-      location,
+      location: trimmedLocation,
       status: status,
     };
     onSubmit(formData);
@@ -294,14 +302,32 @@ const CreateSessionForm: React.FC<CreateSessionFormProps> = ({
                 type="text"
                 placeholder="e.g. Room A-301, Building A"
                 value={location}
-                onChange={(e) => setLocation(e.target.value)}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setLocation(value);
+                  const trimmed = value.trim();
+                  if (trimmed.length > 0 && trimmed.length < 5) {
+                    setLocationError("Location must be at least 5 characters.");
+                  } else if (trimmed.length > 500) {
+                    setLocationError("Location must be at most 500 characters.");
+                  } else {
+                    setLocationError(null);
+                  }
+                }}
                 required
+                minLength={5}
+                maxLength={500}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
               />
               <span className="absolute right-3 top-2.5 text-gray-500 pointer-events-none">
                 <MapPin className="w-4 h-4" />
               </span>
             </div>
+            {locationError && (
+              <p className="text-xs mt-1 text-red-500 font-medium">
+                {locationError}
+              </p>
+            )}
           </div>
 
           {/* Status */}

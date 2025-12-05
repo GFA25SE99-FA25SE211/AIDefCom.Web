@@ -15,8 +15,10 @@ import { groupsApi } from "@/lib/api/groups";
 import { studentsApi } from "@/lib/api/students";
 import { memberNotesApi } from "@/lib/api/member-notes";
 import { rubricsApi } from "@/lib/api/rubrics";
+import { majorRubricsApi } from "@/lib/api/major-rubrics";
 import { scoresApi, type ScoreReadDto } from "@/lib/api/scores";
 import { defenseSessionsApi } from "@/lib/api/defense-sessions";
+import { projectTasksApi } from "@/lib/api/project-tasks";
 import { swalConfig, closeSwal } from "@/lib/utils/sweetAlert";
 import { useAudioRecorder } from "@/lib/hooks/useAudioRecorder";
 import { authUtils } from "@/lib/utils/auth";
@@ -373,22 +375,15 @@ export default function GradeGroupPage() {
         const students = studentsRes.data || [];
         const sessions = sessionsRes.data || [];
 
-        // Fetch rubrics by majorId
-        if (group?.majorId) {
-          try {
-            const rubricsRes = await rubricsApi.getByMajorId(group.majorId);
-            setRubrics(rubricsRes.data || []);
-          } catch (error) {
-            console.error("Error fetching rubrics by major:", error);
-            setRubrics([]);
-          }
-        } else {
-          console.error("No majorId found for group, cannot fetch rubrics");
-          setRubrics([]);
-        }
-
-        // Find session for this group
-        const groupSession = sessions.find((s: any) => s.groupId === groupId);
+        // Find session for this group (ưu tiên sessionId trên URL nếu có)
+        const urlSessionIdNumber = urlSessionId
+          ? parseInt(urlSessionId)
+          : null;
+        const groupSession = urlSessionIdNumber
+          ? sessions.find(
+              (s: any) => s.groupId === groupId && s.id === urlSessionIdNumber
+            ) || sessions.find((s: any) => s.groupId === groupId)
+          : sessions.find((s: any) => s.groupId === groupId);
         if (groupSession) {
           setSessionId(groupSession.id);
           if (
@@ -414,6 +409,143 @@ export default function GradeGroupPage() {
         }
 
         setCurrentUserId(userId);
+
+        // Fetch rubrics: ưu tiên từ project tasks (theo session và user), sau đó theo majorId
+        let rubricsList: any[] = [];
+
+        // Ưu tiên 1: Lấy rubrics từ project tasks được assign cho user trong session này
+        if (groupSession && userId) {
+          try {
+            console.log("🔍 Attempting to load rubrics from project tasks:", {
+              userId: userId,
+              sessionId: groupSession.id
+            });
+            
+            // Lấy project tasks để có rubricId
+            const tasksRes = await projectTasksApi.getByAssigneeAndSession(
+              userId,
+              groupSession.id
+            );
+            
+            console.log("📋 Project tasks response:", {
+              hasData: !!tasksRes.data,
+              dataLength: Array.isArray(tasksRes.data) ? tasksRes.data.length : 0,
+              tasks: tasksRes.data
+            });
+            
+            if (tasksRes.data && Array.isArray(tasksRes.data) && tasksRes.data.length > 0) {
+              // Extract unique rubricIds từ tasks
+              const rubricIds = [...new Set(
+                tasksRes.data
+                  .map((task: any) => task.rubricId)
+                  .filter((id: any) => id !== null && id !== undefined)
+              )];
+              
+              console.log("📝 Extracted rubricIds from tasks:", rubricIds);
+              
+              if (rubricIds.length > 0) {
+                // Lấy full rubric info từ các rubricIds
+                const rubricPromises = rubricIds.map((rubricId: number) =>
+                  rubricsApi.getById(rubricId).catch((err) => {
+                    console.error(`Error fetching rubric ${rubricId}:`, err);
+                    return { data: null };
+                  })
+                );
+                const rubricResults = await Promise.all(rubricPromises);
+                
+                // Filter và map rubrics
+                rubricsList = rubricResults
+                  .map((res: any) => res.data)
+                  .filter((r: any) => r !== null && r !== undefined);
+                
+                // Sort rubrics theo thứ tự trong tasks để giữ đúng thứ tự
+                const rubricOrderMap = new Map(rubricIds.map((id, idx) => [id, idx]));
+                rubricsList.sort((a, b) => {
+                  const orderA = rubricOrderMap.get(a.id) ?? 999;
+                  const orderB = rubricOrderMap.get(b.id) ?? 999;
+                  return orderA - orderB;
+                });
+                
+                setRubrics(rubricsList);
+                console.log("✅ Rubrics loaded from project tasks:", rubricsList.length, "rubrics:", rubricsList);
+              } else {
+                console.warn("⚠️ No rubricIds found in project tasks");
+              }
+            } else {
+              console.warn("⚠️ No project tasks found for user in session");
+            }
+          } catch (error) {
+            console.error("❌ Error fetching rubrics from project tasks:", error);
+          }
+        } else {
+          console.warn("⚠️ Cannot load rubrics from project tasks:", {
+            hasSession: !!groupSession,
+            hasUserId: !!userId,
+            sessionId: groupSession?.id,
+            userId: userId
+          });
+        }
+
+        // Fallback: Lấy rubrics theo majorId nếu chưa có từ project tasks
+        if (rubricsList.length === 0 && group?.majorId) {
+          try {
+            console.log("🔍 Fallback: Loading rubrics from majorId:", group.majorId);
+            const majorRubricsRes = await majorRubricsApi.getByMajorId(group.majorId);
+            console.log("📋 Major rubrics response:", {
+              hasData: !!majorRubricsRes.data,
+              dataLength: Array.isArray(majorRubricsRes.data) ? majorRubricsRes.data.length : 0,
+              data: majorRubricsRes.data
+            });
+            
+            if (majorRubricsRes.data && Array.isArray(majorRubricsRes.data) && majorRubricsRes.data.length > 0) {
+              // Backend trả về MajorRubricReadDto có RubricId và RubricName, không có full Rubric object
+              // Extract unique rubricIds từ major-rubrics
+              const rubricIds = [...new Set(
+                majorRubricsRes.data
+                  .map((mr: any) => mr.rubricId)
+                  .filter((id: any) => id !== null && id !== undefined && id > 0)
+              )];
+              
+              if (rubricIds.length > 0) {
+                // Lấy full rubric info từ các rubricIds
+                const rubricPromises = rubricIds.map((rubricId: number) =>
+                  rubricsApi.getById(rubricId).catch((err) => {
+                    console.error(`Error fetching rubric ${rubricId}:`, err);
+                    return { data: null };
+                  })
+                );
+                const rubricResults = await Promise.all(rubricPromises);
+                
+                // Filter và map rubrics
+                rubricsList = rubricResults
+                  .map((res: any) => res.data)
+                  .filter((r: any) => r !== null && r !== undefined);
+                
+                setRubrics(rubricsList);
+                console.log("✅ Rubrics loaded from major:", rubricsList.length, "rubrics:", rubricsList);
+              } else {
+                console.warn("⚠️ No valid rubricIds found in major-rubrics response");
+              }
+            } else {
+              console.warn("⚠️ Major rubrics response is not an array or empty");
+            }
+          } catch (error) {
+            console.error("❌ Error fetching rubrics by major:", error);
+          }
+        } else if (rubricsList.length === 0) {
+          console.warn("⚠️ Cannot load rubrics from major - no majorId:", {
+            hasGroup: !!group,
+            majorId: group?.majorId
+          });
+        }
+
+        // Nếu vẫn không có rubrics, để trống (sẽ dùng default criteria)
+        if (rubricsList.length === 0) {
+          console.warn("⚠️ No rubrics found for group/session, will use default criteria");
+          setRubrics([]);
+        } else {
+          console.log("✅ Final rubrics list:", rubricsList.length, "items");
+        }
 
         if (group) {
           const displayName =
@@ -443,15 +575,15 @@ export default function GradeGroupPage() {
                   )
                 : [];
 
-              // Create scores array based on rubrics
-              const rubricCount = rubrics.length || 5;
+              // Create scores array based on rubrics (fallback to 5 if no rubrics)
+              const rubricCount = rubricsList.length > 0 ? rubricsList.length : 5;
               const scoresArray = new Array(rubricCount).fill(0);
               const scoreIds = new Array(rubricCount).fill(0);
               const commentsArray = new Array(rubricCount).fill("");
 
               // Map existing scores to rubrics
               sessionScores.forEach((score: ScoreReadDto) => {
-                const rubricIndex = rubrics.findIndex(
+                const rubricIndex = rubricsList.findIndex(
                   (r: any) => r.id === score.rubricId
                 );
                 if (rubricIndex >= 0) {
@@ -623,7 +755,7 @@ export default function GradeGroupPage() {
       if (finalSessionId) {
         router.push(`/member/defense-sessions?sessionId=${finalSessionId}`);
       } else {
-        router.push("/member/groups-to-grade");
+        router.push("/member/defense-sessions");
       }
     } catch (error: any) {
       console.error("Error saving scores:", error);
@@ -640,7 +772,7 @@ export default function GradeGroupPage() {
     if (finalSessionId) {
       router.push(`/member/defense-sessions?sessionId=${finalSessionId}`);
     } else {
-      router.push("/member/groups-to-grade");
+      router.push("/member/defense-sessions");
     }
   };
 
@@ -726,14 +858,14 @@ export default function GradeGroupPage() {
                 />
               </div>
 
-              {/* Back to list */}
+              {/* Back to defense sessions list */}
               <Link
                 href={
                   urlSessionId
                     ? `/member/defense-sessions?sessionId=${urlSessionId}`
                     : sessionId
                     ? `/member/defense-sessions?sessionId=${sessionId}`
-                    : "/member/groups-to-grade"
+                    : "/member/defense-sessions"
                 }
                 className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 text-gray-700 text-sm font-medium shadow-sm hover:bg-gray-100 transition"
               >
@@ -927,39 +1059,29 @@ export default function GradeGroupPage() {
                           </td>
 
                           <td className="py-3 px-3 align-top">
-                            <div className="flex flex-col gap-2">
-                              <button
-                                className="text-sm text-violet-600 border px-3 py-1 rounded-md hover:bg-violet-50"
-                                onClick={() => toggleNoteVisibility(student.id)}
-                              >
-                                Notes
-                              </button>
-
-                              {/* Quick Set All Scores */}
-                              <div className="flex flex-col gap-1">
-                                <span className="text-xs text-gray-500">
-                                  Set All:
-                                </span>
-                                <div className="flex gap-1">
-                                  {[7, 8, 9].map((score) => (
-                                    <button
-                                      key={score}
-                                      type="button"
-                                      onClick={() => {
-                                        const newScores = [...studentScores];
-                                        newScores[studentIndex].scores =
-                                          newScores[studentIndex].scores.map(
-                                            () => score
-                                          );
-                                        setStudentScores(newScores);
-                                      }}
-                                      className="px-1.5 py-0.5 text-xs rounded border bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100 transition-colors"
-                                      title={`Set all scores to ${score}`}
-                                    >
-                                      {score}
-                                    </button>
-                                  ))}
-                                </div>
+                            <div className="flex flex-col gap-1">
+                              <span className="text-xs text-gray-500">
+                                Set All:
+                              </span>
+                              <div className="flex gap-1">
+                                {[7, 8, 9].map((score) => (
+                                  <button
+                                    key={score}
+                                    type="button"
+                                    onClick={() => {
+                                      const newScores = [...studentScores];
+                                      newScores[studentIndex].scores =
+                                        newScores[studentIndex].scores.map(
+                                          () => score
+                                        );
+                                      setStudentScores(newScores);
+                                    }}
+                                    className="px-1.5 py-0.5 text-xs rounded border bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100 transition-colors"
+                                    title={`Set all scores to ${score}`}
+                                  >
+                                    {score}
+                                  </button>
+                                ))}
                               </div>
                             </div>
                           </td>
@@ -967,7 +1089,7 @@ export default function GradeGroupPage() {
 
                         {notesVisibility[student.id] && (
                           <tr>
-                            <td colSpan={8} className="py-3">
+                            <td colSpan={(rubrics.length > 0 ? rubrics.length : criteria.length) + 3} className="py-3">
                               <div className="bg-gray-50 border rounded-md p-3">
                                 <textarea
                                   className="w-full p-3 rounded-md bg-white border text-sm"

@@ -31,6 +31,11 @@ export default function HomePage() {
   const [sessionsData, setSessionsData] = useState<SessionWithGroup[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Xóa session role khi vào trang danh sách (không phải detail)
+  useEffect(() => {
+    localStorage.removeItem("sessionRole");
+  }, []);
+
   useEffect(() => {
     const fetchSessions = async () => {
       try {

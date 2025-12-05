@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { reportsApi } from "@/lib/api/reports";
+import { swalConfig } from "@/lib/utils/sweetAlert";
 import type { ReportDto } from "@/lib/models";
 
 export default function ChairReportStatus() {
@@ -79,7 +80,10 @@ export default function ChairReportStatus() {
       await fetchReports();
     } catch (err) {
       console.error("Failed to approve report:", err);
-      alert("Failed to approve report.");
+      swalConfig.error(
+        "Failed to approve report",
+        "An error occurred while approving the report. Please try again."
+      );
     } finally {
       setActionLoading(null);
     }
@@ -93,7 +97,10 @@ export default function ChairReportStatus() {
       await fetchReports();
     } catch (err) {
       console.error("Failed to reject report:", err);
-      alert("Failed to reject report.");
+      swalConfig.error(
+        "Failed to reject report",
+        "An error occurred while rejecting the report. Please try again."
+      );
     } finally {
       setActionLoading(null);
     }

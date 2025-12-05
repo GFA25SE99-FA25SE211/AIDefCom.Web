@@ -2,6 +2,7 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
+import { swalConfig } from "@/lib/utils/sweetAlert";
 
 export default function TranscriptSessionPage() {
   const { id } = useParams();
@@ -71,7 +72,10 @@ export default function TranscriptSessionPage() {
     if (savedNotes) setNotes(savedNotes);
   }, [id]);
 
-  const handleSave = () => alert("Transcript saved ✅");
+  const handleSave = async () => {
+    console.log("Saving local transcript...", { text, notes });
+    await swalConfig.success("Transcript saved", "Your local transcript was saved.");
+  };
 
   return (
     <div className="page-container">

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { projectTasksApi } from "@/lib/api/project-tasks";
-import type { RubricDto } from "@/lib/models";
 import { swalConfig } from "@/lib/utils/sweetAlert";
+import type { RubricDto } from "@/lib/models";
 
 interface CreateTaskModalProps {
   open: boolean;

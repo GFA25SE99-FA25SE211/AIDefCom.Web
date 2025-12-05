@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { Shield, X, Plus, UserMinus } from "lucide-react";
+import { swalConfig } from "@/lib/utils/sweetAlert";
 
 export interface CouncilMemberData {
   id: number;
@@ -109,7 +110,7 @@ const CreateCouncilForm: React.FC<CreateCouncilFormProps> = ({
     e.preventDefault();
 
     if (!majorId) {
-      alert("Please select a major");
+      swalConfig.error("Missing major", "Please select a major for this council.");
       return;
     }
 
@@ -118,7 +119,10 @@ const CreateCouncilForm: React.FC<CreateCouncilFormProps> = ({
     );
 
     if (validMembers.length === 0) {
-      alert("Please add at least one member with a role");
+      swalConfig.error(
+        "No members",
+        "Please add at least one council member with an assigned role."
+      );
       return;
     }
 

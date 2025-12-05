@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import Modal from "../../../moderator/create-sessions/components/Modal";
 import { Plus } from "lucide-react";
+import { swalConfig } from "@/lib/utils/sweetAlert";
 
 interface AddTaskData {
   title: string;
@@ -42,7 +43,10 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!assignedTo || !status) {
-      alert("Please select 'Assigned To' and 'Status' before saving.");
+      swalConfig.error(
+        "Missing fields",
+        "Please select both 'Assigned To' and 'Status' before saving."
+      );
       return;
     }
     onSubmit({

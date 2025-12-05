@@ -60,7 +60,7 @@ export default function SecretaryReportDashboard() {
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
           <svg
-            className="animate-spin h-12 w-12 text-purple-600 mx-auto mb-4"
+            className="animate-spin h-12 w-12 text-blue-600 mx-auto mb-4"
             xmlns="http://www.w3.org/2000/svg"
             fill="none"
             viewBox="0 0 24 24"
@@ -96,7 +96,7 @@ export default function SecretaryReportDashboard() {
           <p className="text-gray-600 mb-4">{error}</p>
           <button
             onClick={fetchReports}
-            className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
           >
             Try Again
           </button>
@@ -106,10 +106,10 @@ export default function SecretaryReportDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6">
+    <div className="min-h-screen bg-gray-50 p-6">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-800 mb-2">
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">
           📊 Manage Reports
         </h1>
         <p className="text-gray-600">
@@ -119,21 +119,18 @@ export default function SecretaryReportDashboard() {
 
       {/* Stats Section */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        {/* Total Reports */}
-        <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl shadow-lg p-6 text-white transform hover:scale-105 transition-all duration-300">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-purple-100 text-sm font-medium mb-1">
-                Total Reports
-              </p>
-              <p className="text-4xl font-bold">{totalReports}</p>
+              <p className="text-sm text-gray-600 mb-1">Total Reports</p>
+              <p className="text-3xl font-bold text-gray-900">{totalReports}</p>
             </div>
-            <div className="bg-white/20 backdrop-blur-sm rounded-xl p-4">
+            <div className="bg-purple-50 rounded-lg p-3">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 viewBox="0 0 24 24"
                 fill="currentColor"
-                className="w-8 h-8"
+                className="w-7 h-7 text-purple-600"
               >
                 <path d="M5.625 1.5c-1.036 0-1.875.84-1.875 1.875v17.25c0 1.035.84 1.875 1.875 1.875h12.75c1.035 0 1.875-.84 1.875-1.875V12.75A3.75 3.75 0 0016.5 9h-1.875a1.875 1.875 0 01-1.875-1.875V5.25A3.75 3.75 0 009 1.5H5.625z" />
                 <path d="M12.971 1.816A5.23 5.23 0 0114.25 5.25v1.875c0 .207.168.375.375.375H16.5a5.23 5.23 0 013.434 1.279 9.768 9.768 0 00-6.963-6.963z" />
@@ -142,21 +139,20 @@ export default function SecretaryReportDashboard() {
           </div>
         </div>
 
-        {/* Approved */}
-        <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-2xl shadow-lg p-6 text-white transform hover:scale-105 transition-all duration-300">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-green-100 text-sm font-medium mb-1">
-                Approved
+              <p className="text-sm text-gray-600 mb-1">Approved</p>
+              <p className="text-3xl font-bold text-gray-900">
+                {submittedReports}
               </p>
-              <p className="text-4xl font-bold">{submittedReports}</p>
             </div>
-            <div className="bg-white/20 backdrop-blur-sm rounded-xl p-4">
+            <div className="bg-green-50 rounded-lg p-3">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 viewBox="0 0 24 24"
                 fill="currentColor"
-                className="w-8 h-8"
+                className="w-7 h-7 text-green-600"
               >
                 <path
                   fillRule="evenodd"
@@ -168,21 +164,20 @@ export default function SecretaryReportDashboard() {
           </div>
         </div>
 
-        {/* Pending */}
-        <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-2xl shadow-lg p-6 text-white transform hover:scale-105 transition-all duration-300">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-orange-100 text-sm font-medium mb-1">
-                Pending
+              <p className="text-sm text-gray-600 mb-1">Pending</p>
+              <p className="text-3xl font-bold text-gray-900">
+                {pendingReports}
               </p>
-              <p className="text-4xl font-bold">{pendingReports}</p>
             </div>
-            <div className="bg-white/20 backdrop-blur-sm rounded-xl p-4">
+            <div className="bg-orange-50 rounded-lg p-3">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 viewBox="0 0 24 24"
                 fill="currentColor"
-                className="w-8 h-8"
+                className="w-7 h-7 text-orange-600"
               >
                 <path
                   fillRule="evenodd"
@@ -196,15 +191,15 @@ export default function SecretaryReportDashboard() {
       </div>
 
       {/* Table Section */}
-      <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         {/* Table Header */}
-        <div className="bg-gradient-to-r from-purple-600 to-blue-600 px-6 py-4 flex justify-between items-center">
-          <h2 className="text-xl font-bold text-white flex items-center gap-2">
+        <div className="bg-gradient-to-r from-blue-600 to-blue-700 border-b border-blue-800 px-6 py-4 flex justify-between items-center">
+          <h2 className="text-lg font-semibold text-white flex items-center gap-2">
             <svg
               xmlns="http://www.w3.org/2000/svg"
               viewBox="0 0 24 24"
               fill="currentColor"
-              className="w-6 h-6"
+              className="w-5 h-5 text-white"
             >
               <path
                 fillRule="evenodd"
@@ -217,17 +212,17 @@ export default function SecretaryReportDashboard() {
           </h2>
           <button
             onClick={fetchReports}
-            className="px-4 py-2 bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-lg transition-all duration-200 text-white font-medium flex items-center gap-2"
+            className="px-4 py-2 bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-lg transition-colors text-sm font-medium text-white flex items-center gap-2"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
+              viewBox="0 0 20 20"
               fill="currentColor"
-              className="w-5 h-5"
+              className="w-4 h-4"
             >
               <path
                 fillRule="evenodd"
-                d="M4.755 10.059a7.5 7.5 0 0112.548-3.364l1.903 1.903h-3.183a.75.75 0 100 1.5h4.992a.75.75 0 00.75-.75V4.356a.75.75 0 00-1.5 0v3.18l-1.9-1.9A9 9 0 003.306 9.67a.75.75 0 101.45.388zm15.408 3.352a.75.75 0 00-.919.53 7.5 7.5 0 01-12.548 3.364l-1.902-1.903h3.183a.75.75 0 000-1.5H2.984a.75.75 0 00-.75.75v4.992a.75.75 0 001.5 0v-3.18l1.9 1.9a9 9 0 0015.059-4.035.75.75 0 00-.53-.918z"
+                d="M15.312 11.424a5.5 5.5 0 01-9.201 2.466l-.312-.311h2.433a.75.75 0 000-1.5H3.989a.75.75 0 00-.75.75v4.242a.75.75 0 001.5 0v-2.43l.31.31a7 7 0 0011.712-3.138.75.75 0 00-1.449-.39zm1.23-3.723a.75.75 0 00.219-.53V2.929a.75.75 0 00-1.5 0V5.36l-.31-.31A7 7 0 003.239 8.188a.75.75 0 101.448.389A5.5 5.5 0 0113.89 6.11l.311.31h-2.432a.75.75 0 000 1.5h4.243a.75.75 0 00.53-.219z"
                 clipRule="evenodd"
               />
             </svg>
@@ -380,7 +375,7 @@ export default function SecretaryReportDashboard() {
                               href={report.filePath}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors duration-200 shadow-sm"
+                              className="inline-flex items-center gap-1 px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
                             >
                               <svg
                                 xmlns="http://www.w3.org/2000/svg"
@@ -397,7 +392,7 @@ export default function SecretaryReportDashboard() {
 
                           <Link
                             href={`/secretary/transcript/${report.sessionId}`}
-                            className="inline-flex items-center gap-1 px-3 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors duration-200"
+                            className="inline-flex items-center gap-1 px-3 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors"
                           >
                             <svg
                               xmlns="http://www.w3.org/2000/svg"

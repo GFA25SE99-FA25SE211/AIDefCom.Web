@@ -7,8 +7,11 @@ import { ArrowLeft, Save } from "lucide-react";
 import { groupsApi } from "@/lib/api/groups";
 import { studentsApi } from "@/lib/api/students";
 import { rubricsApi } from "@/lib/api/rubrics";
+import { majorRubricsApi } from "@/lib/api/major-rubrics";
 import { scoresApi, type ScoreReadDto } from "@/lib/api/scores";
 import { defenseSessionsApi } from "@/lib/api/defense-sessions";
+import { projectTasksApi } from "@/lib/api/project-tasks";
+import { swalConfig } from "@/lib/utils/sweetAlert";
 import type { GroupDto, StudentDto } from "@/lib/models";
 
 // --- (Code Icons giữ nguyên) ---
@@ -136,6 +139,14 @@ export default function ViewScorePage() {
   // Get sessionId from URL if available
   const urlSessionId = searchParams?.get("sessionId");
 
+  // Xóa session role khi rời khỏi trang
+  useEffect(() => {
+    return () => {
+      // Không xóa session role ở đây vì user có thể quay lại session
+      // Chỉ xóa khi logout hoặc rời khỏi hoàn toàn
+    };
+  }, []);
+
   useEffect(() => {
     const fetchGroupData = async () => {
       try {
@@ -151,24 +162,189 @@ export default function ViewScorePage() {
         const students = studentsRes.data || [];
         const sessions = sessionsRes.data || [];
         
-        // Fetch rubrics by majorId
-        if (group?.majorId) {
-          try {
-            const rubricsRes = await rubricsApi.getByMajorId(group.majorId);
-            setRubrics(rubricsRes.data || []);
-          } catch (error) {
-            console.error("Error fetching rubrics by major:", error);
-            setRubrics([]);
-          }
-        } else {
-          console.error("No majorId found for group, cannot fetch rubrics");
-          setRubrics([]);
-        }
-
-        // Find session for this group
-        const groupSession = sessions.find((s: any) => s.groupId === groupId);
+        // Find session for this group (ưu tiên sessionId trên URL nếu có)
+        const urlSessionIdNumber = urlSessionId
+          ? parseInt(urlSessionId)
+          : null;
+        const groupSession = urlSessionIdNumber
+          ? sessions.find(
+              (s: any) => s.groupId === groupId && s.id === urlSessionIdNumber
+            ) || sessions.find((s: any) => s.groupId === groupId)
+          : sessions.find((s: any) => s.groupId === groupId);
         if (groupSession) {
           setSessionId(groupSession.id);
+          
+          // Lấy session role của user hiện tại
+          try {
+            const storedUser = localStorage.getItem("user");
+            if (storedUser) {
+              const parsedUser = JSON.parse(storedUser);
+              const currentUserId = parsedUser.id;
+              
+              const lecturersRes = await defenseSessionsApi.getUsersBySessionId(groupSession.id);
+              if (lecturersRes.data) {
+                const currentUserInSession = lecturersRes.data.find(
+                  (user: any) => 
+                    String(user.id).toLowerCase() === String(currentUserId).toLowerCase()
+                );
+                
+                if (currentUserInSession && currentUserInSession.role) {
+                  const sessionRoleValue = currentUserInSession.role.toLowerCase();
+                  localStorage.setItem("sessionRole", sessionRoleValue);
+                }
+              }
+            }
+          } catch (err) {
+            console.error("Failed to get session role:", err);
+          }
+        }
+
+        // Fetch rubrics: ưu tiên từ project tasks (theo session và user), sau đó theo majorId
+        let rubricsList: any[] = [];
+        const storedUser = localStorage.getItem("user");
+        let currentUserId = "";
+        
+        if (storedUser) {
+          try {
+            const parsedUser = JSON.parse(storedUser);
+            currentUserId = parsedUser.id;
+          } catch (err) {
+            console.error("Error parsing user:", err);
+          }
+        }
+
+        // Ưu tiên 1: Lấy rubrics từ project tasks được assign cho user trong session này
+        if (groupSession && currentUserId) {
+          try {
+            console.log("🔍 Attempting to load rubrics from project tasks:", {
+              userId: currentUserId,
+              sessionId: groupSession.id
+            });
+            
+            // Lấy project tasks để có rubricId
+            const tasksRes = await projectTasksApi.getByAssigneeAndSession(
+              currentUserId,
+              groupSession.id
+            );
+            
+            console.log("📋 Project tasks response:", {
+              hasData: !!tasksRes.data,
+              dataLength: Array.isArray(tasksRes.data) ? tasksRes.data.length : 0,
+              tasks: tasksRes.data
+            });
+            
+            if (tasksRes.data && Array.isArray(tasksRes.data) && tasksRes.data.length > 0) {
+              // Extract unique rubricIds từ tasks
+              const rubricIds = [...new Set(
+                tasksRes.data
+                  .map((task: any) => task.rubricId)
+                  .filter((id: any) => id !== null && id !== undefined)
+              )];
+              
+              console.log("📝 Extracted rubricIds from tasks:", rubricIds);
+              
+              if (rubricIds.length > 0) {
+                // Lấy full rubric info từ các rubricIds
+                const rubricPromises = rubricIds.map((rubricId: number) =>
+                  rubricsApi.getById(rubricId).catch((err) => {
+                    console.error(`Error fetching rubric ${rubricId}:`, err);
+                    return { data: null };
+                  })
+                );
+                const rubricResults = await Promise.all(rubricPromises);
+                
+                // Filter và map rubrics
+                rubricsList = rubricResults
+                  .map((res: any) => res.data)
+                  .filter((r: any) => r !== null && r !== undefined);
+                
+                // Sort rubrics theo thứ tự trong tasks để giữ đúng thứ tự
+                const rubricOrderMap = new Map(rubricIds.map((id, idx) => [id, idx]));
+                rubricsList.sort((a, b) => {
+                  const orderA = rubricOrderMap.get(a.id) ?? 999;
+                  const orderB = rubricOrderMap.get(b.id) ?? 999;
+                  return orderA - orderB;
+                });
+                
+                setRubrics(rubricsList);
+                console.log("✅ Rubrics loaded from project tasks:", rubricsList.length, "rubrics:", rubricsList);
+              } else {
+                console.warn("⚠️ No rubricIds found in project tasks");
+              }
+            } else {
+              console.warn("⚠️ No project tasks found for user in session");
+            }
+          } catch (error) {
+            console.error("❌ Error fetching rubrics from project tasks:", error);
+          }
+        } else {
+          console.warn("⚠️ Cannot load rubrics from project tasks:", {
+            hasSession: !!groupSession,
+            hasUserId: !!currentUserId,
+            sessionId: groupSession?.id,
+            userId: currentUserId
+          });
+        }
+
+        // Fallback: Lấy rubrics theo majorId nếu chưa có từ project tasks
+        if (rubricsList.length === 0 && group?.majorId) {
+          try {
+            console.log("🔍 Fallback: Loading rubrics from majorId:", group.majorId);
+            const majorRubricsRes = await majorRubricsApi.getByMajorId(group.majorId);
+            console.log("📋 Major rubrics response:", {
+              hasData: !!majorRubricsRes.data,
+              dataLength: Array.isArray(majorRubricsRes.data) ? majorRubricsRes.data.length : 0,
+              data: majorRubricsRes.data
+            });
+            
+            if (majorRubricsRes.data && Array.isArray(majorRubricsRes.data) && majorRubricsRes.data.length > 0) {
+              // Backend trả về MajorRubricReadDto có RubricId và RubricName, không có full Rubric object
+              // Extract unique rubricIds từ major-rubrics
+              const rubricIds = [...new Set(
+                majorRubricsRes.data
+                  .map((mr: any) => mr.rubricId)
+                  .filter((id: any) => id !== null && id !== undefined && id > 0)
+              )];
+              
+              if (rubricIds.length > 0) {
+                // Lấy full rubric info từ các rubricIds
+                const rubricPromises = rubricIds.map((rubricId: number) =>
+                  rubricsApi.getById(rubricId).catch((err) => {
+                    console.error(`Error fetching rubric ${rubricId}:`, err);
+                    return { data: null };
+                  })
+                );
+                const rubricResults = await Promise.all(rubricPromises);
+                
+                // Filter và map rubrics
+                rubricsList = rubricResults
+                  .map((res: any) => res.data)
+                  .filter((r: any) => r !== null && r !== undefined);
+                
+                setRubrics(rubricsList);
+                console.log("✅ Rubrics loaded from major:", rubricsList.length, "rubrics:", rubricsList);
+              } else {
+                console.warn("⚠️ No valid rubricIds found in major-rubrics response");
+              }
+            } else {
+              console.warn("⚠️ Major rubrics response is not an array or empty");
+            }
+          } catch (error) {
+            console.error("❌ Error fetching rubrics by major:", error);
+          }
+        } else if (rubricsList.length === 0) {
+          console.warn("⚠️ Cannot load rubrics from major - no majorId:", {
+            hasGroup: !!group,
+            majorId: group?.majorId
+          });
+        }
+
+        // Nếu vẫn không có rubrics, để trống (sẽ dùng default criteria)
+        if (rubricsList.length === 0) {
+          console.warn("⚠️ No rubrics found for group/session, will use default criteria");
+          setRubrics([]);
+        } else {
+          console.log("✅ Final rubrics list:", rubricsList.length, "items");
         }
 
         if (group) {
@@ -199,14 +375,14 @@ export default function ViewScorePage() {
                   )
                 : [];
 
-              // Create scores array based on rubrics
-              const scoresArray = new Array(rubrics.length || 5).fill(
+              // Create scores array based on rubrics (fallback to 5 if no rubrics)
+              const scoresArray = new Array(rubricsList.length > 0 ? rubricsList.length : 5).fill(
                 0
               );
 
               // Map existing scores to rubrics
               sessionScores.forEach((score: ScoreReadDto) => {
-                const rubricIndex = rubrics.findIndex(
+                const rubricIndex = rubricsList.findIndex(
                   (r: any) => r.id === score.rubricId
                 );
                 if (rubricIndex >= 0) {
@@ -290,14 +466,27 @@ export default function ViewScorePage() {
     }));
   };
 
-  const handleSave = () => {
-    console.log("Saving scores:", studentScores);
-    alert("Scores saved! (Check console for data)");
-    router.push("/member/groups-to-grade");
+  const handleSave = async () => {
+    console.log("Saving scores (view-only):", studentScores);
+    await swalConfig.info(
+      "Scores loaded",
+      "These scores are view-only; no changes were saved."
+    );
+    const finalSessionId = urlSessionId ? parseInt(urlSessionId) : sessionId;
+    if (finalSessionId) {
+      router.push(`/member/defense-sessions?sessionId=${finalSessionId}`);
+    } else {
+      router.push("/member/defense-sessions");
+    }
   };
 
   const handleCancel = () => {
-    router.push("/member/groups-to-grade");
+    const finalSessionId = urlSessionId ? parseInt(urlSessionId) : sessionId;
+    if (finalSessionId) {
+      router.push(`/member/defense-sessions?sessionId=${finalSessionId}`);
+    } else {
+      router.push("/member/defense-sessions");
+    }
   };
 
   return (
@@ -318,9 +507,15 @@ export default function ViewScorePage() {
 
             {/* Right section */}
             <div className="flex items-center gap-3 flex-wrap justify-end">
-              {/* Back to list */}
+              {/* Back to defense sessions list */}
               <Link
-                href={urlSessionId ? `/member/defense-sessions?sessionId=${urlSessionId}` : (sessionId ? `/member/defense-sessions?sessionId=${sessionId}` : "/member/groups-to-grade")}
+                href={
+                  urlSessionId
+                    ? `/member/defense-sessions?sessionId=${urlSessionId}`
+                    : sessionId
+                    ? `/member/defense-sessions?sessionId=${sessionId}`
+                    : "/member/defense-sessions"
+                }
                 className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 text-gray-700 text-sm font-medium shadow-sm hover:bg-gray-100 transition"
               >
                 <ArrowLeft className="w-4 h-4" />
@@ -433,7 +628,7 @@ export default function ViewScorePage() {
 
                           {notesVisibility[student.id] && (
                             <tr>
-                              <td colSpan={8} className="py-3">
+                              <td colSpan={(rubrics.length > 0 ? rubrics.length : criteria.length) + 3} className="py-3">
                                 <div className="bg-gray-50 border rounded-md p-3">
                                   <textarea
                                     className="w-full p-3 rounded-md bg-gray-50 border text-sm cursor-not-allowed"

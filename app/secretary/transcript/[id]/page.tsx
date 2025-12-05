@@ -46,7 +46,9 @@ export default function TranscriptPage({
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editText, setEditText] = useState("");
   const [editSpeaker, setEditSpeaker] = useState("");
-  const [existingTranscriptId, setExistingTranscriptId] = useState<number | null>(null);
+  const [existingTranscriptId, setExistingTranscriptId] = useState<
+    number | null
+  >(null);
   const [saving, setSaving] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
@@ -64,6 +66,55 @@ export default function TranscriptPage({
   // Auto-save timer
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  // Flag to track if Redis cache was loaded (to prevent further overwrites during session)
+  const transcriptLoadedRef = useRef<boolean>(false);
+
+  // ==========================================
+  // SESSION RECORDING STATES (Audio Recording)
+  // ==========================================
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordingChunksRef = useRef<Blob[]>([]);
+  const recordingStartTimeRef = useRef<number>(0);
+  const recordingStreamRef = useRef<MediaStream | null>(null);
+  const [isSessionRecording, setIsSessionRecording] = useState(false);
+  const [recordingId, setRecordingId] = useState<string | null>(null);
+  const [isUploadingRecording, setIsUploadingRecording] = useState(false);
+
+  // Preferred mime types for recording
+  const preferredMimeTypes = [
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/mp4;codecs=mp4a.40.2",
+    "audio/mp4",
+    "audio/mpeg",
+    "audio/ogg;codecs=opus",
+    "audio/ogg",
+    "audio/wav",
+  ];
+
+  const pickSupportedMimeType = (): string => {
+    for (const t of preferredMimeTypes) {
+      if (
+        window.MediaRecorder &&
+        MediaRecorder.isTypeSupported &&
+        MediaRecorder.isTypeSupported(t)
+      ) {
+        return t;
+      }
+    }
+    return "";
+  };
+
+  // API base URL for recording
+  const RECORDING_API_BASE = "https://aidefcomapi.azurewebsites.net";
+
+  // Xóa session role khi rời khỏi trang (nếu cần)
+  useEffect(() => {
+    return () => {
+      // Không xóa session role ở đây vì user có thể quay lại session
+      // Chỉ xóa khi logout hoặc rời khỏi hoàn toàn
+    };
+  }, []);
 
   // Initialize client-side only to avoid hydration mismatch
   useEffect(() => {
@@ -75,6 +126,34 @@ export default function TranscriptPage({
         const response = await defenseSessionsApi.getById(Number(id));
         if (response.data) {
           setSession(response.data);
+
+          // Lấy session role của user hiện tại
+          try {
+            const storedUser = localStorage.getItem("user");
+            if (storedUser) {
+              const parsedUser = JSON.parse(storedUser);
+              const currentUserId = parsedUser.id;
+
+              const lecturersRes = await defenseSessionsApi.getUsersBySessionId(
+                Number(id)
+              );
+              if (lecturersRes.data) {
+                const currentUserInSession = lecturersRes.data.find(
+                  (user: any) =>
+                    String(user.id).toLowerCase() ===
+                    String(currentUserId).toLowerCase()
+                );
+
+                if (currentUserInSession && currentUserInSession.role) {
+                  const sessionRoleValue =
+                    currentUserInSession.role.toLowerCase();
+                  localStorage.setItem("sessionRole", sessionRoleValue);
+                }
+              }
+            }
+          } catch (err) {
+            console.error("Failed to get session role:", err);
+          }
         }
 
         // Fetch existing transcript
@@ -82,48 +161,66 @@ export default function TranscriptPage({
         if (transcriptRes.data && transcriptRes.data.length > 0) {
           const existingTranscript = transcriptRes.data[0];
           setExistingTranscriptId(existingTranscript.id);
-          
+
           // Parse stored transcript text (JSON format)
           if (existingTranscript.transcriptText) {
             try {
               const parsed = JSON.parse(existingTranscript.transcriptText);
               if (Array.isArray(parsed)) {
                 // Convert to STTEvent format with unique IDs
-                const loadedTranscript: STTEvent[] = parsed.map((item: any, index: number) => ({
-                  event: "recognized",
-                  text: item.text || item.content || "",
-                  speaker: item.speaker || item.speaker_name || "Unknown",
-                  id: item.id || `loaded_${index}_${Date.now()}`,
-                  isNew: false,
-                }));
+                const loadedTranscript: STTEvent[] = parsed.map(
+                  (item: any, index: number) => ({
+                    event: "recognized",
+                    text: item.text || item.content || "",
+                    speaker: item.speaker || item.speaker_name || "Unknown",
+                    id: item.id || `loaded_${index}_${Date.now()}`,
+                    isNew: false,
+                  })
+                );
+                // Load from DB - this is saved/finalized data
                 setTranscript(loadedTranscript);
-                console.log("✅ Loaded existing transcript:", loadedTranscript.length, "entries");
+                transcriptLoadedRef.current = true; // Mark as loaded to prevent Redis overwrite
+                console.log(
+                  "📦 Loaded transcript from DB:",
+                  loadedTranscript.length,
+                  "entries"
+                );
               }
             } catch (parseError) {
               // If not JSON, treat as plain text with "Speaker: Text" format
-              const lines = existingTranscript.transcriptText.split("\n").filter((l: string) => l.trim());
-              const loadedTranscript: STTEvent[] = lines.map((line: string, index: number) => {
-                // Parse "Speaker: Text" format
-                const colonIndex = line.indexOf(":");
-                let speaker = "Unknown";
-                let text = line;
-                
-                if (colonIndex > 0 && colonIndex < 50) {
-                  // Likely "Speaker: Text" format
-                  speaker = line.substring(0, colonIndex).trim();
-                  text = line.substring(colonIndex + 1).trim();
+              const lines = existingTranscript.transcriptText
+                .split("\n")
+                .filter((l: string) => l.trim());
+              const loadedTranscript: STTEvent[] = lines.map(
+                (line: string, index: number) => {
+                  // Parse "Speaker: Text" format
+                  const colonIndex = line.indexOf(":");
+                  let speaker = "Unknown";
+                  let text = line;
+
+                  if (colonIndex > 0 && colonIndex < 50) {
+                    // Likely "Speaker: Text" format
+                    speaker = line.substring(0, colonIndex).trim();
+                    text = line.substring(colonIndex + 1).trim();
+                  }
+
+                  return {
+                    event: "recognized",
+                    text: text,
+                    speaker: speaker,
+                    id: `loaded_${index}_${Date.now()}`,
+                    isNew: false,
+                  };
                 }
-                
-                return {
-                  event: "recognized",
-                  text: text,
-                  speaker: speaker,
-                  id: `loaded_${index}_${Date.now()}`,
-                  isNew: false,
-                };
-              });
+              );
+              // Load from DB - this is saved/finalized data
               setTranscript(loadedTranscript);
-              console.log("✅ Loaded existing transcript (plain text format):", loadedTranscript.length, "entries");
+              transcriptLoadedRef.current = true; // Mark as loaded to prevent Redis overwrite
+              console.log(
+                "📦 Loaded transcript (plain text) from DB:",
+                loadedTranscript.length,
+                "entries"
+              );
             }
           }
         }
@@ -157,22 +254,41 @@ export default function TranscriptPage({
     if (eventType === "cached_transcript") {
       console.log("📂 Received cached transcript from Redis:", msg);
       const cachedLines = msg.lines || [];
-      if (cachedLines.length > 0) {
+
+      // Only use Redis cache if we don't already have data loaded from DB
+      // DB data = saved/finalized transcript, Redis = working draft
+      if (cachedLines.length > 0 && !transcriptLoadedRef.current) {
         // Convert cached lines to STTEvent format
-        const loadedTranscript: STTEvent[] = cachedLines.map((line: any, index: number) => ({
-          event: "recognized",
-          text: line.text || "",
-          speaker: line.speaker || "Unknown",
-          speaker_name: line.speaker_name || line.speaker,
-          user_id: line.user_id,
-          id: line.id || `cached_${index}_${Date.now()}`,
-          isNew: false,
-        }));
-        
-        // Replace current transcript with cached version (Redis has latest)
+        const loadedTranscript: STTEvent[] = cachedLines.map(
+          (line: any, index: number) => ({
+            event: "recognized",
+            text: line.text || "",
+            speaker: line.speaker || "Unknown",
+            speaker_name: line.speaker_name || line.speaker,
+            user_id: line.user_id,
+            id: line.id || `cached_${index}_${Date.now()}`,
+            isNew: false,
+          })
+        );
+
         setTranscript(loadedTranscript);
-        console.log("✅ Loaded", loadedTranscript.length, "lines from Redis cache");
-        swalConfig.toast.success(`Đã khôi phục ${loadedTranscript.length} dòng transcript`);
+        transcriptLoadedRef.current = true;
+        console.log(
+          "✅ Loaded",
+          loadedTranscript.length,
+          "lines from Redis cache (no DB data)"
+        );
+        swalConfig.toast.success(
+          `Đã khôi phục ${loadedTranscript.length} dòng transcript từ cache`
+        );
+      } else if (cachedLines.length > 0) {
+        console.log(
+          "⏭️ Skipped Redis cache - already have DB data:",
+          transcript.length,
+          "entries"
+        );
+      } else {
+        console.log("📂 Redis cache is empty");
       }
       return;
     }
@@ -292,7 +408,9 @@ export default function TranscriptPage({
           event: "recognized",
           text: msg.text,
           speaker: msg.speaker_name || msg.speaker || "Đang xác định",
-          id: `broadcast_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          id: `broadcast_${Date.now()}_${Math.random()
+            .toString(36)
+            .substr(2, 9)}`,
           isNew: true,
         };
         setTranscript((prev) => [...prev, newEntry]);
@@ -429,6 +547,14 @@ export default function TranscriptPage({
   const handleToggleRecording = async () => {
     if (isRecording) {
       stopRecording(); // Chỉ tạm dừng mic, WebSocket vẫn mở
+      // Pause session recording khi dừng mic
+      if (
+        mediaRecorderRef.current &&
+        mediaRecorderRef.current.state === "recording"
+      ) {
+        mediaRecorderRef.current.pause();
+        console.log("🎙️ Session recording paused");
+      }
     } else {
       setPacketsSent(0);
       await startRecording();
@@ -440,7 +566,217 @@ export default function TranscriptPage({
           setHasStartedSession(true);
         }, 500);
       }
+      // Bắt đầu hoặc resume session recording
+      if (!isSessionRecording) {
+        // Lần đầu bật mic → bắt đầu recording mới
+        startSessionRecording();
+      } else if (
+        mediaRecorderRef.current &&
+        mediaRecorderRef.current.state === "paused"
+      ) {
+        // Đã có recording đang pause → resume
+        mediaRecorderRef.current.resume();
+        console.log("🎙️ Session recording resumed");
+      }
     }
+  };
+
+  // ==========================================
+  // SESSION RECORDING FUNCTIONS
+  // ==========================================
+
+  // Start recording session audio (called once when first starting mic)
+  const startSessionRecording = async () => {
+    try {
+      // Reset state
+      recordingChunksRef.current = [];
+      setRecordingId(null);
+
+      // Get microphone stream
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      recordingStreamRef.current = stream;
+
+      // Pick supported mime type
+      const mimeType = pickSupportedMimeType();
+      const options = mimeType ? { mimeType } : undefined;
+
+      // Create MediaRecorder
+      const mediaRecorder = new MediaRecorder(stream, options);
+      mediaRecorderRef.current = mediaRecorder;
+
+      // Handle data available
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          recordingChunksRef.current.push(e.data);
+        }
+      };
+
+      // Handle recording stopped
+      mediaRecorder.onstop = () => {
+        console.log(
+          "🎙️ Session recording stopped, chunks:",
+          recordingChunksRef.current.length
+        );
+      };
+
+      // Start recording (gather every 1 second)
+      recordingStartTimeRef.current = performance.now();
+      mediaRecorder.start(1000);
+      setIsSessionRecording(true);
+      console.log(
+        "🎙️ Session recording started (mime:",
+        mediaRecorder.mimeType || mimeType || "default",
+        ")"
+      );
+    } catch (error: any) {
+      console.error("Failed to start session recording:", error);
+      swalConfig.toast.error("Không thể bắt đầu ghi âm phiên");
+    }
+  };
+
+  // Stop recording and upload to Azure
+  const stopAndUploadRecording = async (): Promise<void> => {
+    return new Promise(async (resolve) => {
+      if (!mediaRecorderRef.current || !isSessionRecording) {
+        console.log("⏭️ No active recording to upload");
+        resolve();
+        return;
+      }
+
+      try {
+        setIsUploadingRecording(true);
+
+        // Stop MediaRecorder
+        if (mediaRecorderRef.current.state === "recording") {
+          mediaRecorderRef.current.stop();
+        }
+
+        // Wait for final chunks to be collected
+        await new Promise((r) => setTimeout(r, 500));
+
+        // Stop stream tracks
+        recordingStreamRef.current?.getTracks().forEach((t) => t.stop());
+
+        // Calculate duration
+        const durationSec = Math.round(
+          (performance.now() - recordingStartTimeRef.current) / 1000
+        );
+
+        // Create blob from chunks
+        const mimeType = mediaRecorderRef.current.mimeType || "audio/webm";
+        const recordedBlob = new Blob(recordingChunksRef.current, {
+          type: mimeType,
+        });
+        const sizeBytes = recordedBlob.size;
+
+        console.log(
+          "🎙️ Recording completed:",
+          (sizeBytes / 1024).toFixed(1),
+          "KB, duration:",
+          durationSec,
+          "s"
+        );
+
+        if (sizeBytes === 0) {
+          console.warn("⚠️ Recording is empty, skipping upload");
+          setIsSessionRecording(false);
+          setIsUploadingRecording(false);
+          resolve();
+          return;
+        }
+
+        // Get user ID
+        let userId = "unknown";
+        try {
+          const storedUser = localStorage.getItem("user");
+          if (storedUser) {
+            const parsedUser = JSON.parse(storedUser);
+            userId = parsedUser.id || "unknown";
+          }
+        } catch {}
+
+        // Step 1: Begin upload to get SAS URL
+        console.log("📤 Begin upload (mime:", mimeType, ")");
+        const beginRes = await fetch(
+          `${RECORDING_API_BASE}/api/recordings/begin-upload`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId, mimeType }),
+          }
+        );
+
+        if (!beginRes.ok) {
+          throw new Error(`begin-upload failed: ${beginRes.status}`);
+        }
+
+        const beginData = await beginRes.json();
+        const uploadRecordingId = beginData.data?.recordingId;
+        const uploadUrl = beginData.data?.uploadUrl;
+        setRecordingId(uploadRecordingId);
+        console.log("✅ SAS obtained. RecordingId:", uploadRecordingId);
+
+        // Step 2: PUT blob to Azure SAS URL
+        console.log("📤 Uploading to Azure...");
+        const putRes = await fetch(uploadUrl, {
+          method: "PUT",
+          headers: {
+            "x-ms-blob-type": "BlockBlob",
+            "x-ms-version": "2021-08-06",
+            "Content-Type": mimeType,
+          },
+          body: recordedBlob,
+        });
+
+        if (!putRes.ok) {
+          throw new Error(`Blob PUT failed: ${putRes.status}`);
+        }
+        console.log("✅ Upload completed");
+
+        // Step 3: Finalize recording
+        console.log(
+          "📤 Finalizing... (durationSec:",
+          durationSec,
+          ", sizeBytes:",
+          sizeBytes,
+          ", transcriptId:",
+          existingTranscriptId,
+          ")"
+        );
+        const finRes = await fetch(
+          `${RECORDING_API_BASE}/api/recordings/${uploadRecordingId}/finalize`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              durationSec,
+              sizeBytes,
+              notes: `Recording for defense session ${id}`,
+              transcriptId: existingTranscriptId || 0,
+            }),
+          }
+        );
+
+        if (!finRes.ok && finRes.status !== 204) {
+          throw new Error(`finalize failed: ${finRes.status}`);
+        }
+        console.log("✅ Recording finalized successfully");
+        swalConfig.toast.success("Đã lưu bản ghi âm phiên bảo vệ");
+
+        // Cleanup
+        setIsSessionRecording(false);
+        mediaRecorderRef.current = null;
+        recordingChunksRef.current = [];
+        resolve();
+      } catch (error: any) {
+        console.error("❌ Recording upload error:", error);
+        swalConfig.toast.error("Không thể upload bản ghi âm: " + error.message);
+        setIsSessionRecording(false);
+        resolve();
+      } finally {
+        setIsUploadingRecording(false);
+      }
+    });
   };
 
   const handleToggleQuestion = async () => {
@@ -496,7 +832,7 @@ export default function TranscriptPage({
 
   const handleSaveEdit = () => {
     if (editingIndex === null) return;
-    
+
     setTranscript((prev) => {
       const newTranscript = [...prev];
       newTranscript[editingIndex] = {
@@ -539,9 +875,18 @@ export default function TranscriptPage({
       return;
     }
 
+    if (transcript.length === 0) {
+      swalConfig.error("Lỗi", "Không có nội dung transcript để lưu");
+      return;
+    }
+
     try {
       setSaving(true);
-      
+      console.log("📤 Starting save transcript to DB...");
+      console.log("   existingTranscriptId:", existingTranscriptId);
+      console.log("   session.id:", session.id);
+      console.log("   transcript.length:", transcript.length);
+
       // Prepare transcript data as JSON
       const transcriptData = transcript.map((item) => ({
         id: item.id,
@@ -549,29 +894,45 @@ export default function TranscriptPage({
         speaker: item.speaker,
         speaker_name: item.speaker_name,
       }));
-      
+
       const transcriptText = JSON.stringify(transcriptData);
+      console.log("   transcriptText length:", transcriptText.length);
 
       if (existingTranscriptId) {
         // Update existing transcript
-        await transcriptsApi.update(existingTranscriptId, {
+        console.log(
+          "📝 Updating existing transcript ID:",
+          existingTranscriptId
+        );
+        const updateResult = await transcriptsApi.update(existingTranscriptId, {
           transcriptText: transcriptText,
           status: "Completed",
         });
+        console.log("✅ Update result:", updateResult);
       } else {
         // Create new transcript
+        console.log("📝 Creating new transcript for session:", session.id);
         const result = await transcriptsApi.create({
           sessionId: session.id,
           transcriptText: transcriptText,
           status: "Completed",
         });
+        console.log("✅ Create result:", result);
         if (result.data) {
           setExistingTranscriptId(result.data.id);
+          console.log("   New transcript ID:", result.data.id);
         }
       }
 
       setHasUnsavedChanges(false);
-      swalConfig.success("Thành công", "Đã lưu transcript!");
+      swalConfig.success("Thành công", "Đã lưu transcript vào Database!");
+
+      // Upload recording to Azure (if recording was active)
+      if (isSessionRecording) {
+        swalConfig.loading("Đang upload bản ghi âm...", "Vui lòng chờ");
+        await stopAndUploadRecording();
+        closeSwal();
+      }
 
       // Broadcast session:end để member biết phiên đã kết thúc
       if (hasStartedSession) {
@@ -582,8 +943,14 @@ export default function TranscriptPage({
       // Kết thúc phiên và đóng WebSocket
       stopSession();
     } catch (error: any) {
-      console.error("Failed to save transcript:", error);
-      swalConfig.error("Lỗi", error.message || "Không thể lưu transcript");
+      console.error("❌ Failed to save transcript:", error);
+      console.error("   Error details:", JSON.stringify(error, null, 2));
+      swalConfig.error(
+        "Lỗi lưu transcript",
+        error.message ||
+          error.response?.data?.message ||
+          "Không thể lưu vào Database. Kiểm tra Console để biết chi tiết."
+      );
     } finally {
       setSaving(false);
     }
@@ -595,14 +962,14 @@ export default function TranscriptPage({
 
     try {
       setSaving(true);
-      
+
       const transcriptData = transcript.map((item) => ({
         id: item.id,
         text: item.text,
         speaker: item.speaker,
         speaker_name: item.speaker_name,
       }));
-      
+
       const transcriptText = JSON.stringify(transcriptData);
 
       if (existingTranscriptId) {
@@ -644,13 +1011,13 @@ export default function TranscriptPage({
       if (autoSaveTimerRef.current) {
         clearTimeout(autoSaveTimerRef.current);
       }
-      
+
       // Set new timer for auto-save after 3 seconds
       autoSaveTimerRef.current = setTimeout(() => {
         handleAutoSave(false);
       }, 3000);
     }
-    
+
     return () => {
       if (autoSaveTimerRef.current) {
         clearTimeout(autoSaveTimerRef.current);
@@ -688,9 +1055,13 @@ export default function TranscriptPage({
               <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2 py-0.5 rounded">
                 {session.location}
               </span>
-              <span className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-green-500' : 'bg-gray-400'}`}></span>
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  wsConnected ? "bg-green-500" : "bg-gray-400"
+                }`}
+              ></span>
               <span className="text-xs text-gray-400">
-                {wsConnected ? 'Đã kết nối' : 'Chưa kết nối'}
+                {wsConnected ? "Đã kết nối" : "Chưa kết nối"}
               </span>
             </p>
           </div>
@@ -702,7 +1073,9 @@ export default function TranscriptPage({
         <div className="bg-white rounded-lg shadow-sm border p-4 flex flex-col h-[500px]">
           <div className="flex justify-between items-center mb-4">
             <div className="flex items-center gap-2">
-              <h2 className="text-lg font-semibold text-gray-800">Transcript</h2>
+              <h2 className="text-lg font-semibold text-gray-800">
+                Transcript
+              </h2>
               {transcript.length > 0 && (
                 <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
                   {transcript.length} dòng
@@ -710,12 +1083,21 @@ export default function TranscriptPage({
               )}
               {/* Auto-save status */}
               {saving ? (
-                <span className="text-xs text-gray-400 italic">Đang lưu...</span>
+                <span className="text-xs text-gray-400 italic">
+                  Đang lưu...
+                </span>
               ) : hasUnsavedChanges ? (
                 <span className="text-xs text-yellow-600">●</span>
               ) : lastSavedAt ? (
                 <span className="text-xs text-green-600">✓</span>
               ) : null}
+              {/* Recording status indicator */}
+              {isSessionRecording && (
+                <span className="flex items-center gap-1 text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded animate-pulse">
+                  <span className="w-2 h-2 bg-red-500 rounded-full"></span>
+                  REC
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-2">
               {/* Add entry button */}
@@ -773,7 +1155,9 @@ export default function TranscriptPage({
             !broadcastInterimText ? (
               <div className="text-gray-400 text-sm text-center py-8">
                 <p>Nhấn 🎤 để bắt đầu ghi âm</p>
-                <p className="text-xs mt-1">hoặc nhấn + để thêm nội dung thủ công</p>
+                <p className="text-xs mt-1">
+                  hoặc nhấn + để thêm nội dung thủ công
+                </p>
               </div>
             ) : (
               <>
@@ -846,15 +1230,23 @@ export default function TranscriptPage({
                 {/* Broadcast interim - chữ chạy từ member khác */}
                 {broadcastInterimText && (
                   <div className="bg-green-50 rounded-lg px-3 py-2 border border-green-100 animate-pulse">
-                    <span className="text-xs font-medium text-green-600">đang nói...</span>
-                    <p className="text-gray-600 text-sm mt-0.5 italic">{broadcastInterimText}</p>
+                    <span className="text-xs font-medium text-green-600">
+                      đang nói...
+                    </span>
+                    <p className="text-gray-600 text-sm mt-0.5 italic">
+                      {broadcastInterimText}
+                    </p>
                   </div>
                 )}
                 {/* Self interim - chữ chạy của chính mình */}
                 {interimText && (
                   <div className="bg-purple-50 rounded-lg px-3 py-2 border border-purple-100 animate-pulse">
-                    <span className="text-xs font-medium text-purple-500">...</span>
-                    <p className="text-gray-600 text-sm mt-0.5 italic">{interimText}</p>
+                    <span className="text-xs font-medium text-purple-500">
+                      ...
+                    </span>
+                    <p className="text-gray-600 text-sm mt-0.5 italic">
+                      {interimText}
+                    </p>
                   </div>
                 )}
               </>
@@ -941,7 +1333,7 @@ export default function TranscriptPage({
         >
           Cancel
         </button>
-<button
+        <button
           onClick={handleSaveTranscript}
           disabled={saving || transcript.length === 0}
           className="px-4 py-2 text-white bg-purple-600 rounded-md hover:bg-purple-700 text-sm font-medium shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
@@ -959,7 +1351,7 @@ export default function TranscriptPage({
           </span>
           <div className="h-px flex-1 bg-gray-200"></div>
         </div>
-        <MeetingMinutesForm sessionData={session} />
+        <MeetingMinutesForm defenseId={id} />
       </div>
 
       <p className="text-center text-xs text-gray-400 pb-4">

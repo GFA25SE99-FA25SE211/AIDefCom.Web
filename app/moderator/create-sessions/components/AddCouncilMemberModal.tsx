@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { Users, X } from "lucide-react";
 import Modal from "./Modal";
+import { swalConfig } from "@/lib/utils/sweetAlert";
 
 interface AddCouncilMemberModalProps {
   isOpen: boolean;
@@ -55,7 +56,8 @@ const AddCouncilMemberModal: React.FC<AddCouncilMemberModalProps> = ({
     if (!lecturerId || !role) return;
     const councilRoleId = effectiveRoleMapping.get(role);
     if (!councilRoleId) {
-      alert(
+      swalConfig.error(
+        "Invalid role",
         `Role "${role}" not found in mapping. Please contact administrator.`
       );
       return;

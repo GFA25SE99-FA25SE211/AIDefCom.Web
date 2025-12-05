@@ -24,13 +24,13 @@ interface GroupWithDetails extends GroupDto {
 
 function DefenseSessionsContent() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const sessionIdParam = searchParams?.get("sessionId");
   const [sessions, setSessions] = useState<SessionCard[]>([]);
-  const [selectedSession, setSelectedSession] = useState<DefenseSessionDto | null>(null);
-  const [groups, setGroups] = useState<GroupWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadingGroups, setLoadingGroups] = useState(false);
+
+  // Xóa session role khi vào trang danh sách (không phải detail)
+  useEffect(() => {
+    localStorage.removeItem("sessionRole");
+  }, []);
 
   useEffect(() => {
     const fetchSessions = async () => {
@@ -66,15 +66,6 @@ function DefenseSessionsContent() {
         );
 
         setSessions(sessionsWithStatus);
-
-        // If sessionId in URL, load that session's groups
-        if (sessionIdParam) {
-          const session = sessions.find((s) => s.id === parseInt(sessionIdParam));
-          if (session) {
-            setSelectedSession(session);
-            fetchGroupsBySession(session.id);
-          }
-        }
       } catch (error) {
         console.error("Error fetching sessions:", error);
       } finally {
@@ -83,108 +74,27 @@ function DefenseSessionsContent() {
     };
 
     fetchSessions();
-  }, [sessionIdParam]);
+  }, []);
 
-  const fetchGroupsBySession = async (sessionId: number) => {
+  const handleSessionClick = async (sessionId: number) => {
     try {
-      setLoadingGroups(true);
-      // Get session details
+      // Lấy chi tiết session để đọc groupId
       const sessionRes = await defenseSessionsApi.getById(sessionId);
       const session = sessionRes.data;
-      
-      if (!session || !session.groupId) {
-        setGroups([]);
-        return;
-      }
 
-      // Get group by ID
-      const groupRes = await groupsApi.getById(session.groupId);
-      const group = groupRes.data;
-
-      if (!group) {
-        setGroups([]);
-        return;
-      }
-
-      // Get students for this group
-      const studentsRes = await studentsApi.getByGroupId(group.id);
-      const students = Array.isArray(studentsRes.data) ? studentsRes.data : [];
-      const members = students.length > 0
-        ? students
-            .map((s: StudentDto) => s.fullName || s.userName || "Unknown")
-            .join(", ")
-        : "No members assigned";
-
-      // Check grading status
-      let gradingStatus: "Graded" | "Not Graded" | "Partial" = "Not Graded";
-      let gradedStudentsCount = 0;
-      const totalStudentsCount = students.length;
-
-      if (students.length > 0 && session) {
-        // Get current user ID
-        const userInfo = authUtils.getCurrentUserInfo();
-        let currentUserId = userInfo.userId;
-
-        // Fallback for testing
-        if (!currentUserId) {
-          currentUserId = "0EB5D9FB-4389-45B7-A7AE-23AFBAF461CE";
-        }
-
-        // Check scores for each student
-        const scoresPromises = students.map((student: StudentDto) =>
-          scoresApi.getByStudentId(student.id).catch(() => ({ data: [] }))
+      if (session && session.groupId) {
+        // Điều hướng thẳng tới trang chấm điểm của group đó
+        router.push(
+          `/member/grading/grade/${session.groupId}?sessionId=${sessionId}`
         );
-
-        const allStudentScores = await Promise.all(scoresPromises);
-
-        // Count how many students have been graded
-        gradedStudentsCount = allStudentScores.filter((scoresRes) => {
-          const scores = scoresRes.data || [];
-          return scores.some(
-            (score: any) =>
-              score.sessionId === session.id &&
-              score.evaluatorId === currentUserId
-          );
-        }).length;
-
-        // Determine status
-        if (gradedStudentsCount === 0) {
-          gradingStatus = "Not Graded";
-        } else if (gradedStudentsCount === totalStudentsCount) {
-          gradingStatus = "Graded";
-        } else {
-          gradingStatus = "Partial";
-        }
+      } else {
+        // Nếu không có groupId thì rơi về trang groups-to-grade để xử lý tay
+        router.push(`/member/groups-to-grade?sessionId=${sessionId}`);
       }
-
-      setGroups([{
-        ...group,
-        members,
-        gradingStatus,
-        gradedStudentsCount,
-        totalStudentsCount,
-      }]);
     } catch (error) {
-      console.error("Error fetching groups by session:", error);
-      setGroups([]);
-    } finally {
-      setLoadingGroups(false);
+      console.error("Error getting session details:", error);
+      router.push(`/member/groups-to-grade?sessionId=${sessionId}`);
     }
-  };
-
-  const handleSessionClick = (sessionId: number) => {
-    const session = sessions.find((s) => s.id === sessionId);
-    if (session) {
-      setSelectedSession(session);
-      fetchGroupsBySession(sessionId);
-      router.push(`/member/defense-sessions?sessionId=${sessionId}`);
-    }
-  };
-
-  const handleBackToSessions = () => {
-    setSelectedSession(null);
-    setGroups([]);
-    router.push("/member/defense-sessions");
   };
 
   const getStatusColor = (status: SessionCard["status"]) => {
@@ -210,112 +120,6 @@ function DefenseSessionsContent() {
     group.topicTitle_VN ||
     group.projectTitle ||
     "No project title";
-
-  const getGradingStatusBadge = (group: GroupWithDetails) => {
-    switch (group.gradingStatus) {
-      case "Graded":
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700 border border-green-200">
-            <CheckCircle2 className="w-3.5 h-3.5" />
-            Graded ({group.gradedStudentsCount}/{group.totalStudentsCount})
-          </span>
-        );
-      case "Partial":
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700 border border-yellow-200">
-            <AlertCircle className="w-3.5 h-3.5" />
-            Partial ({group.gradedStudentsCount}/{group.totalStudentsCount})
-          </span>
-        );
-      case "Not Graded":
-      default:
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200">
-            <Circle className="w-3.5 h-3.5" />
-            Not Graded
-          </span>
-        );
-    }
-  };
-
-  // If a session is selected, show groups
-  if (selectedSession) {
-    return (
-      <div className="space-y-6">
-        {/* Header with Back Button */}
-        <div className="bg-white rounded-xl shadow px-6 py-4">
-          <button
-            onClick={handleBackToSessions}
-            className="flex items-center gap-2 text-gray-600 hover:text-gray-800 mb-4 transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span>Back to Sessions</span>
-          </button>
-          <h1 className="text-2xl font-bold text-gray-800">
-            Groups in Session {selectedSession.id}
-          </h1>
-          <p className="text-gray-600 mt-1">
-            {new Date(selectedSession.defenseDate).toLocaleDateString("en-GB")} • {selectedSession.location || "TBD"}
-          </p>
-        </div>
-
-        {/* Groups List */}
-        {loadingGroups ? (
-          <div className="text-center py-8 text-gray-500">
-            Loading groups...
-          </div>
-        ) : groups.length > 0 ? (
-          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
-            {groups.map((group) => (
-              <div
-                key={group.id}
-                onClick={() => router.push(`/member/grading/grade/${group.id}?sessionId=${selectedSession.id}`)}
-                className="bg-white rounded-xl shadow-sm border hover:shadow-md transition-shadow cursor-pointer"
-              >
-                <div className="p-6">
-                  <div className="flex items-start justify-between mb-2">
-                    <h3 className="text-lg font-semibold text-gray-800 flex-1">
-                      {getGroupDisplayName(group)}
-                    </h3>
-                    {getGradingStatusBadge(group)}
-                  </div>
-                  <p className="text-sm text-gray-600 mb-4">
-                    {getProjectTitle(group)}
-                  </p>
-                  <div className="flex items-center gap-2 text-sm text-gray-600 mb-3">
-                    <Users className="w-4 h-4 flex-shrink-0" />
-                    <span className="truncate">{group.members}</span>
-                  </div>
-                  {group.gradingStatus !== "Not Graded" && (
-                    <div className="mb-3 text-xs text-gray-500">
-                      {group.gradingStatus === "Graded" 
-                        ? "✓ All students have been graded"
-                        : `⚠ ${group.totalStudentsCount - group.gradedStudentsCount} student(s) remaining`}
-                    </div>
-                  )}
-                  <div className="mt-4 pt-4 border-t">
-                    <button className="w-full bg-gradient-to-r from-purple-600 to-blue-500 text-white py-2 px-4 rounded-lg text-sm font-medium hover:opacity-90 transition">
-                      {group.gradingStatus === "Graded" ? "View/Edit Grades" : "Grade Now"}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="text-center py-12 text-gray-500">
-            <Users className="w-16 h-16 mx-auto mb-4 text-gray-300" />
-            <p>No groups found for this session</p>
-          </div>
-        )}
-
-        {/* Footer */}
-        <footer className="text-center text-sm text-gray-500 mt-8">
-          © 2025 AIDefCom — Smart Graduation Defense
-        </footer>
-      </div>
-    );
-  }
 
   // Default view: Show all sessions
   return (
