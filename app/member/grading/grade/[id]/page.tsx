@@ -44,104 +44,39 @@ interface GroupData {
 type AllGroupsData = { [key: string]: GroupData };
 type NotesVisibility = { [key: string]: boolean };
 
-const allGroupsData: AllGroupsData = {
-  "2": {
-    name: "Group 2",
-    project: "Intelligent Ride-hailing Application",
-    students: [
-      {
-        id: "SV004",
-        name: "Pham Van D",
-        role: "Team Leader",
-        scores: [0, 0, 0, 0, 0],
-        criterionComments: ["", "", "", "", ""],
-        note: "",
-        existingScoreIds: [0, 0, 0, 0, 0],
-      },
-      {
-        id: "SV005",
-        name: "Hoang Thi E",
-        role: "Developer",
-        scores: [0, 0, 0, 0, 0],
-        criterionComments: ["", "", "", "", ""],
-        note: "",
-        existingScoreIds: [0, 0, 0, 0, 0],
-      },
-    ],
-  },
-  "3": {
-    name: "Group 3",
-    project: "E-commerce Website",
-    students: [
-      {
-        id: "SV006",
-        name: "Do Van F",
-        role: "Developer",
-        scores: [0, 0, 0, 0, 0],
-        criterionComments: ["", "", "", "", ""],
-        note: "",
-        existingScoreIds: [0, 0, 0, 0, 0],
-      },
-      {
-        id: "SV007",
-        name: "Vu Thi G",
-        role: "Developer",
-        scores: [0, 0, 0, 0, 0],
-        criterionComments: ["", "", "", "", ""],
-        note: "",
-        existingScoreIds: [0, 0, 0, 0, 0],
-      },
-    ],
-  },
-  "4": {
-    name: "Group 4",
-    project: "AI Health Consultation Chatbot",
-    students: [
-      {
-        id: "SV008",
-        name: "Mai Van I",
-        role: "Developer",
-        scores: [0, 0, 0, 0, 0],
-        criterionComments: ["", "", "", "", ""],
-        note: "",
-        existingScoreIds: [0, 0, 0, 0, 0],
-      },
-      {
-        id: "SV009",
-        name: "Dinh Thi K",
-        role: "Developer",
-        scores: [0, 0, 0, 0, 0],
-        criterionComments: ["", "", "", "", ""],
-        note: "",
-        existingScoreIds: [0, 0, 0, 0, 0],
-      },
-    ],
-  },
-  "6": {
-    name: "Group 6",
-    project: "Personal Finance Management App",
-    students: [
-      {
-        id: "SV013",
-        name: "Truong Van O",
-        role: "Developer",
-        scores: [0, 0, 0, 0, 0],
-        criterionComments: ["", "", "", "", ""],
-        note: "",
-        existingScoreIds: [0, 0, 0, 0, 0],
-      },
-      {
-        id: "SV014",
-        name: "Duong Thi P",
-        role: "Developer",
-        scores: [0, 0, 0, 0, 0],
-        criterionComments: ["", "", "", "", ""],
-        note: "",
-        existingScoreIds: [0, 0, 0, 0, 0],
-      },
-    ],
-  },
-};
+const allGroupsData: AllGroupsData = {};
+
+// Chuẩn hóa dữ liệu sinh viên fallback (tránh thiếu field)
+const buildFallbackStudents = (students: any[], rubricCount: number): StudentScore[] =>
+  students.map((s, index) => {
+    const scores = Array.from({ length: rubricCount }, (_, i) => s.scores?.[i] ?? 0);
+    const criterionComments = Array.from(
+      { length: rubricCount },
+      (_, i) => s.criterionComments?.[i] ?? ""
+    );
+    const existingScoreIds = Array.from(
+      { length: rubricCount },
+      (_, i) => s.existingScoreIds?.[i] ?? 0
+    );
+    // Chuẩn hóa role: Leader/Member thay vì Team Leader/Developer
+    const rawRole = s.groupRole || s.GroupRole || s.role;
+    const normalizedRole = rawRole
+      ? rawRole.toLowerCase().includes("leader")
+        ? "Leader"
+        : "Member"
+      : index === 0
+      ? "Leader"
+      : "Member";
+    return {
+      id: s.id || `student-${index}`,
+      name: s.name || "Unknown",
+      role: normalizedRole,
+      scores,
+      criterionComments,
+      note: s.note || "",
+      existingScoreIds,
+    };
+  });
 
 const criteria = [
   "Innovation",
@@ -363,6 +298,9 @@ export default function GradeGroupPage() {
 
   useEffect(() => {
     const fetchGroupData = async () => {
+      // rubricsList cần dùng trong cả try/catch
+      let rubricsList: any[] = [];
+
       try {
         setLoading(true);
         const [groupRes, studentsRes, sessionsRes] = await Promise.all([
@@ -411,7 +349,6 @@ export default function GradeGroupPage() {
         setCurrentUserId(userId);
 
         // Fetch rubrics: ưu tiên từ project tasks (theo session và user), sau đó theo majorId
-        let rubricsList: any[] = [];
 
         // Ưu tiên 1: Lấy rubrics từ project tasks được assign cho user trong session này
         if (groupSession && userId) {
@@ -593,10 +530,20 @@ export default function GradeGroupPage() {
                 }
               });
 
+              // Lấy role từ dữ liệu (groupRole), fallback Leader cho student đầu tiên
+              const rawRole = (s as any).groupRole || (s as any).GroupRole;
+              const normalizedRole = rawRole
+                ? rawRole.toLowerCase().includes("leader")
+                  ? "Leader"
+                  : "Member"
+                : index === 0
+                ? "Leader"
+                : "Member";
+
               return {
                 id: s.id,
                 name: s.fullName || s.userName || "Unknown",
-                role: index === 0 ? "Team Leader" : "Developer",
+                role: normalizedRole,
                 scores: scoresArray,
                 criterionComments: commentsArray,
                 note: "",
@@ -613,16 +560,50 @@ export default function GradeGroupPage() {
           setGroupData(groupData);
           setStudentScores(groupData.students);
         } else {
-          // Fallback to default data
-          const defaultData = allGroupsData[groupId] || allGroupsData["2"];
-          setGroupData(defaultData);
-          setStudentScores(defaultData.students);
+          // Fallback: tạo empty groupData hoặc từ students đã fetch
+          const rubricCountFallback =
+            rubricsList.length > 0 ? rubricsList.length : criteria.length;
+          const normalizedStudents = students.length > 0
+            ? await Promise.all(
+                students.map(async (s: StudentDto, index: number) => {
+                  const rawRole = (s as any).groupRole || (s as any).GroupRole;
+                  const normalizedRole = rawRole
+                    ? rawRole.toLowerCase().includes("leader")
+                      ? "Leader"
+                      : "Member"
+                    : index === 0
+                    ? "Leader"
+                    : "Member";
+                  return {
+                    id: s.id,
+                    name: s.fullName || s.userName || "Unknown",
+                    role: normalizedRole,
+                    scores: new Array(rubricCountFallback).fill(0),
+                    criterionComments: new Array(rubricCountFallback).fill(""),
+                    note: "",
+                    existingScoreIds: new Array(rubricCountFallback).fill(0),
+                  };
+                })
+              )
+            : buildFallbackStudents([], rubricCountFallback);
+          setGroupData({
+            name: `Group ${groupId}`,
+            project: "No project title",
+            students: normalizedStudents,
+          });
+          setStudentScores(normalizedStudents);
         }
       } catch (error) {
         console.error("Error fetching group data:", error);
-        const defaultData = allGroupsData[groupId] || allGroupsData["2"];
-        setGroupData(defaultData);
-        setStudentScores(defaultData.students);
+        const rubricCountFallback =
+          rubricsList.length > 0 ? rubricsList.length : criteria.length;
+        const normalizedStudents = buildFallbackStudents([], rubricCountFallback);
+        setGroupData({
+          name: `Group ${groupId}`,
+          project: "No project title",
+          students: normalizedStudents,
+        });
+        setStudentScores(normalizedStudents);
       } finally {
         setLoading(false);
       }

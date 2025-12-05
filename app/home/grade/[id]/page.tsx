@@ -54,7 +54,7 @@ const criteria = [
   "Q&A",
 ];
 
-// Chuẩn hóa dữ liệu fallback để đủ trường
+// Chuẩn hóa dữ liệu sinh viên fallback (tránh thiếu field)
 const buildFallbackStudents = (students: any[], rubricCount: number): StudentScore[] =>
   students.map((s, index) => {
     const scores = Array.from({ length: rubricCount }, (_, i) => s.scores?.[i] ?? 0);
@@ -105,7 +105,7 @@ export default function ViewScorePage() {
 
   useEffect(() => {
     const fetchGroupData = async () => {
-      // Rubrics cần dùng cho fallback
+      // Rubrics list cần dùng cho cả try/catch
       let rubricsList: any[] = [];
 
       try {
@@ -173,7 +173,6 @@ export default function ViewScorePage() {
         }
 
         // Fetch rubrics: ưu tiên từ project tasks (theo session và user), sau đó theo majorId
-        let rubricsList: any[] = [];
         const storedUser = localStorage.getItem("user");
         let currentUserId = "";
         
@@ -366,20 +365,10 @@ export default function ViewScorePage() {
                 }
               });
 
-              // Lấy role từ dữ liệu (groupRole), fallback Leader cho student đầu tiên
-              const rawRole = (s as any).groupRole || (s as any).GroupRole;
-              const normalizedRole = rawRole
-                ? rawRole.toLowerCase().includes("leader")
-                  ? "Leader"
-                  : "Member"
-                : index === 0
-                ? "Leader"
-                : "Member";
-
               return {
                 id: s.id,
                 name: s.fullName || s.userName || "Unknown",
-                role: normalizedRole,
+                role: index === 0 ? "Team Leader" : "Developer",
                 scores: scoresArray,
                 criterionComments: commentsArray,
                 note: "",
@@ -400,14 +389,10 @@ export default function ViewScorePage() {
           const rubricCountFallback =
             rubricsList.length > 0 ? rubricsList.length : criteria.length;
           const normalizedStudents = buildFallbackStudents(
-            defaultData?.students || [],
+            defaultData.students || [],
             rubricCountFallback
           );
-          setGroupData(
-            defaultData
-              ? { ...defaultData, students: normalizedStudents }
-              : { name: "", project: "", students: normalizedStudents }
-          );
+          setGroupData({ ...defaultData, students: normalizedStudents });
           setStudentScores(normalizedStudents);
         }
       } catch (error) {
@@ -416,14 +401,10 @@ export default function ViewScorePage() {
         const rubricCountFallback =
           rubricsList.length > 0 ? rubricsList.length : criteria.length;
         const normalizedStudents = buildFallbackStudents(
-          defaultData?.students || [],
+          defaultData.students || [],
           rubricCountFallback
         );
-        setGroupData(
-          defaultData
-            ? { ...defaultData, students: normalizedStudents }
-            : { name: "", project: "", students: normalizedStudents }
-        );
+        setGroupData({ ...defaultData, students: normalizedStudents });
         setStudentScores(normalizedStudents);
       } finally {
         setLoading(false);
@@ -561,12 +542,7 @@ export default function ViewScorePage() {
         "Success",
         "Scores and notes saved successfully!"
       );
-      const finalSessionId = urlSessionId ? parseInt(urlSessionId) : sessionId;
-      if (finalSessionId) {
-        router.push(`/member/defense-sessions?sessionId=${finalSessionId}`);
-      } else {
-        router.push("/member/defense-sessions");
-      }
+      router.push("/home");
     } catch (error: any) {
       console.error("Error saving scores:", error);
       // Close loading dialog if it exists
@@ -578,12 +554,7 @@ export default function ViewScorePage() {
   };
 
   const handleCancel = () => {
-    const finalSessionId = urlSessionId ? parseInt(urlSessionId) : sessionId;
-    if (finalSessionId) {
-      router.push(`/member/defense-sessions?sessionId=${finalSessionId}`);
-    } else {
-      router.push("/member/defense-sessions");
-    }
+    router.push("/home");
   };
 
   return (
@@ -604,15 +575,9 @@ export default function ViewScorePage() {
 
             {/* Right section */}
             <div className="flex items-center gap-3 flex-wrap justify-end">
-              {/* Back to defense sessions list */}
+              {/* Back to home */}
               <Link
-                href={
-                  urlSessionId
-                    ? `/member/defense-sessions?sessionId=${urlSessionId}`
-                    : sessionId
-                    ? `/member/defense-sessions?sessionId=${sessionId}`
-                    : "/member/defense-sessions"
-                }
+                href="/home"
                 className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 text-gray-700 text-sm font-medium shadow-sm hover:bg-gray-100 transition"
               >
                 <ArrowLeft className="w-4 h-4" />
