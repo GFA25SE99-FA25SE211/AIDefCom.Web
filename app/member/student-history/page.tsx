@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { Search, Users } from "lucide-react";
 import { studentsApi } from "@/lib/api/students";
@@ -11,10 +11,13 @@ interface StudentWithHistory extends StudentDto {
   failedDefenses: number;
 }
 
+const PAGE_SIZE = 10;
+
 export default function StudentHistoryListPage() {
   const [students, setStudents] = useState<StudentWithHistory[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
     const fetchStudents = async () => {
@@ -58,6 +61,56 @@ export default function StudentHistoryListPage() {
       student.email?.toLowerCase().includes(searchLower)
     );
   });
+
+  // Reset to page 1 when search term changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
+
+  // Pagination calculations
+  const paginatedStudents = useMemo(() => {
+    const startIndex = (currentPage - 1) * PAGE_SIZE;
+    return filteredStudents.slice(startIndex, startIndex + PAGE_SIZE);
+  }, [filteredStudents, currentPage]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredStudents.length / PAGE_SIZE));
+
+  // Pagination component helper
+  const renderPagination = () => {
+    if (totalPages <= 1) {
+      return (
+        <div className="flex items-center justify-center mt-4 flex-wrap gap-2">
+          <button
+            className="px-3 py-1 rounded-md text-sm bg-blue-600 text-white"
+            disabled
+          >
+            1
+          </button>
+        </div>
+      );
+    }
+    return (
+      <div className="flex items-center justify-center mt-4 flex-wrap gap-2">
+        {Array.from({ length: totalPages }, (_, index) => {
+          const pageNum = index + 1;
+          const isActive = pageNum === currentPage;
+          return (
+            <button
+              key={pageNum}
+              className={`px-3 py-1 rounded-md text-sm ${
+                isActive
+                  ? "bg-blue-600 text-white"
+                  : "bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
+              }`}
+              onClick={() => setCurrentPage(pageNum)}
+            >
+              {pageNum}
+            </button>
+          );
+        })}
+      </div>
+    );
+  };
   return (
     <>
       <main className="main-content">
@@ -113,7 +166,7 @@ export default function StudentHistoryListPage() {
               </thead>
 
               <tbody>
-                  {filteredStudents.map((student) => (
+                  {paginatedStudents.map((student) => (
                   <tr
                     key={student.id}
                     className="border-b last:border-0 hover:bg-gray-50 transition"
@@ -148,14 +201,14 @@ export default function StudentHistoryListPage() {
                     <td className="py-3 px-4 text-right">
                       <Link
                         href={`/member/student-history/${student.id}`}
-                        className="inline-block px-3 py-1.5 rounded-md text-xs font-medium text-white bg-gradient-to-r from-purple-600 to-blue-500 shadow-sm hover:opacity-90 transition"
+                        className="inline-flex items-center justify-center px-3 py-1.5 rounded-md text-sm font-semibold text-white bg-gradient-to-r from-purple-600 to-blue-500 shadow-md hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-purple-500 transition whitespace-nowrap"
                       >
                         View History
                       </Link>
                     </td>
                   </tr>
                 ))}
-                  {filteredStudents.length === 0 && (
+                  {paginatedStudents.length === 0 && (
                     <tr>
                       <td colSpan={5} className="text-center py-8 text-gray-400">
                         No students found.
@@ -164,6 +217,7 @@ export default function StudentHistoryListPage() {
                   )}
               </tbody>
             </table>
+            {renderPagination()}
           </div>
           )}
         </div>

@@ -366,10 +366,20 @@ export default function ViewScorePage() {
                 }
               });
 
+              // Lấy role từ dữ liệu (groupRole), fallback Leader cho student đầu tiên
+              const rawRole = (s as any).groupRole || (s as any).GroupRole;
+              const normalizedRole = rawRole
+                ? rawRole.toLowerCase().includes("leader")
+                  ? "Leader"
+                  : "Member"
+                : index === 0
+                ? "Leader"
+                : "Member";
+
               return {
                 id: s.id,
                 name: s.fullName || s.userName || "Unknown",
-                role: index === 0 ? "Team Leader" : "Developer",
+                role: normalizedRole,
                 scores: scoresArray,
                 criterionComments: commentsArray,
                 note: "",
