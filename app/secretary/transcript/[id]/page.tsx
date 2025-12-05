@@ -69,6 +69,45 @@ export default function TranscriptPage({
   // Flag to track if Redis cache was loaded (to prevent further overwrites during session)
   const transcriptLoadedRef = useRef<boolean>(false);
 
+  // ==========================================
+  // SESSION RECORDING STATES (Audio Recording)
+  // ==========================================
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordingChunksRef = useRef<Blob[]>([]);
+  const recordingStartTimeRef = useRef<number>(0);
+  const recordingStreamRef = useRef<MediaStream | null>(null);
+  const [isSessionRecording, setIsSessionRecording] = useState(false);
+  const [recordingId, setRecordingId] = useState<string | null>(null);
+  const [isUploadingRecording, setIsUploadingRecording] = useState(false);
+
+  // Preferred mime types for recording
+  const preferredMimeTypes = [
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/mp4;codecs=mp4a.40.2",
+    "audio/mp4",
+    "audio/mpeg",
+    "audio/ogg;codecs=opus",
+    "audio/ogg",
+    "audio/wav",
+  ];
+
+  const pickSupportedMimeType = (): string => {
+    for (const t of preferredMimeTypes) {
+      if (
+        window.MediaRecorder &&
+        MediaRecorder.isTypeSupported &&
+        MediaRecorder.isTypeSupported(t)
+      ) {
+        return t;
+      }
+    }
+    return "";
+  };
+
+  // API base URL for recording
+  const RECORDING_API_BASE = "https://aidefcomapi.azurewebsites.net";
+
   // Xóa session role khi rời khỏi trang (nếu cần)
   useEffect(() => {
     return () => {
@@ -508,6 +547,14 @@ export default function TranscriptPage({
   const handleToggleRecording = async () => {
     if (isRecording) {
       stopRecording(); // Chỉ tạm dừng mic, WebSocket vẫn mở
+      // Pause session recording khi dừng mic
+      if (
+        mediaRecorderRef.current &&
+        mediaRecorderRef.current.state === "recording"
+      ) {
+        mediaRecorderRef.current.pause();
+        console.log("🎙️ Session recording paused");
+      }
     } else {
       setPacketsSent(0);
       await startRecording();
@@ -519,7 +566,217 @@ export default function TranscriptPage({
           setHasStartedSession(true);
         }, 500);
       }
+      // Bắt đầu hoặc resume session recording
+      if (!isSessionRecording) {
+        // Lần đầu bật mic → bắt đầu recording mới
+        startSessionRecording();
+      } else if (
+        mediaRecorderRef.current &&
+        mediaRecorderRef.current.state === "paused"
+      ) {
+        // Đã có recording đang pause → resume
+        mediaRecorderRef.current.resume();
+        console.log("🎙️ Session recording resumed");
+      }
     }
+  };
+
+  // ==========================================
+  // SESSION RECORDING FUNCTIONS
+  // ==========================================
+
+  // Start recording session audio (called once when first starting mic)
+  const startSessionRecording = async () => {
+    try {
+      // Reset state
+      recordingChunksRef.current = [];
+      setRecordingId(null);
+
+      // Get microphone stream
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      recordingStreamRef.current = stream;
+
+      // Pick supported mime type
+      const mimeType = pickSupportedMimeType();
+      const options = mimeType ? { mimeType } : undefined;
+
+      // Create MediaRecorder
+      const mediaRecorder = new MediaRecorder(stream, options);
+      mediaRecorderRef.current = mediaRecorder;
+
+      // Handle data available
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          recordingChunksRef.current.push(e.data);
+        }
+      };
+
+      // Handle recording stopped
+      mediaRecorder.onstop = () => {
+        console.log(
+          "🎙️ Session recording stopped, chunks:",
+          recordingChunksRef.current.length
+        );
+      };
+
+      // Start recording (gather every 1 second)
+      recordingStartTimeRef.current = performance.now();
+      mediaRecorder.start(1000);
+      setIsSessionRecording(true);
+      console.log(
+        "🎙️ Session recording started (mime:",
+        mediaRecorder.mimeType || mimeType || "default",
+        ")"
+      );
+    } catch (error: any) {
+      console.error("Failed to start session recording:", error);
+      swalConfig.toast.error("Không thể bắt đầu ghi âm phiên");
+    }
+  };
+
+  // Stop recording and upload to Azure
+  const stopAndUploadRecording = async (): Promise<void> => {
+    return new Promise(async (resolve) => {
+      if (!mediaRecorderRef.current || !isSessionRecording) {
+        console.log("⏭️ No active recording to upload");
+        resolve();
+        return;
+      }
+
+      try {
+        setIsUploadingRecording(true);
+
+        // Stop MediaRecorder
+        if (mediaRecorderRef.current.state === "recording") {
+          mediaRecorderRef.current.stop();
+        }
+
+        // Wait for final chunks to be collected
+        await new Promise((r) => setTimeout(r, 500));
+
+        // Stop stream tracks
+        recordingStreamRef.current?.getTracks().forEach((t) => t.stop());
+
+        // Calculate duration
+        const durationSec = Math.round(
+          (performance.now() - recordingStartTimeRef.current) / 1000
+        );
+
+        // Create blob from chunks
+        const mimeType = mediaRecorderRef.current.mimeType || "audio/webm";
+        const recordedBlob = new Blob(recordingChunksRef.current, {
+          type: mimeType,
+        });
+        const sizeBytes = recordedBlob.size;
+
+        console.log(
+          "🎙️ Recording completed:",
+          (sizeBytes / 1024).toFixed(1),
+          "KB, duration:",
+          durationSec,
+          "s"
+        );
+
+        if (sizeBytes === 0) {
+          console.warn("⚠️ Recording is empty, skipping upload");
+          setIsSessionRecording(false);
+          setIsUploadingRecording(false);
+          resolve();
+          return;
+        }
+
+        // Get user ID
+        let userId = "unknown";
+        try {
+          const storedUser = localStorage.getItem("user");
+          if (storedUser) {
+            const parsedUser = JSON.parse(storedUser);
+            userId = parsedUser.id || "unknown";
+          }
+        } catch {}
+
+        // Step 1: Begin upload to get SAS URL
+        console.log("📤 Begin upload (mime:", mimeType, ")");
+        const beginRes = await fetch(
+          `${RECORDING_API_BASE}/api/recordings/begin-upload`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId, mimeType }),
+          }
+        );
+
+        if (!beginRes.ok) {
+          throw new Error(`begin-upload failed: ${beginRes.status}`);
+        }
+
+        const beginData = await beginRes.json();
+        const uploadRecordingId = beginData.data?.recordingId;
+        const uploadUrl = beginData.data?.uploadUrl;
+        setRecordingId(uploadRecordingId);
+        console.log("✅ SAS obtained. RecordingId:", uploadRecordingId);
+
+        // Step 2: PUT blob to Azure SAS URL
+        console.log("📤 Uploading to Azure...");
+        const putRes = await fetch(uploadUrl, {
+          method: "PUT",
+          headers: {
+            "x-ms-blob-type": "BlockBlob",
+            "x-ms-version": "2021-08-06",
+            "Content-Type": mimeType,
+          },
+          body: recordedBlob,
+        });
+
+        if (!putRes.ok) {
+          throw new Error(`Blob PUT failed: ${putRes.status}`);
+        }
+        console.log("✅ Upload completed");
+
+        // Step 3: Finalize recording
+        console.log(
+          "📤 Finalizing... (durationSec:",
+          durationSec,
+          ", sizeBytes:",
+          sizeBytes,
+          ", transcriptId:",
+          existingTranscriptId,
+          ")"
+        );
+        const finRes = await fetch(
+          `${RECORDING_API_BASE}/api/recordings/${uploadRecordingId}/finalize`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              durationSec,
+              sizeBytes,
+              notes: `Recording for defense session ${id}`,
+              transcriptId: existingTranscriptId || 0,
+            }),
+          }
+        );
+
+        if (!finRes.ok && finRes.status !== 204) {
+          throw new Error(`finalize failed: ${finRes.status}`);
+        }
+        console.log("✅ Recording finalized successfully");
+        swalConfig.toast.success("Đã lưu bản ghi âm phiên bảo vệ");
+
+        // Cleanup
+        setIsSessionRecording(false);
+        mediaRecorderRef.current = null;
+        recordingChunksRef.current = [];
+        resolve();
+      } catch (error: any) {
+        console.error("❌ Recording upload error:", error);
+        swalConfig.toast.error("Không thể upload bản ghi âm: " + error.message);
+        setIsSessionRecording(false);
+        resolve();
+      } finally {
+        setIsUploadingRecording(false);
+      }
+    });
   };
 
   const handleToggleQuestion = async () => {
@@ -669,6 +926,13 @@ export default function TranscriptPage({
 
       setHasUnsavedChanges(false);
       swalConfig.success("Thành công", "Đã lưu transcript vào Database!");
+
+      // Upload recording to Azure (if recording was active)
+      if (isSessionRecording) {
+        swalConfig.loading("Đang upload bản ghi âm...", "Vui lòng chờ");
+        await stopAndUploadRecording();
+        closeSwal();
+      }
 
       // Broadcast session:end để member biết phiên đã kết thúc
       if (hasStartedSession) {
@@ -827,6 +1091,13 @@ export default function TranscriptPage({
               ) : lastSavedAt ? (
                 <span className="text-xs text-green-600">✓</span>
               ) : null}
+              {/* Recording status indicator */}
+              {isSessionRecording && (
+                <span className="flex items-center gap-1 text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded animate-pulse">
+                  <span className="w-2 h-2 bg-red-500 rounded-full"></span>
+                  REC
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-2">
               {/* Add entry button */}
@@ -1080,7 +1351,7 @@ export default function TranscriptPage({
           </span>
           <div className="h-px flex-1 bg-gray-200"></div>
         </div>
-        <MeetingMinutesForm sessionData={session} />
+        <MeetingMinutesForm defenseId={id} />
       </div>
 
       <p className="text-center text-xs text-gray-400 pb-4">

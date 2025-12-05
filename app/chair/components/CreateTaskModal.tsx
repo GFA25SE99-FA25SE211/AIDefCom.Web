@@ -61,9 +61,12 @@ export default function CreateTaskModal({
       });
 
       onClose();
-      await swalConfig.success(
-        "Task created",
-        "The grading task has been created successfully."
+      swalConfig.success(
+        "Tạo Task Thành Công!",
+        `Task "${formData.title}" đã được tạo và giao cho ${
+          lecturers.find((l) => l.id === formData.assignedToId)?.fullName ||
+          "thành viên"
+        }.`
       );
     } catch (err: any) {
       console.error("Failed to create task:", err);

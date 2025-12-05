@@ -1,4 +1,4 @@
-import Swal from 'sweetalert2';
+import Swal from "sweetalert2";
 
 // Custom SweetAlert2 configurations for consistent styling
 export const swalConfig = {
@@ -7,18 +7,17 @@ export const swalConfig = {
     return Swal.fire({
       title,
       text,
-      icon: 'success',
-      confirmButtonText: 'OK',
+      icon: "success",
+      confirmButtonText: "OK",
       customClass: {
-        confirmButton: 'bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500',
-        popup: 'rounded-lg shadow-xl',
-        title: 'text-gray-800 font-semibold',
-        htmlContainer: 'text-gray-600'
+        confirmButton:
+          "bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500",
+        popup: "rounded-lg shadow-xl",
+        title: "text-gray-800 font-semibold",
+        htmlContainer: "text-gray-600",
       },
       buttonsStyling: false,
-      timer: 3000,
-      timerProgressBar: true,
-      showCloseButton: true
+      showCloseButton: true,
     });
   },
 
@@ -27,16 +26,17 @@ export const swalConfig = {
     return Swal.fire({
       title,
       text,
-      icon: 'error',
-      confirmButtonText: 'OK',
+      icon: "error",
+      confirmButtonText: "OK",
       customClass: {
-        confirmButton: 'bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500',
-        popup: 'rounded-lg shadow-xl',
-        title: 'text-gray-800 font-semibold',
-        htmlContainer: 'text-gray-600'
+        confirmButton:
+          "bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500",
+        popup: "rounded-lg shadow-xl",
+        title: "text-gray-800 font-semibold",
+        htmlContainer: "text-gray-600",
       },
       buttonsStyling: false,
-      showCloseButton: true
+      showCloseButton: true,
     });
   },
 
@@ -45,16 +45,17 @@ export const swalConfig = {
     return Swal.fire({
       title,
       text,
-      icon: 'warning',
-      confirmButtonText: 'OK',
+      icon: "warning",
+      confirmButtonText: "OK",
       customClass: {
-        confirmButton: 'bg-yellow-600 text-white px-4 py-2 rounded-md hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-yellow-500',
-        popup: 'rounded-lg shadow-xl',
-        title: 'text-gray-800 font-semibold',
-        htmlContainer: 'text-gray-600'
+        confirmButton:
+          "bg-yellow-600 text-white px-4 py-2 rounded-md hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-yellow-500",
+        popup: "rounded-lg shadow-xl",
+        title: "text-gray-800 font-semibold",
+        htmlContainer: "text-gray-600",
       },
       buttonsStyling: false,
-      showCloseButton: true
+      showCloseButton: true,
     });
   },
 
@@ -63,44 +64,49 @@ export const swalConfig = {
     return Swal.fire({
       title,
       text,
-      icon: 'info',
-      confirmButtonText: 'OK',
+      icon: "info",
+      confirmButtonText: "OK",
       customClass: {
-        confirmButton: 'bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500',
-        popup: 'rounded-lg shadow-xl',
-        title: 'text-gray-800 font-semibold',
-        htmlContainer: 'text-gray-600'
+        confirmButton:
+          "bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500",
+        popup: "rounded-lg shadow-xl",
+        title: "text-gray-800 font-semibold",
+        htmlContainer: "text-gray-600",
       },
       buttonsStyling: false,
-      timer: 3000,
-      timerProgressBar: true,
-      showCloseButton: true
+      showCloseButton: true,
     });
   },
 
   // Confirmation dialog
-  confirm: (title: string, text?: string, confirmText: string = 'Yes, delete it!') => {
+  confirm: (
+    title: string,
+    text?: string,
+    confirmText: string = "Yes, delete it!"
+  ) => {
     return Swal.fire({
       title,
       text,
-      icon: 'warning',
+      icon: "warning",
       showCancelButton: true,
       confirmButtonText: confirmText,
-      cancelButtonText: 'Cancel',
+      cancelButtonText: "Cancel",
       customClass: {
-        confirmButton: 'bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 mr-2',
-        cancelButton: 'bg-gray-300 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-500',
-        popup: 'rounded-lg shadow-xl',
-        title: 'text-gray-800 font-semibold',
-        htmlContainer: 'text-gray-600'
+        confirmButton:
+          "bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 mr-2",
+        cancelButton:
+          "bg-gray-300 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-500",
+        popup: "rounded-lg shadow-xl",
+        title: "text-gray-800 font-semibold",
+        htmlContainer: "text-gray-600",
       },
       buttonsStyling: false,
-      reverseButtons: true
+      reverseButtons: true,
     });
   },
 
   // Loading notification
-  loading: (title: string = 'Loading...', text?: string) => {
+  loading: (title: string = "Loading...", text?: string) => {
     return Swal.fire({
       title,
       text,
@@ -108,13 +114,13 @@ export const swalConfig = {
       allowEscapeKey: false,
       showConfirmButton: false,
       customClass: {
-        popup: 'rounded-lg shadow-xl',
-        title: 'text-gray-800 font-semibold',
-        htmlContainer: 'text-gray-600'
+        popup: "rounded-lg shadow-xl",
+        title: "text-gray-800 font-semibold",
+        htmlContainer: "text-gray-600",
       },
       didOpen: () => {
         Swal.showLoading();
-      }
+      },
     });
   },
 
@@ -123,53 +129,53 @@ export const swalConfig = {
     success: (title: string) => {
       return Swal.fire({
         toast: true,
-        position: 'top-end',
-        icon: 'success',
+        position: "top-end",
+        icon: "success",
         title,
         showConfirmButton: false,
         timer: 3000,
         timerProgressBar: true,
         customClass: {
-          popup: 'colored-toast'
-        }
+          popup: "colored-toast",
+        },
       });
     },
-    
+
     error: (title: string) => {
       return Swal.fire({
         toast: true,
-        position: 'top-end',
-        icon: 'error',
+        position: "top-end",
+        icon: "error",
         title,
         showConfirmButton: false,
         timer: 4000,
         timerProgressBar: true,
         customClass: {
-          popup: 'colored-toast'
-        }
+          popup: "colored-toast",
+        },
       });
     },
 
     info: (title: string) => {
       return Swal.fire({
         toast: true,
-        position: 'top-end',
-        icon: 'info',
+        position: "top-end",
+        icon: "info",
         title,
         showConfirmButton: false,
         timer: 3000,
         timerProgressBar: true,
         customClass: {
-          popup: 'colored-toast'
-        }
+          popup: "colored-toast",
+        },
       });
-    }
+    },
   },
 
   // Close any open Swal dialog
   closeSwal: () => {
     Swal.close();
-  }
+  },
 };
 
 // Standalone close function for direct import
