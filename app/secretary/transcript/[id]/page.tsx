@@ -527,7 +527,7 @@ export default function TranscriptPage({
   // Backend automatically identifies speaker, so we don't need to send speaker param
   // REMOVING defense_session_id to match Python script behavior (which works).
   //const WS_URL = `ws://localhost:8000/ws/stt?defense_session_id=${id}`;
-  const WS_URL = `wss://fastapi-service.happyforest-7c6ec975.southeastasia.azurecontainerapps.io/ws/stt?defense_session_id=${id}`;
+  const WS_URL = `wss://ai-service.thankfultree-4b6bfec6.southeastasia.azurecontainerapps.io/ws/stt?defense_session_id=${id}`;
 
   const {
     isRecording,

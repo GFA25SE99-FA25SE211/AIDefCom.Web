@@ -382,7 +382,7 @@ export default function VoiceEnrollPage() {
 
       // Gọi API DELETE để reset enrollment
       const response = await fetch(
-        `https://fastapi-service.happyforest-7c6ec975.southeastasia.azurecontainerapps.io/voice/users/${user.id}/enrollment`,
+        `https://ai-service.thankfultree-4b6bfec6.southeastasia.azurecontainerapps.io/voice/users/${user.id}/enrollment`,
         {
           method: "DELETE",
           headers: { "Content-Type": "application/json" },

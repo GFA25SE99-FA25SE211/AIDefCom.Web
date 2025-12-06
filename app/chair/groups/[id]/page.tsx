@@ -170,7 +170,7 @@ export default function GroupDetailsPage() {
 
   // WebSocket URL - kết nối cùng session với thư ký
   const WS_URL = defenseSession?.id
-    ? `wss://fastapi-service.happyforest-7c6ec975.southeastasia.azurecontainerapps.io/ws/stt?defense_session_id=${defenseSession.id}&role=chair`
+    ? `wss://ai-service.thankfultree-4b6bfec6.southeastasia.azurecontainerapps.io/ws/stt?defense_session_id=${defenseSession.id}&role=chair`
     : null;
 
   const {
@@ -304,36 +304,54 @@ export default function GroupDetailsPage() {
           // Ưu tiên: Lấy rubrics từ API theo lecturer và session
           if (currentUid) {
             try {
-              console.log("🔍 Attempting to load rubrics from lecturer/session API:", {
-                lecturerId: currentUid,
-                sessionId: session.id
-              });
-              
-              const rubricsRes = await projectTasksApi.getRubricsByLecturerAndSession(
-                currentUid,
-                session.id
+              console.log(
+                "🔍 Attempting to load rubrics from lecturer/session API:",
+                {
+                  lecturerId: currentUid,
+                  sessionId: session.id,
+                }
               );
-              
-              if (rubricsRes.data && Array.isArray(rubricsRes.data) && rubricsRes.data.length > 0) {
+
+              const rubricsRes =
+                await projectTasksApi.getRubricsByLecturerAndSession(
+                  currentUid,
+                  session.id
+                );
+
+              if (
+                rubricsRes.data &&
+                Array.isArray(rubricsRes.data) &&
+                rubricsRes.data.length > 0
+              ) {
                 // Lấy tất cả rubrics để map với tên
-                const allRubricsRes = await rubricsApi.getAll().catch(() => ({ data: [] }));
-                const allRubrics = Array.isArray(allRubricsRes.data) ? allRubricsRes.data : [];
-                
+                const allRubricsRes = await rubricsApi
+                  .getAll()
+                  .catch(() => ({ data: [] }));
+                const allRubrics = Array.isArray(allRubricsRes.data)
+                  ? allRubricsRes.data
+                  : [];
+
                 // Map tên rubrics với full rubric objects
                 const rubricsList = rubricsRes.data
                   .map((rubricName: string) => {
                     const rubric = allRubrics.find(
-                      (r: any) => 
-                        r.rubricName?.toLowerCase() === rubricName.toLowerCase() ||
+                      (r: any) =>
+                        r.rubricName?.toLowerCase() ===
+                          rubricName.toLowerCase() ||
                         r.name?.toLowerCase() === rubricName.toLowerCase()
                     );
                     return rubric;
                   })
-                  .filter((r: any): r is RubricDto => r !== null && r !== undefined);
-                
+                  .filter(
+                    (r: any): r is RubricDto => r !== null && r !== undefined
+                  );
+
                 if (rubricsList.length > 0) {
                   setRubrics(rubricsList);
-                  console.log("✅ Rubrics loaded from lecturer/session API:", rubricsList.length);
+                  console.log(
+                    "✅ Rubrics loaded from lecturer/session API:",
+                    rubricsList.length
+                  );
                 } else {
                   // Fallback to getAll
                   const fallbackRes = await rubricsApi.getAll();
@@ -350,11 +368,19 @@ export default function GroupDetailsPage() {
               }
             } catch (error: any) {
               // Nếu là 404 hoặc endpoint chưa có, fallback về logic cũ
-              const is404 = error?.status === 404 || error?.message?.includes('404') || error?.message?.includes('not found');
+              const is404 =
+                error?.status === 404 ||
+                error?.message?.includes("404") ||
+                error?.message?.includes("not found");
               if (is404) {
-                console.warn("⚠️ Lecturer/session API endpoint not found (404), falling back to getAll");
+                console.warn(
+                  "⚠️ Lecturer/session API endpoint not found (404), falling back to getAll"
+                );
               } else {
-                console.error("❌ Error fetching rubrics from lecturer/session API:", error);
+                console.error(
+                  "❌ Error fetching rubrics from lecturer/session API:",
+                  error
+                );
               }
               // Fallback to getAll
               try {

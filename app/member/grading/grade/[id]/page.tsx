@@ -47,9 +47,15 @@ type NotesVisibility = { [key: string]: boolean };
 const allGroupsData: AllGroupsData = {};
 
 // Chuẩn hóa dữ liệu sinh viên fallback (tránh thiếu field)
-const buildFallbackStudents = (students: any[], rubricCount: number): StudentScore[] =>
+const buildFallbackStudents = (
+  students: any[],
+  rubricCount: number
+): StudentScore[] =>
   students.map((s, index) => {
-    const scores = Array.from({ length: rubricCount }, (_, i) => s.scores?.[i] ?? 0);
+    const scores = Array.from(
+      { length: rubricCount },
+      (_, i) => s.scores?.[i] ?? 0
+    );
     const criterionComments = Array.from(
       { length: rubricCount },
       (_, i) => s.criterionComments?.[i] ?? ""
@@ -230,7 +236,7 @@ export default function GradeGroupPage() {
 
   // WebSocket URL - kết nối cùng session với thư ký
   const WS_URL = sessionId
-    ? `wss://fastapi-service.happyforest-7c6ec975.southeastasia.azurecontainerapps.io/ws/stt?defense_session_id=${sessionId}&role=member`
+    ? `wss://ai-service.thankfultree-4b6bfec6.southeastasia.azurecontainerapps.io/ws/stt?defense_session_id=${sessionId}&role=member`
     : null;
 
   const {
@@ -314,9 +320,7 @@ export default function GradeGroupPage() {
         const sessions = sessionsRes.data || [];
 
         // Find session for this group (ưu tiên sessionId trên URL nếu có)
-        const urlSessionIdNumber = urlSessionId
-          ? parseInt(urlSessionId)
-          : null;
+        const urlSessionIdNumber = urlSessionId ? parseInt(urlSessionId) : null;
         const groupSession = urlSessionIdNumber
           ? sessions.find(
               (s: any) => s.groupId === groupId && s.id === urlSessionIdNumber
@@ -353,53 +357,81 @@ export default function GradeGroupPage() {
         // Ưu tiên 1: Lấy rubrics từ API theo lecturer và session
         if (groupSession && userId) {
           try {
-            console.log("🔍 Attempting to load rubrics from lecturer/session API:", {
-              lecturerId: userId,
-              sessionId: groupSession.id
-            });
-            
-            // Gọi API mới để lấy danh sách tên rubrics
-            const rubricsRes = await projectTasksApi.getRubricsByLecturerAndSession(
-              userId,
-              groupSession.id
+            console.log(
+              "🔍 Attempting to load rubrics from lecturer/session API:",
+              {
+                lecturerId: userId,
+                sessionId: groupSession.id,
+              }
             );
-            
+
+            // Gọi API mới để lấy danh sách tên rubrics
+            const rubricsRes =
+              await projectTasksApi.getRubricsByLecturerAndSession(
+                userId,
+                groupSession.id
+              );
+
             console.log("📋 Rubrics API response:", {
               hasData: !!rubricsRes.data,
-              dataLength: Array.isArray(rubricsRes.data) ? rubricsRes.data.length : 0,
-              rubricNames: rubricsRes.data
+              dataLength: Array.isArray(rubricsRes.data)
+                ? rubricsRes.data.length
+                : 0,
+              rubricNames: rubricsRes.data,
             });
-            
-            if (rubricsRes.data && Array.isArray(rubricsRes.data) && rubricsRes.data.length > 0) {
+
+            if (
+              rubricsRes.data &&
+              Array.isArray(rubricsRes.data) &&
+              rubricsRes.data.length > 0
+            ) {
               // Lấy tất cả rubrics để map với tên
-              const allRubricsRes = await rubricsApi.getAll().catch(() => ({ data: [] }));
-              const allRubrics = Array.isArray(allRubricsRes.data) ? allRubricsRes.data : [];
-              
+              const allRubricsRes = await rubricsApi
+                .getAll()
+                .catch(() => ({ data: [] }));
+              const allRubrics = Array.isArray(allRubricsRes.data)
+                ? allRubricsRes.data
+                : [];
+
               // Map tên rubrics với full rubric objects, giữ nguyên thứ tự từ API
               rubricsList = rubricsRes.data
                 .map((rubricName: string) => {
                   // Tìm rubric theo tên (case-insensitive)
                   const rubric = allRubrics.find(
-                    (r: any) => 
-                      r.rubricName?.toLowerCase() === rubricName.toLowerCase() ||
+                    (r: any) =>
+                      r.rubricName?.toLowerCase() ===
+                        rubricName.toLowerCase() ||
                       r.name?.toLowerCase() === rubricName.toLowerCase()
                   );
                   return rubric;
                 })
                 .filter((r: any): r is any => r !== null && r !== undefined);
-              
+
               setRubrics(rubricsList);
-              console.log("✅ Rubrics loaded from lecturer/session API:", rubricsList.length, "rubrics:", rubricsList);
+              console.log(
+                "✅ Rubrics loaded from lecturer/session API:",
+                rubricsList.length,
+                "rubrics:",
+                rubricsList
+              );
             } else {
               console.warn("⚠️ No rubrics found from lecturer/session API");
             }
           } catch (error: any) {
             // Nếu là 404 hoặc endpoint chưa có, fallback về logic cũ
-            const is404 = error?.status === 404 || error?.message?.includes('404') || error?.message?.includes('not found');
+            const is404 =
+              error?.status === 404 ||
+              error?.message?.includes("404") ||
+              error?.message?.includes("not found");
             if (is404) {
-              console.warn("⚠️ Lecturer/session API endpoint not found (404), falling back to old logic");
+              console.warn(
+                "⚠️ Lecturer/session API endpoint not found (404), falling back to old logic"
+              );
             } else {
-              console.error("❌ Error fetching rubrics from lecturer/session API:", error);
+              console.error(
+                "❌ Error fetching rubrics from lecturer/session API:",
+                error
+              );
             }
             // Continue to fallback logic below
           }
@@ -408,30 +440,45 @@ export default function GradeGroupPage() {
             hasSession: !!groupSession,
             hasUserId: !!userId,
             sessionId: groupSession?.id,
-            userId: userId
+            userId: userId,
           });
         }
 
         // Fallback: Lấy rubrics theo majorId nếu chưa có từ project tasks
         if (rubricsList.length === 0 && group?.majorId) {
           try {
-            console.log("🔍 Fallback: Loading rubrics from majorId:", group.majorId);
-            const majorRubricsRes = await majorRubricsApi.getByMajorId(group.majorId);
+            console.log(
+              "🔍 Fallback: Loading rubrics from majorId:",
+              group.majorId
+            );
+            const majorRubricsRes = await majorRubricsApi.getByMajorId(
+              group.majorId
+            );
             console.log("📋 Major rubrics response:", {
               hasData: !!majorRubricsRes.data,
-              dataLength: Array.isArray(majorRubricsRes.data) ? majorRubricsRes.data.length : 0,
-              data: majorRubricsRes.data
+              dataLength: Array.isArray(majorRubricsRes.data)
+                ? majorRubricsRes.data.length
+                : 0,
+              data: majorRubricsRes.data,
             });
-            
-            if (majorRubricsRes.data && Array.isArray(majorRubricsRes.data) && majorRubricsRes.data.length > 0) {
+
+            if (
+              majorRubricsRes.data &&
+              Array.isArray(majorRubricsRes.data) &&
+              majorRubricsRes.data.length > 0
+            ) {
               // Backend trả về MajorRubricReadDto có RubricId và RubricName, không có full Rubric object
               // Extract unique rubricIds từ major-rubrics
-              const rubricIds = [...new Set(
-                majorRubricsRes.data
-                  .map((mr: any) => mr.rubricId)
-                  .filter((id: any) => id !== null && id !== undefined && id > 0)
-              )];
-              
+              const rubricIds = [
+                ...new Set(
+                  majorRubricsRes.data
+                    .map((mr: any) => mr.rubricId)
+                    .filter(
+                      (id: any) => id !== null && id !== undefined && id > 0
+                    )
+                ),
+              ];
+
               if (rubricIds.length > 0) {
                 // Lấy full rubric info từ các rubricIds
                 const rubricPromises = rubricIds.map((rubricId: number) =>
@@ -441,19 +488,28 @@ export default function GradeGroupPage() {
                   })
                 );
                 const rubricResults = await Promise.all(rubricPromises);
-                
+
                 // Filter và map rubrics
                 rubricsList = rubricResults
                   .map((res: any) => res.data)
                   .filter((r: any): r is any => r !== null && r !== undefined);
-                
+
                 setRubrics(rubricsList);
-                console.log("✅ Rubrics loaded from major:", rubricsList.length, "rubrics:", rubricsList);
+                console.log(
+                  "✅ Rubrics loaded from major:",
+                  rubricsList.length,
+                  "rubrics:",
+                  rubricsList
+                );
               } else {
-                console.warn("⚠️ No valid rubricIds found in major-rubrics response");
+                console.warn(
+                  "⚠️ No valid rubricIds found in major-rubrics response"
+                );
               }
             } else {
-              console.warn("⚠️ Major rubrics response is not an array or empty");
+              console.warn(
+                "⚠️ Major rubrics response is not an array or empty"
+              );
             }
           } catch (error) {
             console.error("❌ Error fetching rubrics by major:", error);
@@ -461,13 +517,15 @@ export default function GradeGroupPage() {
         } else if (rubricsList.length === 0) {
           console.warn("⚠️ Cannot load rubrics from major - no majorId:", {
             hasGroup: !!group,
-            majorId: group?.majorId
+            majorId: group?.majorId,
           });
         }
 
         // Nếu vẫn không có rubrics, để trống (sẽ dùng default criteria)
         if (rubricsList.length === 0) {
-          console.warn("⚠️ No rubrics found for group/session, will use default criteria");
+          console.warn(
+            "⚠️ No rubrics found for group/session, will use default criteria"
+          );
           setRubrics([]);
         } else {
           console.log("✅ Final rubrics list:", rubricsList.length, "items");
@@ -502,7 +560,8 @@ export default function GradeGroupPage() {
                 : [];
 
               // Create scores array based on rubrics (fallback to 5 if no rubrics)
-              const rubricCount = rubricsList.length > 0 ? rubricsList.length : 5;
+              const rubricCount =
+                rubricsList.length > 0 ? rubricsList.length : 5;
               const scoresArray = new Array(rubricCount).fill(0);
               const scoreIds = new Array(rubricCount).fill(0);
               const commentsArray = new Array(rubricCount).fill("");
@@ -552,29 +611,33 @@ export default function GradeGroupPage() {
           // Fallback: tạo empty groupData hoặc từ students đã fetch
           const rubricCountFallback =
             rubricsList.length > 0 ? rubricsList.length : criteria.length;
-          const normalizedStudents = students.length > 0
-            ? await Promise.all(
-                students.map(async (s: StudentDto, index: number) => {
-                  const rawRole = (s as any).groupRole || (s as any).GroupRole;
-                  const normalizedRole = rawRole
-                    ? rawRole.toLowerCase().includes("leader")
+          const normalizedStudents =
+            students.length > 0
+              ? await Promise.all(
+                  students.map(async (s: StudentDto, index: number) => {
+                    const rawRole =
+                      (s as any).groupRole || (s as any).GroupRole;
+                    const normalizedRole = rawRole
+                      ? rawRole.toLowerCase().includes("leader")
+                        ? "Leader"
+                        : "Member"
+                      : index === 0
                       ? "Leader"
-                      : "Member"
-                    : index === 0
-                    ? "Leader"
-                    : "Member";
-                  return {
-                    id: s.id,
-                    name: s.fullName || s.userName || "Unknown",
-                    role: normalizedRole,
-                    scores: new Array(rubricCountFallback).fill(0),
-                    criterionComments: new Array(rubricCountFallback).fill(""),
-                    note: "",
-                    existingScoreIds: new Array(rubricCountFallback).fill(0),
-                  };
-                })
-              )
-            : buildFallbackStudents([], rubricCountFallback);
+                      : "Member";
+                    return {
+                      id: s.id,
+                      name: s.fullName || s.userName || "Unknown",
+                      role: normalizedRole,
+                      scores: new Array(rubricCountFallback).fill(0),
+                      criterionComments: new Array(rubricCountFallback).fill(
+                        ""
+                      ),
+                      note: "",
+                      existingScoreIds: new Array(rubricCountFallback).fill(0),
+                    };
+                  })
+                )
+              : buildFallbackStudents([], rubricCountFallback);
           setGroupData({
             name: `Group ${groupId}`,
             project: "No project title",
@@ -586,7 +649,10 @@ export default function GradeGroupPage() {
         console.error("Error fetching group data:", error);
         const rubricCountFallback =
           rubricsList.length > 0 ? rubricsList.length : criteria.length;
-        const normalizedStudents = buildFallbackStudents([], rubricCountFallback);
+        const normalizedStudents = buildFallbackStudents(
+          [],
+          rubricCountFallback
+        );
         setGroupData({
           name: `Group ${groupId}`,
           project: "No project title",
@@ -1059,7 +1125,14 @@ export default function GradeGroupPage() {
 
                         {notesVisibility[student.id] && (
                           <tr>
-                            <td colSpan={(rubrics.length > 0 ? rubrics.length : criteria.length) + 3} className="py-3">
+                            <td
+                              colSpan={
+                                (rubrics.length > 0
+                                  ? rubrics.length
+                                  : criteria.length) + 3
+                              }
+                              className="py-3"
+                            >
                               <div className="bg-gray-50 border rounded-md p-3">
                                 <textarea
                                   className="w-full p-3 rounded-md bg-white border text-sm"
