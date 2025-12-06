@@ -546,8 +546,7 @@ export default function TranscriptPage({
 
   const handleToggleRecording = async () => {
     if (isRecording) {
-      stopRecording(); // Chỉ tạm dừng mic của thư ký, WebSocket vẫn mở
-      // KHÔNG broadcast mic:disabled - student vẫn có thể nói
+      stopRecording(); // Chỉ tạm dừng mic, WebSocket vẫn mở
       // Pause session recording khi dừng mic
       if (
         mediaRecorderRef.current &&
@@ -559,18 +558,13 @@ export default function TranscriptPage({
     } else {
       setPacketsSent(0);
       await startRecording();
-      // Broadcast session:start cho member biết thư ký đã bắt đầu/resume
+      // Broadcast session:start cho member biết thư ký đã bắt đầu
       if (!hasStartedSession) {
         // Chờ một chút để WS kết nối xong
         setTimeout(() => {
           broadcastSessionStart();
           setHasStartedSession(true);
         }, 500);
-      } else {
-        // Đã bắt đầu session trước đó, resume → gửi lại session:start để mobile app biết có thể tiếp tục
-        setTimeout(() => {
-          broadcastSessionStart();
-        }, 100);
       }
       // Bắt đầu hoặc resume session recording
       if (!isSessionRecording) {
