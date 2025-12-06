@@ -1,25 +1,18 @@
 "use client";
 
 import React, { useEffect, useState, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { Calendar, Clock, Users, ArrowLeft, CheckCircle2, Circle, AlertCircle } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Calendar, Clock, Users } from "lucide-react";
 import { defenseSessionsApi } from "@/lib/api/defense-sessions";
 import { groupsApi } from "@/lib/api/groups";
-import { studentsApi } from "@/lib/api/students";
-import { scoresApi } from "@/lib/api/scores";
-import { authUtils } from "@/lib/utils/auth";
-import type { DefenseSessionDto, GroupDto, StudentDto } from "@/lib/models";
+import type { DefenseSessionDto, GroupDto } from "@/lib/models";
 
 interface SessionCard extends DefenseSessionDto {
   sessionName: string;
   status: "Upcoming" | "Completed" | "In Progress";
-}
-
-interface GroupWithDetails extends GroupDto {
-  members: string;
-  gradingStatus: "Graded" | "Not Graded" | "Partial";
-  gradedStudentsCount: number;
-  totalStudentsCount: number;
+  groupName?: string;
+  projectCode?: string;
+  projectTitle?: string;
 }
 
 function DefenseSessionsContent() {
@@ -36,16 +29,40 @@ function DefenseSessionsContent() {
     const fetchSessions = async () => {
       try {
         setLoading(true);
-        const sessionsRes = await defenseSessionsApi
-          .getAll()
-          .catch(() => ({ code: 500, message: "Failed", data: [] }));
+        
+        // Get current user's lecturerId from localStorage
+        let lecturerId: string | null = null;
+        try {
+          const storedUser = localStorage.getItem("user");
+          if (storedUser) {
+            const parsedUser = JSON.parse(storedUser);
+            lecturerId = parsedUser.id || null;
+          }
+        } catch (err) {
+          console.error("Error parsing user from localStorage:", err);
+        }
+
+        // Fetch sessions by lecturerId if available, otherwise fetch all
+        const sessionsRes = lecturerId
+          ? await defenseSessionsApi
+              .getByLecturerId(lecturerId)
+              .catch(() => ({ code: 500, message: "Failed", data: [] }))
+          : await defenseSessionsApi
+              .getAll()
+              .catch(() => ({ code: 500, message: "Failed", data: [] }));
 
         const sessions = Array.isArray(sessionsRes.data)
           ? sessionsRes.data
           : [];
 
-        const sessionsWithStatus: SessionCard[] = sessions.map(
-          (session: DefenseSessionDto) => {
+        // Fetch groups for all sessions
+        const groupsRes = await groupsApi
+          .getAll(false)
+          .catch(() => ({ code: 500, message: "Failed", data: [] }));
+        const groups = Array.isArray(groupsRes.data) ? groupsRes.data : [];
+
+        const sessionsWithStatus: SessionCard[] = await Promise.all(
+          sessions.map(async (session: DefenseSessionDto) => {
             const sessionDate = new Date(session.defenseDate);
             const now = new Date();
 
@@ -57,12 +74,29 @@ function DefenseSessionsContent() {
               status = "In Progress";
             }
 
+            // Find group for this session
+            let groupName: string | undefined;
+            let projectCode: string | undefined;
+            let projectTitle: string | undefined;
+            
+            if (session.groupId) {
+              const group = groups.find((g: GroupDto) => g.id === session.groupId);
+              if (group) {
+                groupName = getGroupDisplayName(group);
+                projectCode = group.projectCode;
+                projectTitle = getProjectTitle(group);
+              }
+            }
+
             return {
               ...session,
               sessionName: `Defense Session ${session.id}`,
               status,
+              groupName,
+              projectCode,
+              projectTitle,
             };
-          }
+          })
         );
 
         setSessions(sessionsWithStatus);
@@ -82,15 +116,49 @@ function DefenseSessionsContent() {
       const sessionRes = await defenseSessionsApi.getById(sessionId);
       const session = sessionRes.data;
 
-      if (session && session.groupId) {
-        // Điều hướng thẳng tới trang chấm điểm của group đó
-        router.push(
-          `/member/grading/grade/${session.groupId}?sessionId=${sessionId}`
-        );
-      } else {
+      if (!session || !session.groupId) {
         // Nếu không có groupId thì rơi về trang groups-to-grade để xử lý tay
         router.push(`/member/groups-to-grade?sessionId=${sessionId}`);
+        return;
       }
+
+      // Get current user from localStorage
+      const storedUser = localStorage.getItem("user");
+      if (!storedUser) {
+        router.push(`/member/groups-to-grade?sessionId=${sessionId}`);
+        return;
+      }
+
+      const parsedUser = JSON.parse(storedUser);
+      const currentUserId = parsedUser.id;
+
+      // Check role in session (similar to SessionCard in home)
+      try {
+        const lecturersRes = await defenseSessionsApi.getUsersBySessionId(sessionId);
+        if (lecturersRes.data) {
+          const currentUserInSession = lecturersRes.data.find(
+            (user: any) => 
+              String(user.id).toLowerCase() === String(currentUserId).toLowerCase()
+          );
+
+          if (currentUserInSession && currentUserInSession.role) {
+            const roleInSession = currentUserInSession.role.toLowerCase();
+            
+            // If teacher is member in session, route to grading view (like grade section in home)
+            if (roleInSession === "member") {
+              router.push(`/member/grading/view/${session.groupId}?sessionId=${sessionId}`);
+              return;
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Failed to check session role:", err);
+      }
+
+      // Fallback: If not member or role check failed, use default routing
+      router.push(
+        `/member/grading/grade/${session.groupId}?sessionId=${sessionId}`
+      );
     } catch (error) {
       console.error("Error getting session details:", error);
       router.push(`/member/groups-to-grade?sessionId=${sessionId}`);
@@ -143,9 +211,9 @@ function DefenseSessionsContent() {
             <div
               key={session.id}
               onClick={() => handleSessionClick(session.id)}
-              className="bg-white rounded-xl shadow-sm border hover:shadow-md transition-shadow cursor-pointer"
+              className="bg-white rounded-xl shadow-sm border hover:shadow-md transition-shadow cursor-pointer flex flex-col"
             >
-              <div className="p-6">
+              <div className="p-6 flex flex-col flex-grow">
                 {/* Status Badge */}
                 <div className="flex justify-between items-start mb-4">
                   <span
@@ -162,8 +230,28 @@ function DefenseSessionsContent() {
                   {session.sessionName || `Defense Session ${session.id}`}
                 </h3>
 
+                {/* Project Code / Group Code */}
+                {session.projectCode && (
+                  <div className="mb-2">
+                    <p className="text-sm font-medium text-gray-600">
+                      {session.projectCode}
+                    </p>
+                  </div>
+                )}
+
+                {/* Project Title - Fixed height to ensure alignment */}
+                <div className="mb-4 min-h-[4.5rem] flex-grow">
+                  {session.projectTitle ? (
+                    <p className="text-sm text-gray-700 line-clamp-3 leading-relaxed">
+                      {session.projectTitle}
+                    </p>
+                  ) : (
+                    <p className="text-sm text-gray-400 italic">No project title</p>
+                  )}
+                </div>
+
                 {/* Session Details */}
-                <div className="space-y-2 text-sm text-gray-600">
+                <div className="space-y-2 text-sm text-gray-600 mb-4">
                   <div className="flex items-center gap-2">
                     <Calendar className="w-4 h-4" />
                     <span>
@@ -177,8 +265,8 @@ function DefenseSessionsContent() {
                     <div className="flex items-center gap-2">
                       <Clock className="w-4 h-4" />
                       <span>
-                        {session.startTime}
-                        {session.endTime && ` - ${session.endTime}`}
+                        {session.startTime.substring(0, 5)}
+                        {session.endTime && ` - ${session.endTime.substring(0, 5)}`}
                       </span>
                     </div>
                   )}
@@ -191,8 +279,8 @@ function DefenseSessionsContent() {
                   )}
                 </div>
 
-                {/* Action Button */}
-                <div className="mt-4 pt-4 border-t">
+                {/* Action Button - Always at bottom */}
+                <div className="mt-auto pt-4 border-t">
                   <button className="w-full bg-gradient-to-r from-purple-600 to-blue-500 text-white py-2 px-4 rounded-lg text-sm font-medium hover:opacity-90 transition">
                     View Groups
                   </button>

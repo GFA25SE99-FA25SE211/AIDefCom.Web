@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState, useEffect, Suspense } from "react";
+import React, { useState, useEffect, Suspense, useRef } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Save } from "lucide-react";
+import { ArrowLeft, Save, Mic, MicOff, MessageSquare, StopCircle } from "lucide-react";
 import { groupsApi } from "@/lib/api/groups";
 import { studentsApi } from "@/lib/api/students";
 import { memberNotesApi } from "@/lib/api/member-notes";
@@ -12,7 +12,8 @@ import { majorRubricsApi } from "@/lib/api/major-rubrics";
 import { scoresApi, type ScoreReadDto } from "@/lib/api/scores";
 import { defenseSessionsApi } from "@/lib/api/defense-sessions";
 import { projectTasksApi } from "@/lib/api/project-tasks";
-import { swalConfig } from "@/lib/utils/sweetAlert";
+import { swalConfig, closeSwal } from "@/lib/utils/sweetAlert";
+import { useAudioRecorder } from "@/lib/hooks/useAudioRecorder";
 import { authUtils } from "@/lib/utils/auth";
 import Swal from "sweetalert2";
 import type { GroupDto, StudentDto, ScoreCreateDto } from "@/lib/models";
@@ -94,6 +95,15 @@ export default function ViewScorePage() {
   
   // Get sessionId from URL if available
   const urlSessionId = searchParams?.get("sessionId");
+
+  // Mic and session states
+  const [sessionStarted, setSessionStarted] = useState(false); // Thư ký đã bắt đầu phiên chưa
+  const [questionResults, setQuestionResults] = useState<any[]>([]);
+  const [hasQuestionFinalText, setHasQuestionFinalText] = useState(false);
+  const [mySessionId, setMySessionId] = useState<string | null>(null); // Lưu session_id của chính mình
+  const mySessionIdRef = useRef<string | null>(null); // Ref để tránh stale closure
+  const questionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const waitingForQuestionResult = useRef<boolean>(false);
 
   // Xóa session role khi rời khỏi trang
   useEffect(() => {
@@ -422,6 +432,187 @@ export default function ViewScorePage() {
     fetchGroupData();
   }, [groupId]);
 
+  // WebSocket event handler
+  const handleSTTEvent = (msg: any) => {
+    const eventType = msg.type || msg.event;
+
+    if (eventType === "session_started") {
+      // Thư ký đã bắt đầu phiên
+      setSessionStarted(true);
+    } else if (eventType === "session_ended") {
+      // Thư ký đã kết thúc phiên
+      setSessionStarted(false);
+    } else if (eventType === "question_mode_started") {
+      swalConfig.info("Bắt đầu ghi nhận câu hỏi");
+      setHasQuestionFinalText(false);
+    } else if (eventType === "question_mode_result") {
+      if (questionTimeoutRef.current) {
+        clearTimeout(questionTimeoutRef.current);
+        questionTimeoutRef.current = null;
+      }
+      waitingForQuestionResult.current = false;
+      closeSwal();
+      setHasQuestionFinalText(false);
+
+      if (msg.is_duplicate) {
+        swalConfig.warning(
+          "Câu hỏi bị trùng",
+          "Hệ thống đã ghi nhận câu hỏi này trước đó."
+        );
+      } else {
+        setQuestionResults((prev) => [msg, ...prev]);
+        swalConfig.success("Câu hỏi hợp lệ", "Đã ghi nhận câu hỏi mới.");
+      }
+    } else if (eventType === "error") {
+      console.error("STT Error:", msg.message || msg.error);
+      swalConfig.error(
+        "Lỗi STT",
+        msg.message || msg.error || "Đã xảy ra lỗi không xác định"
+      );
+    } else if (eventType === "broadcast_transcript") {
+      // Transcript từ client khác trong cùng session (thư ký hoặc member khác nói)
+      // Bỏ qua nếu broadcast từ chính mình
+      if (
+        msg.source_session_id &&
+        msg.source_session_id === mySessionIdRef.current
+      ) {
+        console.log("🚫 Ignoring broadcast from self");
+        return;
+      }
+      console.log("📢 Broadcast from other client:", msg.speaker, msg.text);
+      // Member có thể hiển thị hoặc bỏ qua tùy nhu cầu
+    } else if (eventType === "broadcast_question_started") {
+      // Người khác (chair/thư ký/member khác) bắt đầu đặt câu hỏi - dùng toast nhẹ
+      if (
+        msg.source_session_id &&
+        msg.source_session_id === mySessionIdRef.current
+      ) {
+        return;
+      }
+      const speakerName = msg.speaker_name || msg.speaker || "Thành viên";
+      swalConfig.toast.info(`${speakerName} đang đặt câu hỏi...`);
+    } else if (eventType === "broadcast_question_processing") {
+      // Người khác kết thúc đặt câu hỏi, đang xử lý - dùng toast nhẹ
+      if (
+        msg.source_session_id &&
+        msg.source_session_id === mySessionIdRef.current
+      ) {
+        return;
+      }
+      const speakerName = msg.speaker_name || msg.speaker || "Thành viên";
+      swalConfig.toast.info(`Đang xử lý câu hỏi từ ${speakerName}...`);
+    } else if (eventType === "broadcast_question_result") {
+      // Kết quả câu hỏi từ người khác
+      if (
+        msg.source_session_id &&
+        msg.source_session_id === mySessionIdRef.current
+      ) {
+        return;
+      }
+      const speakerName = msg.speaker_name || msg.speaker || "Thành viên";
+      const questionText = msg.question_text || "";
+
+      if (msg.is_duplicate) {
+        swalConfig.toast.info(`Câu hỏi từ ${speakerName} bị trùng`);
+      } else {
+        if (questionText) {
+          setQuestionResults((prev) => [
+            { ...msg, from_broadcast: true, speaker: speakerName },
+            ...prev,
+          ]);
+        }
+        swalConfig.toast.success(`Câu hỏi từ ${speakerName} đã được ghi nhận`);
+      }
+    } else if (eventType === "connected") {
+      console.log(
+        "✅ WebSocket connected:",
+        msg.session_id,
+        "room_size:",
+        msg.room_size
+      );
+      // Lưu session_id của mình
+      if (msg.session_id) {
+        setMySessionId(msg.session_id);
+        mySessionIdRef.current = msg.session_id; // Cập nhật ref ngay lập tức
+      }
+      // KHÔNG tự động enable mic chỉ dựa vào room_size
+      // Chỉ enable khi nhận được session_started từ thư ký
+    } else if (eventType === "session_started") {
+      // Thư ký đã bắt đầu ghi âm - cho phép member sử dụng mic
+      console.log("🎤 Session started by secretary - mic enabled");
+      setSessionStarted(true);
+    } else if (eventType === "session_ended") {
+      // Thư ký đã kết thúc phiên
+      console.log("🛑 Session ended by secretary - mic disabled");
+      setSessionStarted(false);
+    }
+  };
+
+  // WebSocket URL - kết nối cùng session với thư ký
+  const WS_URL = sessionId
+    ? `wss://ai-service.thankfultree-4b6bfec6.southeastasia.azurecontainerapps.io/ws/stt?defense_session_id=${sessionId}&role=member`
+    : null;
+
+  const {
+    isRecording,
+    isAsking,
+    wsConnected,
+    startRecording,
+    stopRecording,
+    toggleAsk,
+    stopSession,
+    broadcastQuestionStarted,
+    broadcastQuestionProcessing,
+  } = useAudioRecorder({
+    wsUrl: WS_URL || "",
+    onWsEvent: handleSTTEvent,
+    autoConnect: !!sessionId, // Tự động kết nối WS để nhận session_started từ thư ký
+  });
+
+  const handleToggleRecording = async () => {
+    if (isRecording) {
+      stopRecording(); // Chỉ tạm dừng mic, WebSocket vẫn mở
+    } else {
+      await startRecording();
+    }
+  };
+
+  const handleToggleQuestion = async () => {
+    if (!isAsking) {
+      // Bắt đầu đặt câu hỏi - broadcast cho thư ký biết
+      broadcastQuestionStarted();
+      toggleAsk();
+    } else {
+      if (isRecording) {
+        stopRecording();
+      }
+
+      // Kết thúc đặt câu hỏi - broadcast cho thư ký biết đang xử lý
+      broadcastQuestionProcessing();
+
+      waitingForQuestionResult.current = true;
+      swalConfig.loading(
+        "Đang xử lý câu hỏi...",
+        "Vui lòng chờ hệ thống phân tích câu hỏi"
+      );
+
+      const upgradePopupTimeout = setTimeout(() => {
+        if (waitingForQuestionResult.current) {
+          swalConfig.warning(
+            "Đang xử lý câu hỏi...",
+            "Hệ thống đang phân tích câu hỏi. Bạn có thể tiếp tục buổi bảo vệ, kết quả sẽ hiển thị khi hoàn tất."
+          );
+        }
+      }, 5000);
+
+      if (!questionTimeoutRef.current) {
+        questionTimeoutRef.current = upgradePopupTimeout;
+      }
+
+      toggleAsk();
+    }
+  };
+
   const calculateAverage = (scores: number[]) => {
     const total = scores.reduce((acc, score) => acc + score, 0);
     const avg = total / scores.length;
@@ -593,6 +784,70 @@ export default function ViewScorePage() {
 
             {/* Right section */}
             <div className="flex items-center gap-3 flex-wrap justify-end">
+              {/* Mic Controls */}
+              <div className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg border">
+                {!isRecording ? (
+                  <button
+                    onClick={handleToggleRecording}
+                    disabled={!sessionId || !sessionStarted}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-white text-sm font-medium shadow-sm transition ${
+                      !sessionId || !sessionStarted
+                        ? "bg-gray-400 cursor-not-allowed opacity-50"
+                        : "bg-purple-600 hover:bg-purple-700"
+                    }`}
+                    title={
+                      !sessionStarted
+                        ? "Chờ thư ký bắt đầu phiên"
+                        : "Bắt đầu ghi âm"
+                    }
+                  >
+                    <Mic className="w-4 h-4" />
+                    <span>Start Mic</span>
+                  </button>
+                ) : (
+                  <>
+                    {!isAsking && (
+                      <button
+                        onClick={handleToggleRecording}
+                        className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-500 text-white hover:bg-red-600 text-sm font-medium shadow-sm transition"
+                      >
+                        <MicOff className="w-4 h-4" />
+                        <span>Stop Mic</span>
+                      </button>
+                    )}
+
+                    <button
+                      onClick={handleToggleQuestion}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium shadow-sm transition ${
+                        isAsking
+                          ? "bg-orange-500 text-white hover:bg-orange-600"
+                          : "bg-indigo-500 text-white hover:bg-indigo-600"
+                      }`}
+                    >
+                      {isAsking ? (
+                        <>
+                          <StopCircle className="w-4 h-4" />
+                          <span>Kết thúc câu hỏi</span>
+                        </>
+                      ) : (
+                        <>
+                          <MessageSquare className="w-4 h-4" />
+                          <span>Đặt câu hỏi</span>
+                        </>
+                      )}
+                    </button>
+                  </>
+                )}
+
+                {/* Connection status */}
+                <div
+                  className={`w-2 h-2 rounded-full ${
+                    wsConnected ? "bg-green-500" : "bg-gray-400"
+                  }`}
+                  title={wsConnected ? "Đã kết nối" : "Chưa kết nối"}
+                />
+              </div>
+
               {/* Back to defense sessions list */}
               <Link
                 href={
