@@ -1,9 +1,37 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 
 interface UseAudioRecorderProps {
-  wsUrl: string; // ví dụ: ws://localhost:8000/ws/stt?speaker=Khach&defense_session_id=DEF123
-  onWsEvent?: (msg: any) => void; // nhận event JSON từ server (partial/final/question_mode_result...)
-  autoConnect?: boolean; // Tự động kết nối WS khi load trang (cho member để nhận session_started)
+  wsUrl: string;
+  onWsEvent?: (msg: any) => void;
+  autoConnect?: boolean;
+}
+
+// Resample audio from source sample rate to target sample rate
+function resampleAudio(
+  inputSamples: Float32Array,
+  inputSampleRate: number,
+  outputSampleRate: number
+): Float32Array {
+  if (inputSampleRate === outputSampleRate) {
+    return inputSamples;
+  }
+
+  const ratio = inputSampleRate / outputSampleRate;
+  const outputLength = Math.floor(inputSamples.length / ratio);
+  const output = new Float32Array(outputLength);
+
+  for (let i = 0; i < outputLength; i++) {
+    const srcIndex = i * ratio;
+    const srcIndexFloor = Math.floor(srcIndex);
+    const srcIndexCeil = Math.min(srcIndexFloor + 1, inputSamples.length - 1);
+    const t = srcIndex - srcIndexFloor;
+
+    // Linear interpolation
+    output[i] =
+      inputSamples[srcIndexFloor] * (1 - t) + inputSamples[srcIndexCeil] * t;
+  }
+
+  return output;
 }
 
 export const useAudioRecorder = ({
@@ -12,11 +40,10 @@ export const useAudioRecorder = ({
   autoConnect = false,
 }: UseAudioRecorderProps) => {
   const [isRecording, setIsRecording] = useState(false);
-  const [isAsking, setIsAsking] = useState(false); // chế độ câu hỏi
-  const [wsConnected, setWsConnected] = useState(false); // WebSocket connection status
+  const [isAsking, setIsAsking] = useState(false);
+  const [wsConnected, setWsConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
 
-  // Dùng ref để tránh dependency loop - callback không thay đổi reference
   const onWsEventRef = useRef(onWsEvent);
   useEffect(() => {
     onWsEventRef.current = onWsEvent;
@@ -27,12 +54,9 @@ export const useAudioRecorder = ({
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
 
-  // Flag để tránh reconnect liên tục
   const isConnectingRef = useRef(false);
 
-  // Kết nối WebSocket
   const connectWs = useCallback(() => {
-    // Tránh reconnect nếu đang connecting hoặc đã connected
     if (isConnectingRef.current) {
       return;
     }
@@ -76,12 +100,10 @@ export const useAudioRecorder = ({
       isConnectingRef.current = false;
       wsRef.current = null;
     };
-  }, [wsUrl]); // Chỉ phụ thuộc wsUrl, không phụ thuộc onWsEvent
+  }, [wsUrl]);
 
-  // Tự động kết nối WS khi autoConnect=true (cho member để nhận session_started)
   useEffect(() => {
     if (autoConnect && wsUrl) {
-      // Delay nhỏ để tránh race condition
       const timer = setTimeout(() => {
         connectWs();
       }, 100);
@@ -89,7 +111,6 @@ export const useAudioRecorder = ({
     }
   }, [autoConnect, wsUrl, connectWs]);
 
-  // Cleanup khi unmount
   useEffect(() => {
     return () => {
       if (wsRef.current) {
@@ -104,7 +125,6 @@ export const useAudioRecorder = ({
   const startRecording = useCallback(async () => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
       connectWs();
-      // Đợi WS mở
       await new Promise((resolve) => {
         const check = () => {
           if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN)
@@ -118,44 +138,60 @@ export const useAudioRecorder = ({
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     streamRef.current = stream;
 
+    // DON'T request specific sample rate - let browser use native rate
+    // We will resample to 16kHz ourselves
     const audioContext = new (window.AudioContext ||
-      (window as any).webkitAudioContext)({
-      sampleRate: 16000, // yêu cầu 16kHz nếu có thể (sẽ downsample nếu khác)
-    });
-    // Safari/Chrome có thể suspended ban đầu
+      (window as any).webkitAudioContext)();
+
     if (audioContext.state === "suspended") await audioContext.resume();
     audioContextRef.current = audioContext;
+
+    const actualSampleRate = audioContext.sampleRate;
+    const TARGET_SAMPLE_RATE = 16000;
+
+    console.log(
+      `🎤 Audio: native=${actualSampleRate}Hz, target=${TARGET_SAMPLE_RATE}Hz, ratio=${(
+        actualSampleRate / TARGET_SAMPLE_RATE
+      ).toFixed(2)}`
+    );
 
     const source = audioContext.createMediaStreamSource(stream);
     sourceRef.current = source;
 
-    // Buffer size 4096 (≈256ms @16k), ta vẫn chunk lại thành ~20ms (1600 samples)
     const processor = audioContext.createScriptProcessor(4096, 1, 1);
     processorRef.current = processor;
 
+    // Buffer for resampled audio - target ~20ms chunks at 16kHz = 320 samples = 640 bytes
     let buffer16: Int16Array = new Int16Array(0);
-    const TARGET_SAMPLES = 1600; // ~20ms @16k → 1600 samples → 3200 bytes
+    const TARGET_SAMPLES = 320; // 20ms at 16kHz
 
     processor.onaudioprocess = (e) => {
       const float32 = e.inputBuffer.getChannelData(0);
-      // Convert Float32 [-1..1] → PCM16
-      const int16 = new Int16Array(float32.length);
-      for (let i = 0; i < float32.length; i++) {
-        const s = Math.max(-1, Math.min(1, float32[i]));
+
+      // Step 1: Resample from native rate to 16kHz
+      const resampled = resampleAudio(
+        float32,
+        actualSampleRate,
+        TARGET_SAMPLE_RATE
+      );
+
+      // Step 2: Convert Float32 [-1..1] → PCM16
+      const int16 = new Int16Array(resampled.length);
+      for (let i = 0; i < resampled.length; i++) {
+        const s = Math.max(-1, Math.min(1, resampled[i]));
         int16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
       }
 
-      // Append vào buffer nội bộ
+      // Step 3: Append to buffer
       const merged = new Int16Array(buffer16.length + int16.length);
       merged.set(buffer16);
       merged.set(int16, buffer16.length);
       buffer16 = merged;
 
-      // Gửi theo chunk TARGET_SAMPLES
+      // Step 4: Send in TARGET_SAMPLES chunks
       while (buffer16.length >= TARGET_SAMPLES) {
         const chunk = buffer16.slice(0, TARGET_SAMPLES);
         buffer16 = buffer16.slice(TARGET_SAMPLES);
-        // Gửi binary raw PCM16
         try {
           wsRef.current?.send(chunk.buffer);
         } catch (err) {
@@ -184,7 +220,6 @@ export const useAudioRecorder = ({
     console.log("Microphone stopped (WebSocket still open)");
   }, []);
 
-  // Toggle chế độ câu hỏi: q:start / q:end
   const toggleAsk = useCallback(() => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
       console.warn("WS not open");
@@ -194,22 +229,19 @@ export const useAudioRecorder = ({
       wsRef.current.send("q:start");
       setIsAsking(true);
     } else {
-      wsRef.current.send("q:end"); // server sẽ tự check-and-register theo defense_session_id/session_id
+      wsRef.current.send("q:end");
       setIsAsking(false);
     }
   }, [isAsking]);
 
-  // Kết thúc phiên hội đồng: gửi "stop" để server flush/close
   const stopSession = useCallback(() => {
     console.log("Ending session and closing WebSocket...");
 
-    // Stop recording if still recording
     if (isRecording) {
       stopRecording();
     }
     setIsAsking(false);
 
-    // Close WebSocket
     try {
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
         wsRef.current.send("stop");
@@ -221,7 +253,7 @@ export const useAudioRecorder = ({
 
     try {
       if (wsRef.current) {
-        wsRef.current.close(1000, "Session ended by user"); // 1000 = normal closure
+        wsRef.current.close(1000, "Session ended by user");
         console.log("WebSocket closed");
         wsRef.current = null;
       }
@@ -230,7 +262,6 @@ export const useAudioRecorder = ({
     }
   }, [isRecording, stopRecording]);
 
-  // Broadcast session start (thư ký gọi khi bắt đầu ghi âm)
   const broadcastSessionStart = useCallback(() => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send("session:start");
@@ -238,7 +269,6 @@ export const useAudioRecorder = ({
     }
   }, []);
 
-  // Broadcast session end (thư ký gọi khi kết thúc phiên)
   const broadcastSessionEnd = useCallback(() => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send("session:end");
@@ -246,7 +276,6 @@ export const useAudioRecorder = ({
     }
   }, []);
 
-  // Broadcast question started (member bắt đầu đặt câu hỏi)
   const broadcastQuestionStarted = useCallback(() => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send("question:started");
@@ -254,7 +283,6 @@ export const useAudioRecorder = ({
     }
   }, []);
 
-  // Broadcast question processing (member kết thúc đặt câu hỏi, đang xử lý)
   const broadcastQuestionProcessing = useCallback(() => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send("question:processing");
