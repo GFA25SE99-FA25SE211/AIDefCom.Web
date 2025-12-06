@@ -68,13 +68,34 @@ export const useAudioRecorder = ({
       return;
     }
 
-    if (!wsUrl) {
+    if (!wsUrl || wsUrl.trim() === "") {
+      console.warn("WS connect skipped: wsUrl is empty or invalid");
+      return;
+    }
+
+    // Validate WebSocket URL format
+    try {
+      const url = new URL(wsUrl);
+      if (url.protocol !== "ws:" && url.protocol !== "wss:") {
+        console.error("WS connect failed: Invalid protocol. Expected ws:// or wss://", wsUrl);
+        return;
+      }
+    } catch (e) {
+      console.error("WS connect failed: Invalid URL format", wsUrl, e);
       return;
     }
 
     isConnectingRef.current = true;
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+    } catch (e) {
+      console.error("WS connect failed: Cannot create WebSocket", wsUrl, e);
+      setWsConnected(false);
+      isConnectingRef.current = false;
+      return;
+    }
 
     ws.onopen = () => {
       console.log("WS connected:", wsUrl);
@@ -90,7 +111,20 @@ export const useAudioRecorder = ({
       }
     };
     ws.onerror = (e) => {
-      console.error("WS error:", e);
+      // WebSocket error event doesn't provide much info, log what we can
+      try {
+        const readyState = ws.readyState;
+        const readyStateText = readyState === WebSocket.CONNECTING ? 'CONNECTING' :
+                              readyState === WebSocket.OPEN ? 'OPEN' :
+                              readyState === WebSocket.CLOSING ? 'CLOSING' :
+                              readyState === WebSocket.CLOSED ? 'CLOSED' : 'UNKNOWN';
+        console.error("WS error - URL:", wsUrl);
+        console.error("WS error - ReadyState:", readyState, `(${readyStateText})`);
+      } catch (err) {
+        // If we can't access readyState, just log the URL
+        console.error("WS error - URL:", wsUrl);
+        console.error("WS error - Exception:", err);
+      }
       setWsConnected(false);
       isConnectingRef.current = false;
     };
@@ -290,6 +324,13 @@ export const useAudioRecorder = ({
     }
   }, []);
 
+  const broadcastMicDisabled = useCallback(() => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send("mic:disabled");
+      console.log("Sent mic:disabled to broadcast");
+    }
+  }, []);
+
   return {
     isRecording,
     isAsking,
@@ -302,5 +343,6 @@ export const useAudioRecorder = ({
     broadcastSessionEnd,
     broadcastQuestionStarted,
     broadcastQuestionProcessing,
+    broadcastMicDisabled,
   };
 };

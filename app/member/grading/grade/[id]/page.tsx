@@ -350,72 +350,61 @@ export default function GradeGroupPage() {
 
         // Fetch rubrics: ưu tiên từ project tasks (theo session và user), sau đó theo majorId
 
-        // Ưu tiên 1: Lấy rubrics từ project tasks được assign cho user trong session này
+        // Ưu tiên 1: Lấy rubrics từ API theo lecturer và session
         if (groupSession && userId) {
           try {
-            console.log("🔍 Attempting to load rubrics from project tasks:", {
-              userId: userId,
+            console.log("🔍 Attempting to load rubrics from lecturer/session API:", {
+              lecturerId: userId,
               sessionId: groupSession.id
             });
             
-            // Lấy project tasks để có rubricId
-            const tasksRes = await projectTasksApi.getByAssigneeAndSession(
+            // Gọi API mới để lấy danh sách tên rubrics
+            const rubricsRes = await projectTasksApi.getRubricsByLecturerAndSession(
               userId,
               groupSession.id
             );
             
-            console.log("📋 Project tasks response:", {
-              hasData: !!tasksRes.data,
-              dataLength: Array.isArray(tasksRes.data) ? tasksRes.data.length : 0,
-              tasks: tasksRes.data
+            console.log("📋 Rubrics API response:", {
+              hasData: !!rubricsRes.data,
+              dataLength: Array.isArray(rubricsRes.data) ? rubricsRes.data.length : 0,
+              rubricNames: rubricsRes.data
             });
             
-            if (tasksRes.data && Array.isArray(tasksRes.data) && tasksRes.data.length > 0) {
-              // Extract unique rubricIds từ tasks
-              const rubricIds = [...new Set(
-                tasksRes.data
-                  .map((task: any) => task.rubricId)
-                  .filter((id: any) => id !== null && id !== undefined)
-              )];
+            if (rubricsRes.data && Array.isArray(rubricsRes.data) && rubricsRes.data.length > 0) {
+              // Lấy tất cả rubrics để map với tên
+              const allRubricsRes = await rubricsApi.getAll().catch(() => ({ data: [] }));
+              const allRubrics = Array.isArray(allRubricsRes.data) ? allRubricsRes.data : [];
               
-              console.log("📝 Extracted rubricIds from tasks:", rubricIds);
+              // Map tên rubrics với full rubric objects, giữ nguyên thứ tự từ API
+              rubricsList = rubricsRes.data
+                .map((rubricName: string) => {
+                  // Tìm rubric theo tên (case-insensitive)
+                  const rubric = allRubrics.find(
+                    (r: any) => 
+                      r.rubricName?.toLowerCase() === rubricName.toLowerCase() ||
+                      r.name?.toLowerCase() === rubricName.toLowerCase()
+                  );
+                  return rubric;
+                })
+                .filter((r: any): r is any => r !== null && r !== undefined);
               
-              if (rubricIds.length > 0) {
-                // Lấy full rubric info từ các rubricIds
-                const rubricPromises = rubricIds.map((rubricId: number) =>
-                  rubricsApi.getById(rubricId).catch((err) => {
-                    console.error(`Error fetching rubric ${rubricId}:`, err);
-                    return { data: null };
-                  })
-                );
-                const rubricResults = await Promise.all(rubricPromises);
-                
-                // Filter và map rubrics
-                rubricsList = rubricResults
-                  .map((res: any) => res.data)
-                  .filter((r: any) => r !== null && r !== undefined);
-                
-                // Sort rubrics theo thứ tự trong tasks để giữ đúng thứ tự
-                const rubricOrderMap = new Map(rubricIds.map((id, idx) => [id, idx]));
-                rubricsList.sort((a, b) => {
-                  const orderA = rubricOrderMap.get(a.id) ?? 999;
-                  const orderB = rubricOrderMap.get(b.id) ?? 999;
-                  return orderA - orderB;
-                });
-                
-                setRubrics(rubricsList);
-                console.log("✅ Rubrics loaded from project tasks:", rubricsList.length, "rubrics:", rubricsList);
-              } else {
-                console.warn("⚠️ No rubricIds found in project tasks");
-              }
+              setRubrics(rubricsList);
+              console.log("✅ Rubrics loaded from lecturer/session API:", rubricsList.length, "rubrics:", rubricsList);
             } else {
-              console.warn("⚠️ No project tasks found for user in session");
+              console.warn("⚠️ No rubrics found from lecturer/session API");
             }
-          } catch (error) {
-            console.error("❌ Error fetching rubrics from project tasks:", error);
+          } catch (error: any) {
+            // Nếu là 404 hoặc endpoint chưa có, fallback về logic cũ
+            const is404 = error?.status === 404 || error?.message?.includes('404') || error?.message?.includes('not found');
+            if (is404) {
+              console.warn("⚠️ Lecturer/session API endpoint not found (404), falling back to old logic");
+            } else {
+              console.error("❌ Error fetching rubrics from lecturer/session API:", error);
+            }
+            // Continue to fallback logic below
           }
         } else {
-          console.warn("⚠️ Cannot load rubrics from project tasks:", {
+          console.warn("⚠️ Cannot load rubrics from lecturer/session API:", {
             hasSession: !!groupSession,
             hasUserId: !!userId,
             sessionId: groupSession?.id,
@@ -456,7 +445,7 @@ export default function GradeGroupPage() {
                 // Filter và map rubrics
                 rubricsList = rubricResults
                   .map((res: any) => res.data)
-                  .filter((r: any) => r !== null && r !== undefined);
+                  .filter((r: any): r is any => r !== null && r !== undefined);
                 
                 setRubrics(rubricsList);
                 console.log("✅ Rubrics loaded from major:", rubricsList.length, "rubrics:", rubricsList);
