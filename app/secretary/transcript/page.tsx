@@ -186,13 +186,11 @@ export default function TranscriptListPage() {
                 {/* Card Header */}
                 <div className="bg-gradient-to-r from-purple-600 to-blue-600 px-6 py-4">
                   <h2 className="text-lg font-semibold text-white truncate">
-                    {group?.groupName || `Group ${session.groupId}`}
+                    {group?.projectCode || `Group ${session.groupId}`}
                   </h2>
-                  {group?.projectCode && (
-                    <p className="text-purple-100 text-sm truncate">
-                      {group.projectCode}
-                    </p>
-                  )}
+                  <p className="text-purple-100 text-sm truncate">
+                    {group?.groupName || `Group ${session.groupId}`}
+                  </p>
                 </div>
 
                 {/* Card Body */}

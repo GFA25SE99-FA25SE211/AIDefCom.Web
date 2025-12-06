@@ -38,6 +38,14 @@ export default function LoginPage() {
         return;
       }
 
+      // Kiểm tra role student
+      if (data.role?.toLowerCase() === "student") {
+        setError(
+          "Tài khoản không được phép truy cập hệ thống. Vui lòng liên hệ người phụ trách."
+        );
+        return;
+      }
+
       // FE chỉ dùng role trả về từ API route
       if (data.user) {
         localStorage.setItem("user", JSON.stringify(data.user));
@@ -68,6 +76,14 @@ export default function LoginPage() {
 
       if (!res.ok) {
         setError(data.message || "Google login failed");
+        return;
+      }
+
+      // Kiểm tra role student
+      if (data.role?.toLowerCase() === "student") {
+        setError(
+          "Tài khoản không được phép truy cập hệ thống. Vui lòng liên hệ người phụ trách."
+        );
         return;
       }
 
@@ -202,14 +218,16 @@ export default function LoginPage() {
           {/* Card */}
           <div className="bg-white rounded-3xl shadow-2xl border border-gray-100 p-8 lg:p-10">
             <div className="mb-8">
-              <h2 className="text-3xl font-bold text-gray-800 mb-2">
+              <h2 className="text-3xl font-bold text-gray-800 mb-2 flex justify-center">
                 Welcome Back
               </h2>
-              <p className="text-gray-600">Sign in to access your account</p>
+              <p className="text-gray-600 flex justify-center">
+                Sign in to access your account
+              </p>
             </div>
 
             {/* GOOGLE LOGIN */}
-            <div className="mb-6">
+            <div className="mb-6 flex justify-center">
               <GoogleLogin
                 onSuccess={handleGoogleSuccess}
                 onError={() => setError("Google login failed")}

@@ -22,6 +22,7 @@ export default function VoiceEnrollPage() {
   const [user, setUser] = useState<any>(null);
   const [timeLeft, setTimeLeft] = useState(RECORDING_DURATION);
   const [showNextButton, setShowNextButton] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -364,6 +365,66 @@ export default function VoiceEnrollPage() {
     }
   };
 
+  // Reset enrollment - xóa tất cả dữ liệu voice enrollment trên Azure
+  const handleResetEnrollment = async () => {
+    if (!user) return;
+
+    // Confirm với user
+    const result = await swalConfig.confirm(
+      "Xác nhận Reset",
+      "Bạn có chắc muốn xóa tất cả dữ liệu ghi âm và bắt đầu lại từ đầu?"
+    );
+
+    if (!result.isConfirmed) return;
+
+    try {
+      setResetting(true);
+
+      // Gọi API DELETE để reset enrollment
+      const response = await fetch(
+        `https://fastapi-service.happyforest-7c6ec975.southeastasia.azurecontainerapps.io/voice/users/${user.id}/enrollment`,
+        {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Reset failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log("Reset enrollment response:", data);
+
+      // Reset local state
+      setCurrentSampleIndex(0);
+      setSamples([
+        { status: "pending", index: 0 },
+        { status: "pending", index: 1 },
+        { status: "pending", index: 2 },
+      ]);
+      setShowNextButton(false);
+      setTimeLeft(RECORDING_DURATION);
+      setStatus(null);
+
+      swalConfig.success(
+        "Đã reset",
+        "Dữ liệu đã được xóa. Bạn có thể ghi âm lại từ đầu."
+      );
+
+      // Refresh status
+      await fetchStatus(user.id);
+    } catch (error: any) {
+      console.error("Reset enrollment failed:", error);
+      swalConfig.error(
+        "Lỗi",
+        error.message || "Không thể reset dữ liệu. Vui lòng thử lại."
+      );
+    } finally {
+      setResetting(false);
+    }
+  };
+
   const handleLogout = async () => {
     try {
       await fetch("/api/auth/logout", { method: "POST" });
@@ -423,12 +484,34 @@ export default function VoiceEnrollPage() {
               </p>
             </div>
           </div>
-          <button
-            onClick={handleLogout}
-            className="px-5 py-2.5 text-sm font-medium text-gray-700 hover:text-gray-900 bg-white hover:bg-gray-50 border border-gray-300 rounded-lg transition-all shadow-sm hover:shadow"
-          >
-            Đăng xuất
-          </button>
+          <div className="flex items-center gap-3">
+            {/* Reset Button */}
+            <button
+              onClick={handleResetEnrollment}
+              disabled={resetting || recording || processing}
+              className={`px-5 py-2.5 text-sm font-medium rounded-lg transition-all shadow-sm hover:shadow ${
+                resetting || recording || processing
+                  ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                  : "text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 border border-red-200"
+              }`}
+            >
+              {resetting ? (
+                <span className="flex items-center gap-2">
+                  <div className="w-4 h-4 border-2 border-red-400 border-t-transparent rounded-full animate-spin" />
+                  Đang xóa...
+                </span>
+              ) : (
+                "Reset Data"
+              )}
+            </button>
+            {/* Logout Button */}
+            <button
+              onClick={handleLogout}
+              className="px-5 py-2.5 text-sm font-medium text-gray-700 hover:text-gray-900 bg-white hover:bg-gray-50 border border-gray-300 rounded-lg transition-all shadow-sm hover:shadow"
+            >
+              Đăng xuất
+            </button>
+          </div>
         </div>
       </div>
 

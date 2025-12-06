@@ -93,9 +93,10 @@ export const swalConfig = {
       cancelButtonText: "Cancel",
       customClass: {
         confirmButton:
-          "bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 mr-2",
+          "bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500",
         cancelButton:
           "bg-gray-300 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-500",
+        actions: "gap-4",
         popup: "rounded-lg shadow-xl",
         title: "text-gray-800 font-semibold",
         htmlContainer: "text-gray-600",
