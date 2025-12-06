@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import MemberSidebar from "./components/Sidebar";
 import Header from "./components/Header";
@@ -163,7 +163,7 @@ const defaultGroupsData: GroupWithSession[] = [
   },
 ];
 
-export default function GroupsToGradePage() {
+function GroupsToGradePageContent() {
   const searchParams = useSearchParams();
   const sessionIdParam = searchParams?.get("sessionId");
   const selectedSessionId = sessionIdParam ? parseInt(sessionIdParam) : null;
@@ -428,5 +428,21 @@ export default function GroupsToGradePage() {
         </footer>
       </main>
     </div>
+  );
+}
+
+export default function GroupsToGradePage() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-screen bg-[#F3F6FB]">
+        <main className="flex-1 p-4 sm:p-6 lg:p-8">
+          <div className="text-center py-8 text-gray-500">
+            Loading...
+          </div>
+        </main>
+      </div>
+    }>
+      <GroupsToGradePageContent />
+    </Suspense>
   );
 }

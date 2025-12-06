@@ -8,6 +8,7 @@ import { studentsApi } from "@/lib/api/students";
 import { defenseSessionsApi } from "@/lib/api/defense-sessions";
 import { rubricsApi } from "@/lib/api/rubrics";
 import { memberNotesApi } from "@/lib/api/member-notes";
+import { projectTasksApi } from "@/lib/api/project-tasks";
 import { useAudioRecorder } from "@/lib/hooks/useAudioRecorder";
 import { swalConfig, closeSwal } from "@/lib/utils/sweetAlert";
 import type {
@@ -285,17 +286,6 @@ export default function GroupDetailsPage() {
 
         if (groupRes.data) {
           setGroup(groupRes.data);
-
-          // 2. Fetch all rubrics
-          try {
-            const rubricsRes = await rubricsApi.getAll();
-            if (rubricsRes.data) {
-              setRubrics(rubricsRes.data);
-            }
-          } catch (rubricError) {
-            console.error("Error fetching rubrics:", rubricError);
-            setRubrics([]);
-          }
         }
         if (studentsRes.data) {
           setStudents(studentsRes.data);
@@ -306,10 +296,89 @@ export default function GroupDetailsPage() {
           setMemberNotes(memberNotesRes.data);
         }
 
-        // 2. If session exists, fetch lecturers
+        // 2. If session exists, fetch lecturers and rubrics
         if (sessionsRes.data && sessionsRes.data.length > 0) {
           const session = sessionsRes.data[0];
           setDefenseSession(session);
+
+          // Ưu tiên: Lấy rubrics từ API theo lecturer và session
+          if (currentUid) {
+            try {
+              console.log("🔍 Attempting to load rubrics from lecturer/session API:", {
+                lecturerId: currentUid,
+                sessionId: session.id
+              });
+              
+              const rubricsRes = await projectTasksApi.getRubricsByLecturerAndSession(
+                currentUid,
+                session.id
+              );
+              
+              if (rubricsRes.data && Array.isArray(rubricsRes.data) && rubricsRes.data.length > 0) {
+                // Lấy tất cả rubrics để map với tên
+                const allRubricsRes = await rubricsApi.getAll().catch(() => ({ data: [] }));
+                const allRubrics = Array.isArray(allRubricsRes.data) ? allRubricsRes.data : [];
+                
+                // Map tên rubrics với full rubric objects
+                const rubricsList = rubricsRes.data
+                  .map((rubricName: string) => {
+                    const rubric = allRubrics.find(
+                      (r: any) => 
+                        r.rubricName?.toLowerCase() === rubricName.toLowerCase() ||
+                        r.name?.toLowerCase() === rubricName.toLowerCase()
+                    );
+                    return rubric;
+                  })
+                  .filter((r: any): r is RubricDto => r !== null && r !== undefined);
+                
+                if (rubricsList.length > 0) {
+                  setRubrics(rubricsList);
+                  console.log("✅ Rubrics loaded from lecturer/session API:", rubricsList.length);
+                } else {
+                  // Fallback to getAll
+                  const fallbackRes = await rubricsApi.getAll();
+                  if (fallbackRes.data) {
+                    setRubrics(fallbackRes.data);
+                  }
+                }
+              } else {
+                // Fallback to getAll
+                const fallbackRes = await rubricsApi.getAll();
+                if (fallbackRes.data) {
+                  setRubrics(fallbackRes.data);
+                }
+              }
+            } catch (error: any) {
+              // Nếu là 404 hoặc endpoint chưa có, fallback về logic cũ
+              const is404 = error?.status === 404 || error?.message?.includes('404') || error?.message?.includes('not found');
+              if (is404) {
+                console.warn("⚠️ Lecturer/session API endpoint not found (404), falling back to getAll");
+              } else {
+                console.error("❌ Error fetching rubrics from lecturer/session API:", error);
+              }
+              // Fallback to getAll
+              try {
+                const fallbackRes = await rubricsApi.getAll();
+                if (fallbackRes.data) {
+                  setRubrics(fallbackRes.data);
+                }
+              } catch (rubricError) {
+                console.error("Error fetching rubrics:", rubricError);
+                setRubrics([]);
+              }
+            }
+          } else {
+            // No currentUid, fallback to getAll
+            try {
+              const rubricsRes = await rubricsApi.getAll();
+              if (rubricsRes.data) {
+                setRubrics(rubricsRes.data);
+              }
+            } catch (rubricError) {
+              console.error("Error fetching rubrics:", rubricError);
+              setRubrics([]);
+            }
+          }
 
           try {
             const lecturersRes = await defenseSessionsApi.getUsersBySessionId(

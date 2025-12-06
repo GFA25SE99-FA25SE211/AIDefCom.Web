@@ -30,6 +30,10 @@ export const projectTasksApi = {
     return apiClient.get<string[]>(`/api/project-tasks/assignee/${assignedToId}/session/${sessionId}/rubrics`);
   },
 
+  getRubricsByLecturerAndSession: async (lecturerId: string, sessionId: number) => {
+    return apiClient.get<string[]>(`/api/project-tasks/lecturer/${lecturerId}/session/${sessionId}/rubrics`);
+  },
+
   create: async (data: ProjectTaskCreateDto) => {
     return apiClient.post<ProjectTaskDto>('/api/project-tasks', data);
   },
