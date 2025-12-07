@@ -930,7 +930,7 @@ export default function AdminDataManagementPage() {
     data: { lecturerId: string; councilId: string; role: string }
   ) => {
     try {
-      // Find the original assignment to get defenseSessionId
+      // Find the original assignment to get councilRoleId
       const originalAssignment = assignments.find((a) => String(a.id) === id);
       if (!originalAssignment) {
         await swalConfig.error("Error", "Assignment not found");
@@ -941,33 +941,72 @@ export default function AdminDataManagementPage() {
         ? parseInt(data.councilId, 10)
         : originalAssignment.councilId;
 
-      const result = await committeeAssignmentsApi.update(id, {
+      // Map role name to councilRoleId
+      // Mapping: Chair=0, Member=1, Secretary=2
+      const roleMapping = new Map<string, number>([
+        ["Chair", 0],
+        ["Member", 1],
+        ["Secretary", 2],
+      ]);
+
+      // If role changed, use mapping. Otherwise, try to use existing councilRoleId
+      const currentRoleName = (originalAssignment as any).roleName || originalAssignment.role;
+      let councilRoleId: number | undefined;
+      
+      if (data.role !== currentRoleName) {
+        // Role changed, map new role to councilRoleId
+        councilRoleId = roleMapping.get(data.role);
+      } else {
+        // Role unchanged, use existing councilRoleId if available
+        councilRoleId = (originalAssignment as any).councilRoleId;
+        // If councilRoleId is not available, map from role name
+        if (councilRoleId === undefined || councilRoleId === null) {
+          councilRoleId = roleMapping.get(data.role);
+        }
+      }
+
+      // Validate role and councilRoleId
+      if (!data.role || !roleMapping.has(data.role)) {
+        await swalConfig.error(
+          "Error",
+          `Invalid role: "${data.role}". Valid roles are: Chair, Member, Secretary.`
+        );
+        return;
+      }
+
+      // If councilRoleId is still undefined, use mapping
+      if (councilRoleId === undefined) {
+        councilRoleId = roleMapping.get(data.role);
+      }
+
+      // Final validation - councilRoleId should be 0, 1, or 2
+      if (councilRoleId === undefined || (councilRoleId !== 0 && councilRoleId !== 1 && councilRoleId !== 2)) {
+        await swalConfig.error(
+          "Error",
+          `Cannot determine Council Role ID for role: "${data.role}". Please contact administrator.`
+        );
+        return;
+      }
+
+      await committeeAssignmentsApi.update(id, {
         lecturerId: data.lecturerId || originalAssignment.lecturerId,
         councilId,
-        defenseSessionId: originalAssignment.defenseSessionId,
-        role: data.role,
+        councilRoleId,
       });
 
-      if (result.code === 200 || result.message?.includes("success")) {
-        await swalConfig.success(
-          "Success!",
-          "Assignment updated successfully!"
-        );
-        // Reload assignments to get updated data
-        const response = await committeeAssignmentsApi.getAll();
-        setAssignments(response.data || []);
-        setEditingAssignment(null);
-      } else {
-        await swalConfig.error(
-          "Update Failed",
-          result.message || "Failed to update assignment"
-        );
-      }
+      await swalConfig.success(
+        "Success!",
+        "Assignment updated successfully!"
+      );
+      // Reload assignments to get updated data
+      const response = await committeeAssignmentsApi.getAll();
+      setAssignments(response.data || []);
+      setEditingAssignment(null);
     } catch (error: any) {
       console.error("Error updating assignment:", error);
       await swalConfig.error(
         "Error",
-        "An error occurred while updating the assignment"
+        error.message || "An error occurred while updating the assignment"
       );
     }
   };
@@ -1113,27 +1152,43 @@ export default function AdminDataManagementPage() {
 
   const handleDeleteAssignment = async (id: number | string) => {
     const assignmentId = String(id);
+    
+    // Find assignment to show better confirmation message
+    const assignment = assignments.find((a) => String(a.id) === assignmentId);
+    const lecturerName = assignment 
+      ? (userMap.get(assignment.lecturerId) || assignment.lecturerId)
+      : assignmentId;
+    
     const result = await swalConfig.confirm(
       "Delete Assignment?",
-      `Are you sure you want to delete assignment with ID: ${assignmentId}?`,
+      `Are you sure you want to delete assignment for "${lecturerName}" (ID: ${assignmentId})?`,
       "Yes, delete it!"
     );
 
     if (result.isConfirmed) {
       try {
         await committeeAssignmentsApi.delete(assignmentId);
-        setAssignments((prev) =>
-          prev.filter((a) => String(a.id) !== assignmentId)
-        );
+        
+        // Reload assignments from API to ensure data consistency
+        const response = await committeeAssignmentsApi.getAll();
+        setAssignments(response.data || []);
+        
         await swalConfig.success(
           "Deleted!",
           "Assignment deleted successfully!"
         );
       } catch (error: any) {
         console.error("Error deleting assignment:", error);
+        
+        // Provide more detailed error message
+        let errorMessage = error.message || "Failed to delete assignment";
+        if (error.errorData?.message) {
+          errorMessage = error.errorData.message;
+        }
+        
         await swalConfig.error(
           "Error Deleting Assignment",
-          error.message || "Failed to delete assignment"
+          errorMessage
         );
       }
     }
@@ -1552,7 +1607,7 @@ export default function AdminDataManagementPage() {
         <>
           {renderHeader("Committee Assignments")}
           {renderTable(
-            ["ID", "Lecturer", "Council Name", "Role"],
+            ["ID", "Lecturer", "Council Name", "Role", "Actions"],
             paginatedAssignments.map((a) => (
               <tr key={a.id}>
                 <td>{a.id}</td>
@@ -1565,6 +1620,24 @@ export default function AdminDataManagementPage() {
                   {councilMap.get(a.councilId) || `Council ${a.councilId}`}
                 </td>
                 <td>{(a as any).roleName || a.role}</td>
+                <td>
+                  <div className="flex items-center gap-2">
+                    <button
+                      className="btn-subtle p-1"
+                      onClick={() => setEditingAssignment(a)}
+                      title="Edit"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button
+                      className="btn-subtle p-1 text-red-600 hover:bg-red-50"
+                      onClick={() => handleDeleteAssignment(a.id)}
+                      title="Delete"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </td>
               </tr>
             ))
           )}
@@ -1706,7 +1779,27 @@ export default function AdminDataManagementPage() {
           }))}
         />
       )}
-      {/* Assignment actions temporarily disabled */}
+      {editingAssignment && (
+        <EditAssignmentModal
+          isOpen
+          onClose={() => setEditingAssignment(null)}
+          onSubmit={(id, data) => handleEditAssignment(id, data)}
+          assignmentData={{
+            id: String(editingAssignment.id),
+            lecturerId: editingAssignment.lecturerId,
+            councilId: String(editingAssignment.councilId),
+            role: editingAssignment.role || "",
+            roleName: (editingAssignment as any).roleName || editingAssignment.role || "",
+          }}
+          lecturers={users
+            .filter((u) => u.role && (u.role === "Lecturer" || u.role === "Administrator"))
+            .map((u) => ({ id: u.id, fullName: u.fullName }))}
+          councils={councils.map((c) => ({
+            id: String(c.id),
+            councilName: c.councilName || `Council ${c.id}`,
+          }))}
+        />
+      )}
     </main>
   );
 }

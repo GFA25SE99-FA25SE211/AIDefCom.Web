@@ -19,6 +19,7 @@ import { majorRubricsApi } from "@/lib/api/major-rubrics";
 import { scoresApi, type ScoreReadDto } from "@/lib/api/scores";
 import { defenseSessionsApi } from "@/lib/api/defense-sessions";
 import { projectTasksApi } from "@/lib/api/project-tasks";
+import { committeeAssignmentsApi } from "@/lib/api/committee-assignments";
 import { swalConfig, closeSwal } from "@/lib/utils/sweetAlert";
 import { useAudioRecorder } from "@/lib/hooks/useAudioRecorder";
 import { authUtils } from "@/lib/utils/auth";
@@ -354,6 +355,53 @@ export default function GradeGroupPage() {
 
         setCurrentUserId(userId);
 
+        // Kiểm tra committee-assignments/lecturer trước để xem có rubrics không
+        let shouldShowRubrics = true;
+        if (userId) {
+          try {
+            const assignmentRes = await committeeAssignmentsApi.getByLecturerId(userId);
+            const assignments = Array.isArray(assignmentRes.data) ? assignmentRes.data : [];
+            
+            console.log("🔍 Checking committee assignments for rubrics:", {
+              lecturerId: userId,
+              assignmentsCount: assignments.length,
+              assignments: assignments
+            });
+            
+            // Kiểm tra nếu assignment có rubrics null hoặc không có rubrics
+            if (assignments.length > 0) {
+              // Kiểm tra từng assignment xem có rubrics null không
+              const hasRubrics = assignments.some((assignment: any) => {
+                // Kiểm tra nếu có rubrics trong assignment (có thể là field rubrics hoặc rubricIds)
+                const hasRubricsField = assignment.rubrics !== null && assignment.rubrics !== undefined;
+                const hasRubricIds = assignment.rubricIds && Array.isArray(assignment.rubricIds) && assignment.rubricIds.length > 0;
+                return hasRubricsField || hasRubricIds;
+              });
+              
+              // Nếu tất cả assignments đều có rubrics null hoặc không có rubrics, không hiển thị
+              if (!hasRubrics) {
+                console.log("⚠️ No rubrics found in committee assignments (all null or empty), hiding rubrics");
+                shouldShowRubrics = false;
+                setRubrics([]);
+              }
+            } else {
+              // Nếu không có assignment nào, vẫn hiển thị rubrics (fallback behavior)
+              console.log("⚠️ No committee assignments found, will load rubrics as fallback");
+            }
+          } catch (error: any) {
+            console.warn("⚠️ Error checking committee assignments:", error);
+            // Nếu lỗi, vẫn tiếp tục load rubrics như bình thường
+          }
+        }
+
+        // Nếu không nên hiển thị rubrics, dừng lại và không load rubrics
+        if (!shouldShowRubrics) {
+          console.log("✅ Skipping rubrics loading - no rubrics in committee assignments");
+          // Set empty rubrics và return early
+          setRubrics([]);
+          return;
+        }
+
         // Fetch rubrics: ưu tiên từ project tasks (theo session và user), sau đó theo majorId
 
         // Ưu tiên 1: Lấy rubrics từ API theo lecturer và session
@@ -523,10 +571,10 @@ export default function GradeGroupPage() {
           });
         }
 
-        // Nếu vẫn không có rubrics, để trống (sẽ dùng default criteria)
+        // Nếu vẫn không có rubrics, để trống (không dùng default criteria)
         if (rubricsList.length === 0) {
           console.warn(
-            "⚠️ No rubrics found for group/session, will use default criteria"
+            "⚠️ No rubrics found for group/session, will leave empty (no default criteria)"
           );
           setRubrics([]);
         } else {
@@ -561,9 +609,8 @@ export default function GradeGroupPage() {
                   )
                 : [];
 
-              // Create scores array based on rubrics (fallback to 5 if no rubrics)
-              const rubricCount =
-                rubricsList.length > 0 ? rubricsList.length : 5;
+              // Create scores array based on rubrics (no fallback if no rubrics)
+              const rubricCount = rubricsList.length;
               const scoresArray = new Array(rubricCount).fill(0);
               const scoreIds = new Array(rubricCount).fill(0);
               const commentsArray = new Array(rubricCount).fill("");
@@ -610,9 +657,8 @@ export default function GradeGroupPage() {
           setGroupData(groupData);
           setStudentScores(groupData.students);
         } else {
-          // Fallback: tạo empty groupData hoặc từ students đã fetch
-          const rubricCountFallback =
-            rubricsList.length > 0 ? rubricsList.length : criteria.length;
+          // Tạo empty groupData hoặc từ students đã fetch (không fallback criteria)
+          const rubricCountFallback = rubricsList.length;
           const normalizedStudents =
             students.length > 0
               ? await Promise.all(
@@ -669,8 +715,10 @@ export default function GradeGroupPage() {
     fetchGroupData();
   }, [groupId, router]);
 
-  const calculateAverage = (scores: number[]) =>
-    (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(2);
+  const calculateAverage = (scores: number[]) => {
+    if (scores.length === 0) return "0.00";
+    return (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(2);
+  };
 
   const handleScoreChange = (
     studentIndex: number,
@@ -959,13 +1007,10 @@ export default function GradeGroupPage() {
                   <thead>
                     <tr className="text-left text-gray-600">
                       <th className="py-2 pr-4">Student</th>
-                      {(rubrics.length > 0
-                        ? rubrics.map((r: any) => r.rubricName)
-                        : criteria
-                      ).map((name) => (
-                        <th key={name} className="py-2 px-3">
+                      {rubrics.length > 0 && rubrics.map((r: any) => (
+                        <th key={r.id || r.rubricName} className="py-2 px-3">
                           <div className="flex flex-col">
-                            <span className="font-medium">{name}</span>
+                            <span className="font-medium">{r.rubricName || r.name}</span>
                             <span className="text-xs text-gray-400">
                               (Max: 10)
                             </span>

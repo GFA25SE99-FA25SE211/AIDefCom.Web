@@ -6,6 +6,7 @@ export interface CommitteeAssignmentDto {
   defenseSessionId: number;
   role: string;
   roleName?: string; // API có thể trả về roleName
+  councilRoleId?: number; // API có thể trả về councilRoleId
 }
 
 export interface CommitteeAssignmentCreateDto {
@@ -17,7 +18,6 @@ export interface CommitteeAssignmentCreateDto {
 export interface CommitteeAssignmentUpdateDto {
   lecturerId: string;
   councilId: number;
-  defenseSessionId: number;
-  role: string;
+  councilRoleId: number;
 }
 
