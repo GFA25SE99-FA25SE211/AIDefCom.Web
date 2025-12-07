@@ -71,7 +71,27 @@ export const voiceApi = {
     const data = await response.json();
 
     if (!response.ok) {
-      throw new Error(data.error || data.message || "Enrollment failed");
+      let errorMessage = data.error || data.message || "Enrollment failed";
+
+      // Match patterns like: "Your voice is too similar to an existing user in the system (similarity: XX%)"
+      const similarityMatch =
+        errorMessage.match(/similarity[:\s]+(\d+(?:\.\d+)?%?)/i) ||
+        errorMessage.match(/(\d+(?:\.\d+)?%?)\s*similarity/i);
+
+      if (
+        errorMessage.includes("similarity") ||
+        errorMessage.includes("giống")
+      ) {
+        const similarity = similarityMatch ? similarityMatch[1] : "high";
+        const similarityValue =
+          typeof similarity === "string" && similarity.includes("%")
+            ? similarity
+            : `${similarity}%`;
+
+        errorMessage = `Your voice is too similar to an existing user in the system (similarity: ${similarityValue}). Please re-record with your natural voice.`;
+      }
+
+      throw new Error(errorMessage);
     }
 
     return data;
