@@ -30,28 +30,36 @@ export default function ChairReportStatus() {
       const user = JSON.parse(storedUser);
       const lecturerId = user.id;
 
-      // Check if user is Chair (System Chair or Role Chair)
+      // Check if user has Chair role (including Chair Session)
+      // Anyone accessing /chair page should be able to manage reports
       let chairRole = false;
-      if (user.roles && user.roles.includes("Chair")) {
-        chairRole = true;
-      } else if (user.role === "Chair") {
-        chairRole = true;
+
+      // Check roles array for any Chair-related role
+      if (user.roles && Array.isArray(user.roles)) {
+        chairRole = user.roles.some((r: string) =>
+          r.toLowerCase().includes("chair")
+        );
       }
+
+      // Check single role field
+      if (!chairRole && user.role) {
+        chairRole = user.role.toLowerCase().includes("chair");
+      }
+
+      // Fallback: if accessing chair page, grant chair permissions
+      if (!chairRole && typeof window !== "undefined") {
+        chairRole = window.location.pathname.startsWith("/chair");
+      }
+
       setIsChair(chairRole);
 
-      let response;
-      if (chairRole) {
-        // If Chair, fetch ALL reports
-        response = await reportsApi.getAll();
-      } else {
-        // If Lecturer, fetch assigned reports
-        if (!lecturerId) {
-          setError("Lecturer ID not found.");
-          setLoading(false);
-          return;
-        }
-        response = await reportsApi.getByLecturerId(lecturerId);
+      // Always fetch reports by lecturer ID (Chair sees their assigned sessions)
+      if (!lecturerId) {
+        setError("Lecturer ID not found.");
+        setLoading(false);
+        return;
       }
+      const response = await reportsApi.getByLecturerId(lecturerId);
 
       if (response.data) {
         setReports(response.data);
@@ -147,6 +155,34 @@ export default function ChairReportStatus() {
     }
   };
 
+  // Handle download file from filePath
+  const handleDownload = async (filePath: string, fileName?: string) => {
+    try {
+      const response = await fetch(filePath);
+      if (!response.ok) {
+        throw new Error("Failed to download file");
+      }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      // Extract filename from URL or use provided fileName
+      const extractedName =
+        fileName || filePath.split("/").pop() || "report.docx";
+      link.download = extractedName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Download failed:", error);
+      swalConfig.error(
+        "Download Failed",
+        "Could not download the file. Please try again."
+      );
+    }
+  };
+
   // Calculate stats
   const totalReports = reports.length;
   const approvedCount = reports.filter((r) => r.status === "Approved").length;
@@ -158,15 +194,13 @@ export default function ChairReportStatus() {
   return (
     <>
       {/* Header */}
-      <div className="section-header">
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-800">
-            Report Review Status
-          </h1>
-          <p className="text-sm text-gray-500">
-            View and manage submitted reports from secretary
-          </p>
-        </div>
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">
+          📝 Report Review Status
+        </h1>
+        <p className="text-gray-600">
+          View and manage submitted reports from secretary
+        </p>
       </div>
 
       {/* Stats Section */}
@@ -220,20 +254,20 @@ export default function ChairReportStatus() {
           <table className="table-base mt-4">
             <thead>
               <tr>
-                <th>ID</th>
-                <th>Session ID</th>
+                <th style={{ textAlign: "center" }}>ID</th>
+                <th style={{ textAlign: "center" }}>Session ID</th>
                 <th>Summary</th>
                 <th>Report</th>
-                <th>Generated Date</th>
-                <th>Status</th>
-                <th>Actions</th>
+                <th style={{ textAlign: "center" }}>Generated Date</th>
+                <th style={{ textAlign: "center" }}>Status</th>
+                <th style={{ textAlign: "center" }}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {reports.map((r) => (
                 <tr key={r.id}>
-                  <td>{r.id}</td>
-                  <td>{r.sessionId}</td>
+                  <td style={{ textAlign: "center" }}>{r.id}</td>
+                  <td style={{ textAlign: "center" }}>{r.sessionId}</td>
                   <td
                     className="max-w-xs truncate"
                     title={r.summaryText || r.summary}
@@ -247,20 +281,20 @@ export default function ChairReportStatus() {
                       ? "Report Available"
                       : "No file"}
                   </td>
-                  <td>
+                  <td style={{ textAlign: "center" }}>
                     {r.generatedDate
                       ? new Date(r.generatedDate).toLocaleDateString()
                       : "-"}
                   </td>
-                  <td>
+                  <td style={{ textAlign: "center" }}>
                     {isChair ? (
                       <select
-                        className={`text-xs font-medium px-2 py-1 rounded-full border-none outline-none cursor-pointer ${
+                        className={`text-sm font-semibold px-4 py-2 rounded-lg border-2 shadow-sm cursor-pointer transition-all duration-200 focus:ring-2 focus:ring-offset-1 ${
                           r.status === "Approved"
-                            ? "bg-green-100 text-green-700"
+                            ? "bg-green-50 text-green-700 border-green-300 focus:ring-green-400"
                             : r.status === "Rejected"
-                            ? "bg-red-100 text-red-700"
-                            : "bg-yellow-100 text-yellow-700"
+                            ? "bg-red-50 text-red-700 border-red-300 focus:ring-red-400"
+                            : "bg-amber-50 text-amber-700 border-amber-300 focus:ring-amber-400"
                         }`}
                         value={r.status || "Pending"}
                         onChange={(e) =>
@@ -268,9 +302,9 @@ export default function ChairReportStatus() {
                         }
                         disabled={actionLoading === r.id}
                       >
-                        <option value="Pending">Pending</option>
-                        <option value="Approved">Approved</option>
-                        <option value="Rejected">Rejected</option>
+                        <option value="Pending">⏳ Pending</option>
+                        <option value="Approved">✅ Approved</option>
+                        <option value="Rejected">❌ Rejected</option>
                       </select>
                     ) : (
                       <span className={statusClass(r.status)}>
@@ -278,15 +312,18 @@ export default function ChairReportStatus() {
                       </span>
                     )}
                   </td>
-                  <td>
-                    <div className="flex gap-2">
+                  <td style={{ textAlign: "center" }}>
+                    <div className="flex gap-2 justify-center">
                       {/* Download Button */}
                       {r.filePath && (
-                        <a
-                          href={r.filePath}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-gray-500 hover:text-gray-700"
+                        <button
+                          onClick={() =>
+                            handleDownload(
+                              r.filePath!,
+                              `meeting-minutes-${r.sessionId}.docx`
+                            )
+                          }
+                          className="p-2 text-gray-500 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-all duration-200"
                           title="Download"
                         >
                           <svg
@@ -303,7 +340,7 @@ export default function ChairReportStatus() {
                               d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V4"
                             />
                           </svg>
-                        </a>
+                        </button>
                       )}
                     </div>
                   </td>
