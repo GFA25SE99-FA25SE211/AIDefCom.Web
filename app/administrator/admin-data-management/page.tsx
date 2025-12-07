@@ -10,6 +10,8 @@ import { groupsApi } from "@/lib/api/groups";
 import { committeeAssignmentsApi } from "@/lib/api/committee-assignments";
 import { councilsApi } from "@/lib/api/councils";
 import { authApi } from "@/lib/api/auth";
+import { memberNotesApi } from "@/lib/api/member-notes";
+import { reportsApi } from "@/lib/api/reports";
 import { swalConfig } from "@/lib/utils/sweetAlert";
 import type {
   MajorDto,
@@ -20,6 +22,8 @@ import type {
   CommitteeAssignmentDto,
   CouncilDto,
   UserDto,
+  MemberNoteDto,
+  ReportDto,
 } from "@/lib/models";
 
 // Import các Modal đã tạo:
@@ -67,14 +71,7 @@ interface Task {
   assignedTo: string;
   status: "Pending" | "Completed" | "Inprogress";
 }
-interface Note {
-  id: number;
-  committeeAssignmentId: string;
-  userName: string | null;
-  groupId: string;
-  noteContent: string;
-  createdAt: string;
-}
+// Note interface removed - using MemberNoteDto from models
 
 type AdminTabKey =
   | "tasks"
@@ -83,6 +80,7 @@ type AdminTabKey =
   | "groups"
   | "rubrics"
   | "notes"
+  | "reports"
   | "assignments";
 
 const formatDateInputValue = (value?: string) => {
@@ -121,6 +119,7 @@ const adminTabs: {
   { key: "groups", label: "Groups", icon: Users },
   { key: "rubrics", label: "Rubrics", icon: BookOpen },
   { key: "notes", label: "Notes", icon: StickyNote },
+  { key: "reports", label: "Reports", icon: BookOpen },
   { key: "assignments", label: "Assignments", icon: Users },
 ];
 
@@ -146,6 +145,8 @@ export default function AdminDataManagementPage() {
   const [editingAssignment, setEditingAssignment] =
     useState<CommitteeAssignmentDto | null>(null);
   const [editingGroup, setEditingGroup] = useState<GroupDto | null>(null);
+  const [editingNote, setEditingNote] = useState<MemberNoteDto | null>(null);
+  const [editingReport, setEditingReport] = useState<ReportDto | null>(null);
 
   /* ============ State data ============ */
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -179,35 +180,8 @@ export default function AdminDataManagementPage() {
     },
   ]);
   const [rubrics, setRubrics] = useState<RubricDto[]>([]);
-  const [notes] = useState<Note[]>([
-    {
-      id: 1,
-      committeeAssignmentId: "486D75CF-3E93-4DA5-A231-885BE87D07AF",
-      userName: null,
-      groupId: "457144B6-D625-4F5B-8BAE-AB1E882DA8DE",
-      noteContent:
-        "Ghi chú: Sinh viên trình bày tốt. Cần theo dõi thêm về phần bảo mật dữ liệu người dùng. Đề xuất bổ sung thêm tính năng tự động phát hiện cảm xúc tiêu cực.",
-      createdAt: "2025-11-13T03:26:07.7033333",
-    },
-    {
-      id: 2,
-      committeeAssignmentId: "486D75CF-3E93-4DA5-A231-885BE87D07AF",
-      userName: null,
-      groupId: "457144B6-D625-4F5B-8BAE-AB1E882DA8DE",
-      noteContent:
-        "Nhóm có sự chuẩn bị tốt cho phần demo. Tuy nhiên cần cải thiện thuật toán xử lý dữ liệu để tăng độ chính xác.",
-      createdAt: "2025-11-14T08:15:22.1234567",
-    },
-    {
-      id: 3,
-      committeeAssignmentId: "A123B456-C789-4DEF-8901-234567890ABC",
-      userName: null,
-      groupId: "789ABC12-3456-789D-EFAB-CDEF01234567",
-      noteContent:
-        "Đề tài có tính ứng dụng cao. Sinh viên cần bổ sung thêm phần testing và viết documentation chi tiết hơn.",
-      createdAt: "2025-11-15T14:30:45.9876543",
-    },
-  ]);
+  const [notes, setNotes] = useState<MemberNoteDto[]>([]);
+  const [reports, setReports] = useState<ReportDto[]>([]);
   const [assignments, setAssignments] = useState<CommitteeAssignmentDto[]>([]);
   const [users, setUsers] = useState<UserDto[]>([]);
 
@@ -218,6 +192,7 @@ export default function AdminDataManagementPage() {
   const [groupPage, setGroupPage] = useState(1);
   const [rubricPage, setRubricPage] = useState(1);
   const [notePage, setNotePage] = useState(1);
+  const [reportPage, setReportPage] = useState(1);
   const [assignmentPage, setAssignmentPage] = useState(1);
 
   // Map userId to fullName for quick lookup
@@ -258,6 +233,7 @@ export default function AdminDataManagementPage() {
     setGroupPage(1);
     setRubricPage(1);
     setNotePage(1);
+    setReportPage(1);
     setAssignmentPage(1);
   }, [activeTab]);
 
@@ -274,6 +250,8 @@ export default function AdminDataManagementPage() {
           assignmentsRes,
           councilsRes,
           usersRes,
+          notesRes,
+          reportsRes,
         ] = await Promise.all([
           majorsApi.getAll().catch(() => ({ data: [] })),
           semestersApi.getAll().catch(() => ({ data: [] })),
@@ -283,6 +261,8 @@ export default function AdminDataManagementPage() {
           committeeAssignmentsApi.getAll().catch(() => ({ data: [] })),
           councilsApi.getAll(false).catch(() => ({ data: [] })),
           authApi.getAllUsers().catch(() => ({ data: [] })),
+          memberNotesApi.getAll().catch(() => ({ data: [] })),
+          reportsApi.getAll().catch(() => ({ data: [] })),
         ]);
 
         setMajors(majorsRes.data || []);
@@ -292,6 +272,8 @@ export default function AdminDataManagementPage() {
         setCouncils(councilsRes.data || []);
         setAssignments(assignmentsRes.data || []);
         setUsers(usersRes.data || []);
+        setNotes(notesRes.data || []);
+        setReports(reportsRes.data || []);
 
         // Transform tasks
         const transformedTasks = (tasksRes.data || []).map(
@@ -386,6 +368,24 @@ export default function AdminDataManagementPage() {
       ),
     [assignments, searchQuery]
   );
+  const filteredNotes = useMemo(
+    () =>
+      getFilteredData(
+        notes,
+        ["noteContent", "committeeAssignmentId", "groupId", "userName"],
+        searchQuery
+      ),
+    [notes, searchQuery]
+  );
+  const filteredReports = useMemo(
+    () =>
+      getFilteredData(
+        reports,
+        ["summary", "filePath", "sessionId"],
+        searchQuery
+      ),
+    [reports, searchQuery]
+  );
 
   // Pagination calculations
   const paginatedTasks = useMemo(() => {
@@ -415,8 +415,12 @@ export default function AdminDataManagementPage() {
 
   const paginatedNotes = useMemo(() => {
     const startIndex = (notePage - 1) * PAGE_SIZE;
-    return notes.slice(startIndex, startIndex + PAGE_SIZE);
-  }, [notes, notePage]);
+    return filteredNotes.slice(startIndex, startIndex + PAGE_SIZE);
+  }, [filteredNotes, notePage]);
+  const paginatedReports = useMemo(() => {
+    const startIndex = (reportPage - 1) * PAGE_SIZE;
+    return filteredReports.slice(startIndex, startIndex + PAGE_SIZE);
+  }, [filteredReports, reportPage]);
 
   const paginatedAssignments = useMemo(() => {
     const startIndex = (assignmentPage - 1) * PAGE_SIZE;
@@ -444,7 +448,8 @@ export default function AdminDataManagementPage() {
     1,
     Math.ceil(filteredRubrics.length / PAGE_SIZE)
   );
-  const noteTotalPages = Math.max(1, Math.ceil(notes.length / PAGE_SIZE));
+  const noteTotalPages = Math.max(1, Math.ceil(filteredNotes.length / PAGE_SIZE));
+  const reportTotalPages = Math.max(1, Math.ceil(filteredReports.length / PAGE_SIZE));
   const assignmentTotalPages = Math.max(
     1,
     Math.ceil(filteredAssignments.length / PAGE_SIZE)
@@ -1030,6 +1035,82 @@ export default function AdminDataManagementPage() {
     }
   };
 
+  const handleEditNote = async (id: number, content: string) => {
+    try {
+      await memberNotesApi.update(id, { content });
+      const response = await memberNotesApi.getAll();
+      setNotes(response.data || []);
+      setEditingNote(null);
+      await swalConfig.success("Success!", "Note updated successfully!");
+    } catch (error: any) {
+      await swalConfig.error(
+        "Error Editing Note",
+        error.message || "Failed to edit note"
+      );
+    }
+  };
+
+  const handleDeleteNote = async (id: number) => {
+    const result = await swalConfig.confirm(
+      "Delete Note?",
+      `Are you sure you want to delete note with ID: ${id}?`,
+      "Yes, delete it!"
+    );
+
+    if (result.isConfirmed) {
+      try {
+        await memberNotesApi.delete(id);
+        const response = await memberNotesApi.getAll();
+        setNotes(response.data || []);
+        await swalConfig.success("Deleted!", "Note deleted successfully!");
+      } catch (error: any) {
+        console.error("Error deleting note:", error);
+        await swalConfig.error(
+          "Error Deleting Note",
+          error.message || "Failed to delete note"
+        );
+      }
+    }
+  };
+
+  const handleEditReport = async (id: number, summary: string) => {
+    try {
+      await reportsApi.update(id, { summary });
+      const response = await reportsApi.getAll();
+      setReports(response.data || []);
+      setEditingReport(null);
+      await swalConfig.success("Success!", "Report updated successfully!");
+    } catch (error: any) {
+      await swalConfig.error(
+        "Error Editing Report",
+        error.message || "Failed to edit report"
+      );
+    }
+  };
+
+  const handleDeleteReport = async (id: number) => {
+    const result = await swalConfig.confirm(
+      "Delete Report?",
+      `Are you sure you want to delete report with ID: ${id}?`,
+      "Yes, delete it!"
+    );
+
+    if (result.isConfirmed) {
+      try {
+        await reportsApi.delete(id);
+        const response = await reportsApi.getAll();
+        setReports(response.data || []);
+        await swalConfig.success("Deleted!", "Report deleted successfully!");
+      } catch (error: any) {
+        console.error("Error deleting report:", error);
+        await swalConfig.error(
+          "Error Deleting Report",
+          error.message || "Failed to delete report"
+        );
+      }
+    }
+  };
+
   const handleDeleteAssignment = async (id: number | string) => {
     const assignmentId = String(id);
     const result = await swalConfig.confirm(
@@ -1388,19 +1469,82 @@ export default function AdminDataManagementPage() {
       {activeTab === "notes" && (
         <>
           {renderHeader("Member Notes")}
+          {renderSearch("Search notes...")}
           {renderTable(
-            ["ID", "Assignment ID", "Group ID", "Note Content", "Created At"],
+            ["ID", "Assignment ID", "Group ID", "Note Content", "Created At", "Actions"],
             paginatedNotes.map((n) => (
               <tr key={n.id}>
                 <td>{n.id}</td>
                 <td>{n.committeeAssignmentId}</td>
                 <td>{n.groupId}</td>
-                <td>{n.noteContent}</td>
+                <td className="max-w-md truncate">{n.noteContent}</td>
                 <td>{new Date(n.createdAt).toLocaleString()}</td>
+                <td className="text-center align-middle">
+                  <div className="flex gap-2 justify-center items-center">
+                    <button
+                      className="btn-subtle"
+                      onClick={() => {
+                        const newContent = prompt("Edit note content:", n.noteContent);
+                        if (newContent !== null && newContent !== n.noteContent) {
+                          handleEditNote(n.id, newContent);
+                        }
+                      }}
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button
+                      className="btn-subtle text-red-600 hover:bg-red-50"
+                      onClick={() => handleDeleteNote(n.id)}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </td>
               </tr>
             ))
           )}
           {renderPagination(notePage, noteTotalPages, setNotePage)}
+        </>
+      )}
+
+      {activeTab === "reports" && (
+        <>
+          {renderHeader("Reports")}
+          {renderSearch("Search reports...")}
+          {renderTable(
+            ["ID", "Session ID", "Summary", "File Path", "Generated Date", "Actions"],
+            paginatedReports.map((r) => (
+              <tr key={r.id}>
+                <td>{r.id}</td>
+                <td>{r.sessionId}</td>
+                <td className="max-w-md truncate">{r.summary}</td>
+                <td className="max-w-md truncate">{r.filePath || "N/A"}</td>
+                <td>{r.generatedDate ? new Date(r.generatedDate).toLocaleString() : "N/A"}</td>
+                <td className="text-center align-middle">
+                  <div className="flex gap-2 justify-center items-center">
+                    <button
+                      className="btn-subtle"
+                      onClick={() => {
+                        const newSummary = prompt("Edit report summary:", r.summary);
+                        if (newSummary !== null && newSummary !== r.summary) {
+                          handleEditReport(r.id, newSummary);
+                        }
+                      }}
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button
+                      className="btn-subtle text-red-600 hover:bg-red-50"
+                      onClick={() => handleDeleteReport(r.id)}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))
+          )}
+          {renderPagination(reportPage, reportTotalPages, setReportPage)}
         </>
       )}
 

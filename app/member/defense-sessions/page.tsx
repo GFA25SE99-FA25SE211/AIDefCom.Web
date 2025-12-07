@@ -48,8 +48,8 @@ function DefenseSessionsContent() {
               .getByLecturerId(lecturerId)
               .catch(() => ({ code: 500, message: "Failed", data: [] }))
           : await defenseSessionsApi
-              .getAll()
-              .catch(() => ({ code: 500, message: "Failed", data: [] }));
+          .getAll()
+          .catch(() => ({ code: 500, message: "Failed", data: [] }));
 
         const sessions = Array.isArray(sessionsRes.data)
           ? sessionsRes.data

@@ -1755,13 +1755,14 @@ export default function DataManagementPage() {
                         >
                           View
                         </button>
-                        <button
+                        {/* Tạm ẩn button download */}
+                        {/* <button
                           className="p-2 rounded-md hover:bg-gray-100"
                           onClick={() => handleDownloadReport(r.filePath)}
                           title="Download"
                         >
                           <Download className="w-4 h-4" />
-                        </button>
+                        </button> */}
                       </div>
                     </td>
                   </tr>
@@ -1924,7 +1925,8 @@ export default function DataManagementPage() {
         isOpen={!!selectedReport}
         onClose={() => setSelectedReport(null)}
         report={selectedReport}
-        onDownload={handleDownloadReport}
+        // Tạm ẩn download
+        // onDownload={handleDownloadReport}
       />
 
       {/* Hidden import inputs */}
