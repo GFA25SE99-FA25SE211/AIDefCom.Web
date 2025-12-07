@@ -225,9 +225,9 @@ export default function ViewScorePage() {
                 
                 setRubrics(rubricsList);
               console.log("✅ Rubrics loaded from lecturer/session API:", rubricsList.length, "rubrics:", rubricsList);
-            } else {
+              } else {
               console.warn("⚠️ No rubrics found from lecturer/session API");
-            }
+              }
           } catch (error: any) {
             // Nếu là 404 hoặc endpoint chưa có, fallback về logic cũ
             const is404 = error?.status === 404 || error?.message?.includes('404') || error?.message?.includes('not found');
