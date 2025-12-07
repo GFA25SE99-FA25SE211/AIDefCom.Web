@@ -113,7 +113,7 @@ export default function StudentHistoryDetailPage() {
         setLoading(true);
         const [studentRes, sessionsRes] = await Promise.all([
           studentsApi.getById(studentId).catch(() => ({ data: null })),
-          defenseSessionsApi.getAll().catch(() => ({ data: [] })),
+          defenseSessionsApi.getByStudentId(studentId).catch(() => ({ data: [] })),
         ]);
 
         const studentData = studentRes.data;
@@ -123,10 +123,8 @@ export default function StudentHistoryDetailPage() {
           return;
         }
 
-        // Get sessions for this student's group
-        const studentSessions = sessionsRes.data?.filter(
-          (s: DefenseSessionDto) => s.groupId === studentData.groupId
-        ) || [];
+        // Get sessions for this student using the API
+        const studentSessions = sessionsRes.data || [];
 
         // Transform to StudentDetail format
         const studentDetail: StudentDetail = {
@@ -137,9 +135,9 @@ export default function StudentHistoryDetailPage() {
           attempts: studentSessions.map((s: DefenseSessionDto, index: number) => ({
             attempt: `Attempt #${studentSessions.length - index}`,
             id: `DEF-${s.id}`,
-            date: s.defenseDate,
-            group: "Group", // TODO: Get group name
-            topic: "Project", // TODO: Get project title
+            date: s.defenseDate || "",
+            group: s.groupId || "N/A", // Use groupId from session
+            topic: "Project", // TODO: Get project title from group
             role: "Member",
             score: 0, // TODO: Get from scores
             grade: "N/A",

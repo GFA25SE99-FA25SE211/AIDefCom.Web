@@ -27,6 +27,7 @@ import { lecturersApi } from "@/lib/api/lecturers";
 import { semestersApi } from "@/lib/api/semesters";
 import { majorsApi } from "@/lib/api/majors";
 import { swalConfig } from "@/lib/utils/sweetAlert";
+import { authUtils } from "@/lib/utils/auth";
 import type { SemesterDto, MajorDto } from "@/lib/models";
 
 // --- Types ---
@@ -57,12 +58,8 @@ const allRoles = [
   "All Roles",
   "Administrator",
   "Lecturer",
-  "Moderator",
-  "Chair",
-  "Member",
-  "Secretary",
   "Student",
-  "No Role",
+  "Moderator",
 ];
 
 const PAGE_SIZE = 8;
@@ -218,7 +215,6 @@ export default function AccountManagementPage() {
       Member: 0,
       Secretary: 0,
       Student: 0,
-      "No Role": 0,
     };
     users.forEach((user) => {
       user.roles.forEach((role) => {
@@ -229,7 +225,6 @@ export default function AccountManagementPage() {
         else if (role === "Member") counts.Member++;
         else if (role === "Secretary") counts.Secretary++;
         else if (role === "Student") counts.Student++;
-        else if (role === "No Role") counts["No Role"]++;
       });
     });
     return counts;
@@ -303,7 +298,9 @@ export default function AccountManagementPage() {
       console.log("Create account response:", response);
 
       if (data.role && data.role !== "Student") {
-        await authApi.assignRole(data.email, data.role);
+        // Gửi "Admin" thay vì "Administrator" cho backend
+        const roleToSend = data.role === "Administrator" ? "Admin" : data.role;
+        await authApi.assignRole(data.email, roleToSend);
       }
 
       // Refresh users list
@@ -359,7 +356,9 @@ export default function AccountManagementPage() {
         editingUser &&
         data.role !== editingUser.primaryRole
       ) {
-        await authApi.assignRole(data.email, data.role);
+        // Gửi "Admin" thay vì "Administrator" cho backend
+        const roleToSend = data.role === "Administrator" ? "Admin" : data.role;
+        await authApi.assignRole(data.email, roleToSend);
       }
 
       // Refresh users list
@@ -381,6 +380,53 @@ export default function AccountManagementPage() {
     const user = users.find((u) => u.id === id);
     if (!user) {
       swalConfig.error("Error", "User not found!");
+      return;
+    }
+
+    // Lấy thông tin user hiện tại đang login
+    const currentUser = authUtils.getCurrentUserInfo();
+    
+    // Kiểm tra xem user đang được xóa có phải là admin không
+    const isUserAdmin = user.roles?.some(r => {
+      const roleLower = r?.toLowerCase();
+      return roleLower === "administrator" || roleLower === "admin";
+    }) || user.primaryRole?.toLowerCase() === "administrator" || 
+        user.primaryRole?.toLowerCase() === "admin";
+    
+    // Kiểm tra xem có phải đang xóa chính mình không
+    let isDeletingSelf = false;
+    
+    // So sánh bằng userId (chuyển về string để so sánh chính xác)
+    if (currentUser.userId) {
+      const currentUserIdStr = String(currentUser.userId).trim();
+      const userToDeleteIdStr = String(user.id).trim();
+      const idToDeleteStr = String(id).trim();
+      if (currentUserIdStr === userToDeleteIdStr || currentUserIdStr === idToDeleteStr) {
+        isDeletingSelf = true;
+      }
+    }
+    
+    // So sánh bằng email (case-insensitive) nếu chưa match bằng id
+    if (!isDeletingSelf && currentUser.email && user.email) {
+      const currentEmailLower = currentUser.email.toLowerCase().trim();
+      const userEmailLower = user.email.toLowerCase().trim();
+      if (currentEmailLower === userEmailLower) {
+        isDeletingSelf = true;
+      }
+    }
+    
+    // Nếu đang cố xóa chính mình và là admin, chặn lại
+    if (isDeletingSelf && isUserAdmin) {
+      console.log("BLOCKED: Admin trying to delete themselves", {
+        currentUser: currentUser,
+        userToDelete: { id: user.id, email: user.email, roles: user.roles },
+        isDeletingSelf,
+        isUserAdmin
+      });
+      await swalConfig.error(
+        "Không thể xóa",
+        "Bạn không thể tự xóa chính tài khoản Administrator của mình!"
+      );
       return;
     }
 
@@ -586,6 +632,68 @@ export default function AccountManagementPage() {
     setIsEditModalOpen(true);
   };
 
+  // Lấy thông tin user hiện tại đang login
+  const currentUserInfo = useMemo(() => {
+    // Thử lấy từ localStorage trước (cách chính)
+    if (typeof window !== 'undefined') {
+      try {
+        const userStr = localStorage.getItem("user");
+        if (userStr) {
+          const user = JSON.parse(userStr);
+          console.log("Current logged in user from localStorage:", user);
+          return {
+            userId: user.id || user.Id || user.userId || null,
+            email: user.email || user.Email || null,
+            name: user.fullName || user.FullName || user.name || null,
+            role: user.role || user.Role || null,
+          };
+        }
+      } catch (error) {
+        console.error("Error parsing user from localStorage:", error);
+      }
+    }
+    
+    // Fallback: thử lấy từ authUtils (token)
+    const userInfo = authUtils.getCurrentUserInfo();
+    console.log("Current logged in user from token:", userInfo);
+    return userInfo;
+  }, []);
+
+  // Kiểm tra xem user có phải là admin đang login chính mình không
+  const isCurrentUserAdminSelf = (user: UserAccount): boolean => {
+    // Kiểm tra role của user - phải là admin
+    const isUserAdmin = user.roles?.some(r => {
+      const roleLower = r?.toLowerCase();
+      return roleLower === "administrator" || roleLower === "admin";
+    }) || user.primaryRole?.toLowerCase() === "administrator" || 
+        user.primaryRole?.toLowerCase() === "admin";
+    
+    if (!isUserAdmin) return false;
+    
+    // Kiểm tra xem có phải chính mình không
+    // So sánh bằng userId
+    if (currentUserInfo.userId) {
+      const currentUserIdStr = String(currentUserInfo.userId).trim();
+      const userToCheckIdStr = String(user.id).trim();
+      if (currentUserIdStr === userToCheckIdStr) {
+        console.log("Match by userId:", { currentUserIdStr, userToCheckIdStr, userEmail: user.email });
+        return true;
+      }
+    }
+    
+    // So sánh bằng email (case-insensitive)
+    if (currentUserInfo.email && user.email) {
+      const currentEmailLower = currentUserInfo.email.toLowerCase().trim();
+      const userEmailLower = user.email.toLowerCase().trim();
+      if (currentEmailLower === userEmailLower) {
+        console.log("Match by email:", { currentEmailLower, userEmailLower, userId: user.id });
+        return true;
+      }
+    }
+    
+    return false;
+  };
+
   return (
     <main className="page-container">
       <header className="section-header">
@@ -718,7 +826,17 @@ export default function AccountManagementPage() {
                       </button>
                       <button
                         className="btn-subtle p-1 text-red-600 hover:bg-red-50"
-                        onClick={() => handleDeleteAccount(user.id)}
+                        onClick={() => {
+                          // Kiểm tra nếu là admin đang xóa chính mình, hiển thị alert
+                          if (isCurrentUserAdminSelf(user)) {
+                            swalConfig.error(
+                              "Không thể xóa",
+                              "Bạn không thể tự xóa chính tài khoản Administrator của mình!"
+                            );
+                            return;
+                          }
+                          handleDeleteAccount(user.id);
+                        }}
                         disabled={deletingUserId === user.id}
                         title={
                           deletingUserId === user.id ? "Deleting..." : "Delete"

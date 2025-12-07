@@ -15,7 +15,7 @@ interface ReportDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
   report: ReportData | null;
-  onDownload: (filePath: string) => void;
+  onDownload?: (filePath: string) => void; // Tạm optional để ẩn button download
 }
 
 const ReportDetailModal: React.FC<ReportDetailModalProps> = ({
@@ -27,8 +27,10 @@ const ReportDetailModal: React.FC<ReportDetailModalProps> = ({
   if (!isOpen || !report) return null;
 
   const handleDownloadClick = () => {
-    onDownload(report.filePath);
-    onClose();
+    if (onDownload) {
+      onDownload(report.filePath);
+      onClose();
+    }
   };
 
   const footer = (
@@ -40,13 +42,16 @@ const ReportDetailModal: React.FC<ReportDetailModalProps> = ({
       >
         Close
       </button>
-      <button
-        type="button"
-        className="px-3 py-2 rounded-md bg-blue-600 text-white text-sm"
-        onClick={handleDownloadClick}
-      >
-        Download Report
-      </button>
+      {/* Tạm ẩn button download */}
+      {/* {onDownload && (
+        <button
+          type="button"
+          className="px-3 py-2 rounded-md bg-blue-600 text-white text-sm"
+          onClick={handleDownloadClick}
+        >
+          Download Report
+        </button>
+      )} */}
     </>
   );
 

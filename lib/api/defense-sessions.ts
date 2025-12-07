@@ -29,6 +29,12 @@ export const defenseSessionsApi = {
     );
   },
 
+  getByStudentId: async (studentId: string) => {
+    return apiClient.get<DefenseSessionDto[]>(
+      `/api/defense-sessions/student/${studentId}`
+    );
+  },
+
   getUsersBySessionId: async (id: number) => {
     return apiClient.get<any[]>(`/api/defense-sessions/${id}/users`);
   },

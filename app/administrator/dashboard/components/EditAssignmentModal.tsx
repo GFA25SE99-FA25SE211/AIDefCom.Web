@@ -130,15 +130,19 @@ const EditAssignmentModal: React.FC<EditAssignmentModalProps> = ({
         </div>
 
         <div className="form-group">
-          <label htmlFor="role-input">Role</label>
-          <input
-            id="role-input"
-            type="text"
+          <label htmlFor="role-select">Role</label>
+          <select
+            id="role-select"
             value={role}
             onChange={(e) => setRole(e.target.value)}
-            placeholder="e.g. Chair, Member, Secretary"
             required
-          />
+          >
+            <option value="">Select Role</option>
+            <option value="Administrator">Administrator</option>
+            <option value="Lecturer">Lecturer</option>
+            <option value="Student">Student</option>
+            <option value="Moderator">Moderator</option>
+          </select>
         </div>
       </form>
     </Modal>
