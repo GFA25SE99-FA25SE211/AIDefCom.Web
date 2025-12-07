@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { reportsApi } from "@/lib/api/reports";
+import { defenseSessionsApi } from "@/lib/api/defense-sessions";
 import { swalConfig } from "@/lib/utils/sweetAlert";
 import type { ReportDto } from "@/lib/models";
 
@@ -11,12 +12,15 @@ export default function ChairReportStatus() {
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<number | null>(null);
   const [isChair, setIsChair] = useState(false);
+  const [sessionGroupMap, setSessionGroupMap] = useState<Map<number, string>>(
+    new Map()
+  );
 
   const fetchReports = async () => {
     try {
       setLoading(true);
       // Get current user from localStorage
-      const storedUser = localStorage.getItem('user');
+      const storedUser = localStorage.getItem("user");
       if (!storedUser) {
         setError("User not found. Please login.");
         setLoading(false);
@@ -51,6 +55,31 @@ export default function ChairReportStatus() {
 
       if (response.data) {
         setReports(response.data);
+
+        // Fetch groupId for each unique sessionId
+        const uniqueSessionIds = [
+          ...new Set(
+            response.data.map((r: ReportDto) => r.sessionId).filter(Boolean)
+          ),
+        ];
+        const groupMap = new Map<number, string>();
+
+        await Promise.all(
+          uniqueSessionIds.map(async (sessionId) => {
+            try {
+              const sessionRes = await defenseSessionsApi.getById(
+                sessionId as number
+              );
+              if (sessionRes.data && sessionRes.data.groupId) {
+                groupMap.set(sessionId as number, sessionRes.data.groupId);
+              }
+            } catch (err) {
+              console.error(`Failed to fetch session ${sessionId}:`, err);
+            }
+          })
+        );
+
+        setSessionGroupMap(groupMap);
       }
     } catch (err) {
       console.error("Failed to fetch reports:", err);
@@ -120,9 +149,11 @@ export default function ChairReportStatus() {
 
   // Calculate stats
   const totalReports = reports.length;
-  const approvedCount = reports.filter(r => r.status === "Approved").length;
-  const rejectedCount = reports.filter(r => r.status === "Rejected").length;
-  const pendingCount = reports.filter(r => !r.status || r.status === "Pending").length;
+  const approvedCount = reports.filter((r) => r.status === "Approved").length;
+  const rejectedCount = reports.filter((r) => r.status === "Rejected").length;
+  const pendingCount = reports.filter(
+    (r) => !r.status || r.status === "Pending"
+  ).length;
 
   return (
     <>
@@ -176,11 +207,15 @@ export default function ChairReportStatus() {
       {/* Table Section */}
       <div className="mt-8 card-base">
         {loading ? (
-          <div className="text-center py-10 text-gray-500">Loading reports...</div>
+          <div className="text-center py-10 text-gray-500">
+            Loading reports...
+          </div>
         ) : error ? (
           <div className="text-center py-10 text-red-500">{error}</div>
         ) : reports.length === 0 ? (
-          <div className="text-center py-10 text-gray-500">No reports found.</div>
+          <div className="text-center py-10 text-gray-500">
+            No reports found.
+          </div>
         ) : (
           <table className="table-base mt-4">
             <thead>
@@ -188,7 +223,7 @@ export default function ChairReportStatus() {
                 <th>ID</th>
                 <th>Session ID</th>
                 <th>Summary</th>
-                <th>File Path</th>
+                <th>Report</th>
                 <th>Generated Date</th>
                 <th>Status</th>
                 <th>Actions</th>
@@ -199,14 +234,23 @@ export default function ChairReportStatus() {
                 <tr key={r.id}>
                   <td>{r.id}</td>
                   <td>{r.sessionId}</td>
-                  <td className="max-w-xs truncate" title={r.summaryText || r.summary}>
+                  <td
+                    className="max-w-xs truncate"
+                    title={r.summaryText || r.summary}
+                  >
                     {r.summaryText || r.summary || "No summary"}
                   </td>
-                  <td className="text-blue-600 underline cursor-pointer hover:text-blue-700 transition max-w-xs truncate">
-                    {r.filePath || "No file"}
+                  <td className="text-purple-600 font-medium">
+                    {r.sessionId && sessionGroupMap.get(r.sessionId)
+                      ? `Report of Group ${sessionGroupMap.get(r.sessionId)}`
+                      : r.filePath
+                      ? "Report Available"
+                      : "No file"}
                   </td>
                   <td>
-                    {r.generatedDate ? new Date(r.generatedDate).toLocaleDateString() : "-"}
+                    {r.generatedDate
+                      ? new Date(r.generatedDate).toLocaleDateString()
+                      : "-"}
                   </td>
                   <td>
                     {isChair ? (
@@ -219,7 +263,9 @@ export default function ChairReportStatus() {
                             : "bg-yellow-100 text-yellow-700"
                         }`}
                         value={r.status || "Pending"}
-                        onChange={(e) => handleStatusChange(r.id, e.target.value)}
+                        onChange={(e) =>
+                          handleStatusChange(r.id, e.target.value)
+                        }
                         disabled={actionLoading === r.id}
                       >
                         <option value="Pending">Pending</option>
@@ -227,7 +273,9 @@ export default function ChairReportStatus() {
                         <option value="Rejected">Rejected</option>
                       </select>
                     ) : (
-                      <span className={statusClass(r.status)}>{r.status || "Pending"}</span>
+                      <span className={statusClass(r.status)}>
+                        {r.status || "Pending"}
+                      </span>
                     )}
                   </td>
                   <td>

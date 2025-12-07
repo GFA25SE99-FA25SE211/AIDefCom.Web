@@ -377,8 +377,8 @@ function extractRole(token: string) {
 async function redirectByRole(role: string, router: any, user?: any) {
   const r = role?.toLowerCase();
 
-  // Check voice enrollment for non-admin users
-  if (user && r !== "admin" && r !== "administrator") {
+  // Check voice enrollment for non-admin and non-moderator users
+  if (user && r !== "admin" && r !== "administrator" && r !== "moderator") {
     try {
       // Import dynamically to avoid circular dependencies if any, or just use global import
       const { voiceApi } = await import("@/lib/api/voice");
