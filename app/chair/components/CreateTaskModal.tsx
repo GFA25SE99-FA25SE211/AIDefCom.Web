@@ -62,10 +62,10 @@ export default function CreateTaskModal({
 
       onClose();
       swalConfig.success(
-        "Tạo Task Thành Công!",
-        `Task "${formData.title}" đã được tạo và giao cho ${
+        "Task Created Successfully!",
+        `Task "${formData.title}" has been created and assigned to ${
           lecturers.find((l) => l.id === formData.assignedToId)?.fullName ||
-          "thành viên"
+          "member"
         }.`
       );
     } catch (err: any) {

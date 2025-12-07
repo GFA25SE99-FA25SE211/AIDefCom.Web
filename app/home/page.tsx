@@ -40,7 +40,7 @@ export default function HomePage() {
     const fetchSessions = async () => {
       try {
         setLoading(true);
-        
+
         // Get current user's lecturerId from localStorage
         let lecturerId: string | null = null;
         try {
@@ -60,65 +60,86 @@ export default function HomePage() {
               .catch(async (error) => {
                 console.error("Error fetching sessions by lecturerId:", error);
                 // Check if it's a network error
-                if (error instanceof TypeError && error.message === 'Failed to fetch') {
-                  console.error("Network error: Backend server may not be running or CORS is not configured");
+                if (
+                  error instanceof TypeError &&
+                  error.message === "Failed to fetch"
+                ) {
+                  console.error(
+                    "Network error: Backend server may not be running or CORS is not configured"
+                  );
                   await swalConfig.error(
-                    "Lỗi kết nối",
-                    "Không thể kết nối đến server. Vui lòng kiểm tra:\n- Server backend có đang chạy không?\n- Cấu hình CORS đã đúng chưa?\n- Kết nối mạng có ổn định không?"
+                    "Connection Error",
+                    "Unable to connect to server. Please check:\n- Is the backend server running?\n- Is CORS configured correctly?\n- Is your network connection stable?"
                   );
                 } else {
                   await swalConfig.error(
-                    "Lỗi tải dữ liệu",
-                    "Không thể tải danh sách phiên bảo vệ. Vui lòng thử lại sau."
+                    "Data Loading Error",
+                    "Unable to load defense sessions list. Please try again later."
                   );
                 }
-                return { code: 500, message: "Failed to fetch sessions", data: [] };
+                return {
+                  code: 500,
+                  message: "Failed to fetch sessions",
+                  data: [],
+                };
               })
-          : defenseSessionsApi
-              .getAll()
-              .catch(async (error) => {
-                console.error("Error fetching all sessions:", error);
-                // Check if it's a network error
-                if (error instanceof TypeError && error.message === 'Failed to fetch') {
-                  console.error("Network error: Backend server may not be running or CORS is not configured");
-                  await swalConfig.error(
-                    "Lỗi kết nối",
-                    "Không thể kết nối đến server. Vui lòng kiểm tra:\n- Server backend có đang chạy không?\n- Cấu hình CORS đã đúng chưa?\n- Kết nối mạng có ổn định không?"
-                  );
-                } else {
-                  await swalConfig.error(
-                    "Lỗi tải dữ liệu",
-                    "Không thể tải danh sách phiên bảo vệ. Vui lòng thử lại sau."
-                  );
-                }
-                return { code: 500, message: "Failed to fetch sessions", data: [] };
-              });
-
-        const [sessionsRes, groupsRes] = await Promise.all([
-          sessionsPromise,
-          groupsApi
-            .getAll(false)
-            .catch(async (error) => {
-              console.error("Error fetching groups:", error);
+          : defenseSessionsApi.getAll().catch(async (error) => {
+              console.error("Error fetching all sessions:", error);
               // Check if it's a network error
-              if (error instanceof TypeError && error.message === 'Failed to fetch') {
-                console.error("Network error: Backend server may not be running or CORS is not configured");
+              if (
+                error instanceof TypeError &&
+                error.message === "Failed to fetch"
+              ) {
+                console.error(
+                  "Network error: Backend server may not be running or CORS is not configured"
+                );
                 await swalConfig.error(
-                  "Lỗi kết nối",
-                  "Không thể kết nối đến server. Vui lòng kiểm tra:\n- Server backend có đang chạy không?\n- Cấu hình CORS đã đúng chưa?\n- Kết nối mạng có ổn định không?"
+                  "Connection Error",
+                  "Unable to connect to server. Please check:\n- Is the backend server running?\n- Is CORS configured correctly?\n- Is your network connection stable?"
                 );
               } else {
                 await swalConfig.error(
-                  "Lỗi tải dữ liệu",
-                  "Không thể tải danh sách nhóm. Vui lòng thử lại sau."
+                  "Data Loading Error",
+                  "Unable to load defense sessions list. Please try again later."
                 );
               }
-              return { code: 500, message: "Failed to fetch groups", data: [] };
-            }),
+              return {
+                code: 500,
+                message: "Failed to fetch sessions",
+                data: [],
+              };
+            });
+
+        const [sessionsRes, groupsRes] = await Promise.all([
+          sessionsPromise,
+          groupsApi.getAll(false).catch(async (error) => {
+            console.error("Error fetching groups:", error);
+            // Check if it's a network error
+            if (
+              error instanceof TypeError &&
+              error.message === "Failed to fetch"
+            ) {
+              console.error(
+                "Network error: Backend server may not be running or CORS is not configured"
+              );
+              await swalConfig.error(
+                "Connection Error",
+                "Unable to connect to server. Please check:\n- Is the backend server running?\n- Is CORS configured correctly?\n- Is your network connection stable?"
+              );
+            } else {
+              await swalConfig.error(
+                "Data Loading Error",
+                "Unable to load groups list. Please try again later."
+              );
+            }
+            return { code: 500, message: "Failed to fetch groups", data: [] };
+          }),
         ]);
 
         // Extract data from API response structure
-        const sessions = Array.isArray(sessionsRes.data) ? sessionsRes.data : [];
+        const sessions = Array.isArray(sessionsRes.data)
+          ? sessionsRes.data
+          : [];
         const groups = Array.isArray(groupsRes.data) ? groupsRes.data : [];
 
         console.log("Sessions API Response:", {
@@ -135,53 +156,56 @@ export default function HomePage() {
           return;
         }
 
-        const sessionsWithGroups: (SessionWithGroup | null)[] = await Promise.all(
-          sessions.map(async (session: DefenseSessionDto) => {
-            const group = groups.find((g: GroupDto) => g.id === session.groupId);
-            
-            if (!group) {
-              return null;
-            }
+        const sessionsWithGroups: (SessionWithGroup | null)[] =
+          await Promise.all(
+            sessions.map(async (session: DefenseSessionDto) => {
+              const group = groups.find(
+                (g: GroupDto) => g.id === session.groupId
+              );
 
-            // Get students for this group
-            const studentsRes = await studentsApi
-              .getByGroupId(session.groupId)
-              .catch(() => ({ code: 500, message: "Failed", data: [] }));
-            const students = Array.isArray(studentsRes.data)
-              ? studentsRes.data
-              : [];
-            const members =
-              students.length > 0
-                ? students
-                    .map(
-                      (s: StudentDto) => s.fullName || s.userName || "Unknown"
-                    )
-                    .join(", ")
-                : "No members assigned";
+              if (!group) {
+                return null;
+              }
 
-            const sessionDate = new Date(session.defenseDate);
-            const isCompleted = sessionDate < new Date();
-            const isUpcoming = sessionDate >= new Date();
+              // Get students for this group
+              const studentsRes = await studentsApi
+                .getByGroupId(session.groupId)
+                .catch(() => ({ code: 500, message: "Failed", data: [] }));
+              const students = Array.isArray(studentsRes.data)
+                ? studentsRes.data
+                : [];
+              const members =
+                students.length > 0
+                  ? students
+                      .map(
+                        (s: StudentDto) => s.fullName || s.userName || "Unknown"
+                      )
+                      .join(", ")
+                  : "No members assigned";
 
-            const displayName = getGroupDisplayName(group);
-            const projectTitle = getProjectTitle(group);
+              const sessionDate = new Date(session.defenseDate);
+              const isCompleted = sessionDate < new Date();
+              const isUpcoming = sessionDate >= new Date();
 
-            let displayStatus: SessionStatus = "Scheduled";
-            if (isCompleted) {
-              displayStatus = "Completed";
-            } else if (isUpcoming) {
-              displayStatus = "Upcoming";
-            }
+              const displayName = getGroupDisplayName(group);
+              const projectTitle = getProjectTitle(group);
 
-            return {
-              ...session,
-              groupName: displayName,
-              projectTitle,
-              members,
-              displayStatus,
-            };
-          })
-        );
+              let displayStatus: SessionStatus = "Scheduled";
+              if (isCompleted) {
+                displayStatus = "Completed";
+              } else if (isUpcoming) {
+                displayStatus = "Upcoming";
+              }
+
+              return {
+                ...session,
+                groupName: displayName,
+                projectTitle,
+                members,
+                displayStatus,
+              };
+            })
+          );
 
         // Filter out null values
         const validSessions = sessionsWithGroups.filter(
@@ -199,15 +223,16 @@ export default function HomePage() {
       } catch (error) {
         console.error("Error fetching sessions:", error);
         // Show error notification if it's a network error
-        if (error instanceof TypeError && error.message === 'Failed to fetch') {
+        if (error instanceof TypeError && error.message === "Failed to fetch") {
           await swalConfig.error(
-            "Lỗi kết nối",
-            "Không thể kết nối đến server. Vui lòng kiểm tra:\n- Server backend có đang chạy không?\n- Cấu hình CORS đã đúng chưa?\n- Kết nối mạng có ổn định không?"
+            "Connection Error",
+            "Unable to connect to server. Please check:\n- Is the backend server running?\n- Is CORS configured correctly?\n- Is your network connection stable?"
           );
         } else if (error instanceof Error) {
           await swalConfig.error(
-            "Lỗi",
-            error.message || "Đã xảy ra lỗi khi tải dữ liệu. Vui lòng thử lại sau."
+            "Error",
+            error.message ||
+              "An error occurred while loading data. Please try again later."
           );
         }
         setSessionsData([]);
@@ -225,39 +250,39 @@ export default function HomePage() {
     <div className="space-y-6">
       <Header totalCount={totalCount} />
 
-        {/* Danh sách sessions */}
-        {loading ? (
-          <div className="text-center py-8 text-gray-500">
-            Loading defense sessions...
-          </div>
-        ) : sessionsData.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">
-            No defense sessions found.
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
-            {sessionsData.map((session) => (
-              <SessionCard
-                key={session.id}
-                sessionId={session.id}
-                groupId={session.groupId}
-                groupName={session.groupName}
-                projectTitle={session.projectTitle}
-                location={session.location}
-                defenseDate={session.defenseDate}
-                startTime={session.startTime}
-                endTime={session.endTime}
-                status={session.displayStatus}
-                members={session.members}
-              />
-            ))}
-          </div>
-        )}
+      {/* Danh sách sessions */}
+      {loading ? (
+        <div className="text-center py-8 text-gray-500">
+          Loading defense sessions...
+        </div>
+      ) : sessionsData.length === 0 ? (
+        <div className="text-center py-8 text-gray-500">
+          No defense sessions found.
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
+          {sessionsData.map((session) => (
+            <SessionCard
+              key={session.id}
+              sessionId={session.id}
+              groupId={session.groupId}
+              groupName={session.groupName}
+              projectTitle={session.projectTitle}
+              location={session.location}
+              defenseDate={session.defenseDate}
+              startTime={session.startTime}
+              endTime={session.endTime}
+              status={session.displayStatus}
+              members={session.members}
+            />
+          ))}
+        </div>
+      )}
 
-        {/* Footer */}
-        <footer className="text-center text-sm text-gray-500 mt-8">
-          © 2025 AIDefCom — Smart Graduation Defense
-        </footer>
+      {/* Footer */}
+      <footer className="text-center text-sm text-gray-500 mt-8">
+        © 2025 AIDefCom — Smart Graduation Defense
+      </footer>
     </div>
   );
 }

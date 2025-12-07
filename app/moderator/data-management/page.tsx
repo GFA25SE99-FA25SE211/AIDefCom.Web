@@ -154,7 +154,6 @@ export default function DataManagementPage() {
   const [councilImportMajorId, setCouncilImportMajorId] = useState("");
   const councilFileInputRef = useRef<HTMLInputElement | null>(null);
 
-
   const [isStudentImportModalOpen, setIsStudentImportModalOpen] =
     useState(false);
   const studentFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -535,7 +534,7 @@ export default function DataManagementPage() {
       const groupsData = (response.data || []).map((g: GroupDto) => ({
         id: g.id || "0",
         topicEN: g.projectTitle || "No title",
-        topicVN: g.projectTitle || "Không có tiêu đề",
+        topicVN: g.projectTitle || "No title",
         semester:
           semesters.find((s) => s.id === g.semesterId)?.name ||
           `Semester ${g.semesterId}`,
@@ -553,7 +552,6 @@ export default function DataManagementPage() {
       );
     }
   };
-
 
   const handleAddStudent = async (data: {
     userId: string;
@@ -747,7 +745,7 @@ export default function DataManagementPage() {
       const groupsData = (response.data || []).map((g: GroupDto) => ({
         id: g.id || "0",
         topicEN: g.projectTitle || "No title",
-        topicVN: g.projectTitle || "Không có tiêu đề",
+        topicVN: g.projectTitle || "No title",
         semester:
           semesters.find((s) => s.id === g.semesterId)?.name ||
           `Semester ${g.semesterId}`,
@@ -1999,7 +1997,6 @@ export default function DataManagementPage() {
           </div>
         </div>
       )}
-
 
       {/* Student import modal */}
       {isStudentImportModalOpen && (
