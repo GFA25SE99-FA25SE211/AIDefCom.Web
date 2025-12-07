@@ -279,45 +279,783 @@ export default function MeetingMinutesForm({
     }
   };
 
-  // Handle Save Minutes
+  // Handle Save Minutes - Generate Word document and upload to server
   const handleSaveMinutes = async () => {
     setSaving(true);
     try {
-      // Step 1: Generate PDF from current form (placeholder - will need actual PDF generation)
-      // For now, we'll create a simple text representation
-      const pdfBlob = new Blob([JSON.stringify(formData, null, 2)], {
-        type: "application/pdf",
-      });
-      const pdfFile = new File([pdfBlob], `meeting-minutes-${defenseId}.pdf`, {
-        type: "application/pdf",
+      // Step 1: Generate Word document using same logic as handleExportWord
+      // Create presentation table rows
+      const presentationTableRows = formData.presentationSummary.map(
+        (p) =>
+          new TableRow({
+            children: [
+              new TableCell({
+                children: [
+                  new Paragraph({
+                    children: [new TextRun({ text: p.student, size: 24 })],
+                  }),
+                ],
+                width: { size: 20, type: WidthType.PERCENTAGE },
+              }),
+              new TableCell({
+                children: [
+                  new Paragraph({
+                    children: [
+                      new TextRun({ text: p.content || "", size: 24 }),
+                    ],
+                  }),
+                ],
+                width: { size: 80, type: WidthType.PERCENTAGE },
+              }),
+            ],
+          })
+      );
+
+      // Create Q&A table rows
+      const qaTableRows = formData.qa.map(
+        (q) =>
+          new TableRow({
+            children: [
+              new TableCell({
+                children: [
+                  new Paragraph({
+                    children: [
+                      new TextRun({
+                        text: `${q.questioner}:`,
+                        bold: true,
+                        size: 24,
+                      }),
+                    ],
+                  }),
+                  new Paragraph({
+                    children: [new TextRun({ text: q.question, size: 24 })],
+                  }),
+                ],
+                width: { size: 50, type: WidthType.PERCENTAGE },
+              }),
+              new TableCell({
+                children: [
+                  new Paragraph({
+                    children: [
+                      new TextRun({
+                        text: `${q.respondent}:`,
+                        bold: true,
+                        size: 24,
+                      }),
+                    ],
+                  }),
+                  new Paragraph({
+                    children: [new TextRun({ text: q.answer, size: 24 })],
+                  }),
+                ],
+                width: { size: 50, type: WidthType.PERCENTAGE },
+              }),
+            ],
+          })
+      );
+
+      // Create grades table rows
+      const gradesTableRows = formData.officialGrades.map(
+        (g, idx) =>
+          new TableRow({
+            children: [
+              new TableCell({
+                children: [
+                  new Paragraph({
+                    children: [new TextRun({ text: `${idx + 1}`, size: 24 })],
+                    alignment: AlignmentType.CENTER,
+                  }),
+                ],
+              }),
+              new TableCell({
+                children: [
+                  new Paragraph({
+                    children: [new TextRun({ text: g.id, size: 24 })],
+                    alignment: AlignmentType.CENTER,
+                  }),
+                ],
+              }),
+              new TableCell({
+                children: [
+                  new Paragraph({
+                    children: [new TextRun({ text: g.name, size: 24 })],
+                  }),
+                ],
+              }),
+              new TableCell({
+                children: [
+                  new Paragraph({
+                    children: [new TextRun({ text: g.grade || "", size: 24 })],
+                    alignment: AlignmentType.CENTER,
+                  }),
+                ],
+              }),
+              new TableCell({
+                children: [
+                  new Paragraph({
+                    children: [
+                      new TextRun({ text: g.conclusion || "", size: 24 }),
+                    ],
+                  }),
+                ],
+              }),
+            ],
+          })
+      );
+
+      // Fetch logo image
+      let logoImageBuffer: ArrayBuffer | null = null;
+      try {
+        const logoResponse = await fetch("/fpt-logo.png");
+        if (logoResponse.ok) {
+          logoImageBuffer = await logoResponse.arrayBuffer();
+        }
+      } catch (error) {
+        console.warn("Could not load logo:", error);
+      }
+
+      // Create Word Document with EXACT same format as handleExportWord
+      const doc = new Document({
+        sections: [
+          {
+            properties: {},
+            children: [
+              // Header - FPT University Logo
+              ...(logoImageBuffer
+                ? [
+                    new Paragraph({
+                      children: [
+                        new ImageRun({
+                          data: logoImageBuffer,
+                          transformation: {
+                            width: 224,
+                            height: 87,
+                          },
+                          type: "png",
+                        }),
+                      ],
+                      alignment: AlignmentType.CENTER,
+                      spacing: { after: 100 },
+                    }),
+                  ]
+                : [
+                    new Paragraph({
+                      children: [
+                        new TextRun({
+                          text: "FPT Education",
+                          color: "FF6600",
+                          bold: true,
+                          size: 28,
+                        }),
+                      ],
+                      alignment: AlignmentType.CENTER,
+                    }),
+                  ]),
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                spacing: { after: 200 },
+              }),
+
+              // Title
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: "BIÊN BẢN KẾT LUẬN CỦA HỘI ĐỒNG CHẤM ĐIỂM KHÓA LUẬN",
+                    bold: true,
+                    size: 24,
+                  }),
+                ],
+                alignment: AlignmentType.CENTER,
+              }),
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: "THESIS COUNCIL MEETING MINUTES",
+                    bold: true,
+                    italics: true,
+                    size: 24,
+                  }),
+                ],
+                alignment: AlignmentType.CENTER,
+                spacing: { after: 200 },
+              }),
+              // Semester/Year
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: `Học kỳ / Semester `,
+                    bold: true,
+                    size: 24,
+                  }),
+                  new TextRun({
+                    text: formData.semester,
+                    size: 24,
+                  }),
+                  new TextRun({ text: ` Năm / Year `, bold: true, size: 24 }),
+                  new TextRun({ text: formData.year, size: 24 }),
+                ],
+                alignment: AlignmentType.CENTER,
+                spacing: { after: 200 },
+              }),
+              // Section 1: Council members
+              new Paragraph({
+                children: [
+                  new TextRun({ text: "1. ", bold: true, size: 24 }),
+                  new TextRun({
+                    text: "Thành phần Hội đồng số / Member of Thesis ",
+                    bold: true,
+                    size: 24,
+                  }),
+                  new TextRun({
+                    text: "Council ",
+                    bold: true,
+                    italics: true,
+                    size: 24,
+                  }),
+                  new TextRun({ text: formData.councilId, size: 24 }),
+                  new TextRun({
+                    text: ", including:",
+                    italics: true,
+                    size: 24,
+                  }),
+                ],
+                spacing: { before: 150 },
+              }),
+              new Paragraph({
+                children: [
+                  new TextRun({ text: "Chủ tịch hội đồng / ", size: 24 }),
+                  new TextRun({ text: "Chairperson", italics: true, size: 24 }),
+                  new TextRun({ text: `: ${formData.chairperson}`, size: 24 }),
+                ],
+              }),
+              new Paragraph({
+                children: [
+                  new TextRun({ text: "Thư ký / ", size: 24 }),
+                  new TextRun({ text: "Secretary", italics: true, size: 24 }),
+                  new TextRun({ text: `: ${formData.secretary}`, size: 24 }),
+                ],
+              }),
+              ...formData.members.map(
+                (member) =>
+                  new Paragraph({
+                    children: [
+                      new TextRun({ text: "Ủy viên / ", size: 24 }),
+                      new TextRun({ text: "Member", italics: true, size: 24 }),
+                      new TextRun({ text: `: ${member}`, size: 24 }),
+                    ],
+                  })
+              ),
+              // Section 2: Time and venue
+              new Paragraph({
+                children: [
+                  new TextRun({ text: "2. ", bold: true, size: 24 }),
+                  new TextRun({
+                    text: "Thời gian, địa điểm / ",
+                    bold: true,
+                    size: 24,
+                  }),
+                  new TextRun({
+                    text: "Time and venue:",
+                    bold: true,
+                    italics: true,
+                    size: 24,
+                  }),
+                ],
+                spacing: { before: 150 },
+              }),
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: `Thời gian: ${formData.time}`,
+                    size: 24,
+                  }),
+                ],
+              }),
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: `Time: ${formData.timeEn}`,
+                    italics: true,
+                    size: 24,
+                  }),
+                ],
+              }),
+              new Paragraph({
+                children: [
+                  new TextRun({ text: "Địa điểm / ", size: 24 }),
+                  new TextRun({ text: "Venue", italics: true, size: 24 }),
+                  new TextRun({ text: `: ${formData.venue}`, size: 24 }),
+                ],
+              }),
+              // Section 3: Progress of defense
+              new Paragraph({
+                children: [
+                  new TextRun({ text: "3. ", bold: true, size: 24 }),
+                  new TextRun({
+                    text: "Diễn biến của quá trình bảo vệ khóa luận (tên khóa luận) / ",
+                    bold: true,
+                    size: 24,
+                  }),
+                  new TextRun({
+                    text: "Progress of the thesis defense: (Name of the thesis):",
+                    bold: true,
+                    italics: true,
+                    size: 24,
+                  }),
+                ],
+                spacing: { before: 150 },
+              }),
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: `Thời gian bắt đầu / Starting time: ${formData.startTime}`,
+                    size: 24,
+                  }),
+                ],
+              }),
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: `Thời gian kết thúc / Ending time: ${formData.endTime}`,
+                    size: 24,
+                  }),
+                ],
+              }),
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: "Tóm tắt phần trình bày của nhóm/sinh viên / ",
+                    size: 24,
+                  }),
+                  new TextRun({
+                    text: "Summarize the presentation of the group/student:",
+                    italics: true,
+                    size: 24,
+                  }),
+                ],
+                spacing: { before: 100 },
+              }),
+              new Paragraph({
+                children: [
+                  new TextRun({ text: "Đề tài:", bold: true, size: 24 }),
+                ],
+                indent: { left: 720 },
+              }),
+              new Paragraph({
+                children: [
+                  new TextRun({ text: formData.thesisName, size: 24 }),
+                ],
+                indent: { left: 720 },
+              }),
+              new Paragraph({
+                children: [
+                  new TextRun({ text: "Mã đề tài: ", bold: true, size: 24 }),
+                  new TextRun({ text: formData.thesisCode, size: 24 }),
+                ],
+                indent: { left: 720 },
+              }),
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: "Nhóm thực hiện:",
+                    bold: true,
+                    size: 24,
+                  }),
+                ],
+                indent: { left: 720 },
+              }),
+              ...formData.studentGroup.map(
+                (student, idx) =>
+                  new Paragraph({
+                    children: [
+                      new TextRun({
+                        text: `${idx + 1}. ${student.name} - ${student.id}`,
+                        size: 24,
+                      }),
+                    ],
+                    indent: { left: 1080 },
+                  })
+              ),
+
+              // Presentation Table
+              new Table({
+                width: { size: 100, type: WidthType.PERCENTAGE },
+                rows: [
+                  new TableRow({
+                    children: [
+                      new TableCell({
+                        children: [
+                          new Paragraph({
+                            children: [
+                              new TextRun({
+                                text: "Sinh viên",
+                                bold: true,
+                                size: 24,
+                              }),
+                            ],
+                            alignment: AlignmentType.CENTER,
+                          }),
+                        ],
+                        width: { size: 20, type: WidthType.PERCENTAGE },
+                        shading: { fill: "E0E0E0" },
+                      }),
+                      new TableCell({
+                        children: [
+                          new Paragraph({
+                            children: [
+                              new TextRun({
+                                text: "Nội dung trình bày",
+                                bold: true,
+                                size: 24,
+                              }),
+                            ],
+                            alignment: AlignmentType.CENTER,
+                          }),
+                        ],
+                        width: { size: 80, type: WidthType.PERCENTAGE },
+                        shading: { fill: "E0E0E0" },
+                      }),
+                    ],
+                  }),
+                  ...presentationTableRows,
+                ],
+              }),
+              // Q&A Section
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: "Ghi lại tóm tắt các câu hỏi của các thành viên hội đồng và phản trả lời của nhóm/ sinh viên đối với từng câu hỏi / ",
+                    size: 24,
+                  }),
+                  new TextRun({
+                    text: "summary of questions from the council members and the group / student responses:",
+                    italics: true,
+                    size: 24,
+                  }),
+                ],
+                spacing: { before: 150 },
+              }),
+              new Table({
+                width: { size: 100, type: WidthType.PERCENTAGE },
+                rows: [
+                  new TableRow({
+                    children: [
+                      new TableCell({
+                        children: [
+                          new Paragraph({
+                            children: [
+                              new TextRun({
+                                text: "Câu hỏi từ Hội đồng",
+                                bold: true,
+                                size: 24,
+                              }),
+                            ],
+                            alignment: AlignmentType.CENTER,
+                          }),
+                        ],
+                        shading: { fill: "E0E0E0" },
+                      }),
+                      new TableCell({
+                        children: [
+                          new Paragraph({
+                            children: [
+                              new TextRun({
+                                text: "Nội dung trả lời từ Nhóm",
+                                bold: true,
+                                size: 24,
+                              }),
+                            ],
+                            alignment: AlignmentType.CENTER,
+                          }),
+                        ],
+                        shading: { fill: "E0E0E0" },
+                      }),
+                    ],
+                  }),
+                  ...qaTableRows,
+                ],
+              }),
+              // Section 4: Council Conclusion
+              new Paragraph({
+                children: [
+                  new TextRun({ text: "4. ", bold: true, size: 24 }),
+                  new TextRun({
+                    text: "Kết luận của Hội đồng / ",
+                    bold: true,
+                    size: 24,
+                  }),
+                  new TextRun({
+                    text: "Council Conclusion:",
+                    bold: true,
+                    italics: true,
+                    size: 24,
+                  }),
+                ],
+                spacing: { before: 150 },
+              }),
+
+              // Grades Table
+              new Table({
+                width: { size: 100, type: WidthType.PERCENTAGE },
+                rows: [
+                  new TableRow({
+                    children: [
+                      new TableCell({
+                        children: [
+                          new Paragraph({
+                            children: [
+                              new TextRun({
+                                text: "No.",
+                                bold: true,
+                                size: 24,
+                              }),
+                            ],
+                            alignment: AlignmentType.CENTER,
+                          }),
+                          new Paragraph({
+                            children: [
+                              new TextRun({ text: "TT", bold: true, size: 24 }),
+                            ],
+                            alignment: AlignmentType.CENTER,
+                          }),
+                        ],
+                        shading: { fill: "E0E0E0" },
+                      }),
+                      new TableCell({
+                        children: [
+                          new Paragraph({
+                            children: [
+                              new TextRun({
+                                text: "Student ID",
+                                bold: true,
+                                size: 24,
+                              }),
+                            ],
+                            alignment: AlignmentType.CENTER,
+                          }),
+                          new Paragraph({
+                            children: [
+                              new TextRun({
+                                text: "Mã sinh viên",
+                                bold: true,
+                                size: 24,
+                              }),
+                            ],
+                            alignment: AlignmentType.CENTER,
+                          }),
+                        ],
+                        shading: { fill: "E0E0E0" },
+                      }),
+                      new TableCell({
+                        children: [
+                          new Paragraph({
+                            children: [
+                              new TextRun({
+                                text: "Full Name",
+                                bold: true,
+                                size: 24,
+                              }),
+                            ],
+                            alignment: AlignmentType.CENTER,
+                          }),
+                          new Paragraph({
+                            children: [
+                              new TextRun({
+                                text: "Họ và tên",
+                                bold: true,
+                                size: 24,
+                              }),
+                            ],
+                            alignment: AlignmentType.CENTER,
+                          }),
+                        ],
+                        shading: { fill: "E0E0E0" },
+                      }),
+                      new TableCell({
+                        children: [
+                          new Paragraph({
+                            children: [
+                              new TextRun({
+                                text: "Grade",
+                                bold: true,
+                                size: 24,
+                              }),
+                            ],
+                            alignment: AlignmentType.CENTER,
+                          }),
+                          new Paragraph({
+                            children: [
+                              new TextRun({
+                                text: "Điểm",
+                                bold: true,
+                                size: 24,
+                              }),
+                            ],
+                            alignment: AlignmentType.CENTER,
+                          }),
+                        ],
+                        shading: { fill: "E0E0E0" },
+                      }),
+                      new TableCell({
+                        children: [
+                          new Paragraph({
+                            children: [
+                              new TextRun({
+                                text: "Conclusion",
+                                bold: true,
+                                size: 24,
+                              }),
+                            ],
+                            alignment: AlignmentType.CENTER,
+                          }),
+                          new Paragraph({
+                            children: [
+                              new TextRun({
+                                text: "Kết luận",
+                                bold: true,
+                                size: 24,
+                              }),
+                            ],
+                            alignment: AlignmentType.CENTER,
+                          }),
+                        ],
+                        shading: { fill: "E0E0E0" },
+                      }),
+                    ],
+                  }),
+                  ...gradesTableRows,
+                ],
+              }),
+              // Meeting End
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: `Biên bản kết thúc vào lúc`,
+                    size: 24,
+                  }),
+                  new TextRun({
+                    text: `       ${formData.meetingEndTime}       `,
+                    size: 24,
+                  }),
+                  new TextRun({ text: "ngày", size: 24 }),
+                  new TextRun({
+                    text: `       ${formData.meetingEndDate}`,
+                    size: 24,
+                  }),
+                ],
+                spacing: { before: 200 },
+              }),
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: `The meeting end at ${formData.meetingEndTime} on ${formData.meetingEndDate}`,
+                    italics: true,
+                    size: 24,
+                  }),
+                ],
+              }),
+
+              // Signatures
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: "Chủ tịch hội đồng",
+                    bold: true,
+                    size: 24,
+                  }),
+                  new TextRun({
+                    text: "                                                  ",
+                    size: 24,
+                  }),
+                  new TextRun({
+                    text: "Thư ký hội đồng",
+                    bold: true,
+                    size: 24,
+                  }),
+                ],
+                alignment: AlignmentType.CENTER,
+                spacing: { before: 400 },
+              }),
+              new Paragraph({
+                children: [
+                  new TextRun({ text: "Chairperson", italics: true, size: 24 }),
+                  new TextRun({
+                    text: "                                                            ",
+                    size: 24,
+                  }),
+                  new TextRun({ text: "Secretary", italics: true, size: 24 }),
+                ],
+                alignment: AlignmentType.CENTER,
+              }),
+              new Paragraph({
+                children: [
+                  new TextRun({ text: formData.chairperson, size: 24 }),
+                  new TextRun({
+                    text: "                                                  ",
+                    size: 24,
+                  }),
+                  new TextRun({ text: formData.secretary, size: 24 }),
+                ],
+                alignment: AlignmentType.CENTER,
+                spacing: { before: 600 },
+              }),
+            ],
+          },
+        ],
       });
 
-      // Step 2: Upload PDF using apiClient
+      // Generate Word blob
+      const wordBlob = await Packer.toBlob(doc);
+      const wordFile = new File(
+        [wordBlob],
+        `meeting-minutes-${defenseId}.docx`,
+        {
+          type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        }
+      );
+
+      console.log(
+        "📤 Generated Word file:",
+        wordFile.name,
+        wordFile.size,
+        "bytes"
+      );
+
+      // Step 2: Upload Word document using apiClient
       const uploadFormData = new FormData();
-      uploadFormData.append("file", pdfFile);
+      uploadFormData.append("file", wordFile);
 
       const uploadResult = await apiClient.postFormData<any>(
         "/api/defense-reports/upload-pdf",
         uploadFormData
       );
 
-      // Extract PDF URL from response (API returns fileUrl)
-      const pdfUrl =
-        uploadResult.data?.fileUrl ||
+      console.log("📤 Upload API Response:", uploadResult);
+      console.log("📤 Upload data:", uploadResult.data);
+      console.log("📤 downloadUrl field:", uploadResult.data?.downloadUrl);
+
+      // Extract download URL from response (API returns downloadUrl for secure access)
+      const downloadUrl =
+        uploadResult.data?.downloadUrl ||
         uploadResult.data?.url ||
         uploadResult.data?.filePath ||
         (typeof uploadResult.data === "string" ? uploadResult.data : null);
 
-      if (!pdfUrl) {
-        throw new Error("No PDF URL returned from upload");
+      console.log("📤 Extracted downloadUrl:", downloadUrl);
+
+      if (!downloadUrl) {
+        throw new Error("No download URL returned from upload");
       }
 
       // Step 3: Save to DB using apiClient
-      await apiClient.post<any>("/api/reports", {
+      const reportPayload = {
         sessionId: parseInt(defenseId),
-        filePath: pdfUrl,
+        filePath: downloadUrl,
         summary: `Defense session completed successfully with all members present`,
-      });
+      };
+      console.log("📤 Sending to /api/reports:", reportPayload);
+
+      await apiClient.post<any>("/api/reports", reportPayload);
 
       swalConfig.success("Success", "Meeting minutes saved successfully!");
     } catch (error: any) {
