@@ -279,7 +279,7 @@ export default function TranscriptPage({
           "lines from Redis cache (no DB data)"
         );
         swalConfig.toast.success(
-          `Đã khôi phục ${loadedTranscript.length} dòng transcript từ cache`
+          `Restored ${loadedTranscript.length} transcript lines from cache`
         );
       } else if (cachedLines.length > 0) {
         console.log(
@@ -340,7 +340,7 @@ export default function TranscriptPage({
       }
     } else if (eventType === "question_mode_started") {
       console.log("Question mode started", msg.session_id);
-      swalConfig.info("Bắt đầu ghi nhận câu hỏi");
+      swalConfig.info("Recording question");
       // Reset flag when starting new question
       setHasQuestionFinalText(false);
     } else if (eventType === "question_mode_result") {
@@ -364,23 +364,23 @@ export default function TranscriptPage({
 
       if (msg.is_duplicate) {
         swalConfig.warning(
-          "Câu hỏi bị trùng",
-          "Hệ thống đã ghi nhận câu hỏi này trước đó."
+          "Duplicate Question",
+          "This question has already been recorded."
         );
       } else {
         // Thêm vào danh sách (không cần dedup vì đây là event trực tiếp)
         if (questionText) {
           setQuestionResults((prev) => [{ ...msg, from_self: true }, ...prev]);
         }
-        swalConfig.success("Câu hỏi hợp lệ", "Đã ghi nhận câu hỏi mới.");
+        swalConfig.success("Valid Question", "New question has been recorded.");
       }
     } else if (eventType === "session_started") {
       console.log("Session started:", msg.session_id);
     } else if (eventType === "error") {
       console.error("STT Error:", msg.message || msg.error);
       swalConfig.error(
-        "Lỗi STT",
-        msg.message || msg.error || "Đã xảy ra lỗi không xác định"
+        "STT Error",
+        msg.message || msg.error || "An unknown error occurred"
       );
     } else if (eventType === "speaker_identified") {
       console.log("Speaker identified:", msg.speaker);
@@ -407,7 +407,7 @@ export default function TranscriptPage({
         const newEntry: STTEvent = {
           event: "recognized",
           text: msg.text,
-          speaker: msg.speaker_name || msg.speaker || "Đang xác định",
+          speaker: msg.speaker_name || msg.speaker || "Identifying",
           id: `broadcast_${Date.now()}_${Math.random()
             .toString(36)
             .substr(2, 9)}`,
@@ -425,7 +425,7 @@ export default function TranscriptPage({
         return; // Bỏ qua partial từ chính mình
       }
       // Hiển thị chữ chạy với tên speaker - dùng state riêng để không bị ghi đè
-      const speakerName = msg.speaker_name || msg.speaker || "Đang xác định";
+      const speakerName = msg.speaker_name || msg.speaker || "Identifying";
       setBroadcastInterimText(`${speakerName}: ${msg.text || ""}`);
     } else if (eventType === "broadcast_question_started") {
       // Member bắt đầu đặt câu hỏi - dùng toast nhẹ nhàng
@@ -435,9 +435,9 @@ export default function TranscriptPage({
       ) {
         return;
       }
-      const speakerName = msg.speaker_name || msg.speaker || "Thành viên";
-      // Toast notification - không chặn màn hình
-      swalConfig.toast.info(`${speakerName} đang đặt câu hỏi...`);
+      const speakerName = msg.speaker_name || msg.speaker || "Member";
+      // Toast notification
+      swalConfig.toast.info(`${speakerName} is asking a question...`);
     } else if (eventType === "broadcast_question_processing") {
       // Member kết thúc đặt câu hỏi, đang xử lý
       // Dùng toast để thư ký biết nhưng KHÔNG bị chặn làm việc
@@ -447,9 +447,9 @@ export default function TranscriptPage({
       ) {
         return;
       }
-      const speakerName = msg.speaker_name || msg.speaker || "Thành viên";
-      // Toast nhẹ - tự đóng sau 3s, không cần bấm OK
-      swalConfig.toast.info(`Đang xử lý câu hỏi từ ${speakerName}...`);
+      const speakerName = msg.speaker_name || msg.speaker || "Member";
+      // Toast notification
+      swalConfig.toast.info(`Processing question from ${speakerName}...`);
     } else if (eventType === "broadcast_question_result") {
       // Kết quả câu hỏi từ MEMBER (không phải từ chính mình)
       if (
@@ -477,13 +477,13 @@ export default function TranscriptPage({
       // Đóng loading popup
       closeSwal();
 
-      const speakerName = msg.speaker_name || msg.speaker || "Thành viên";
+      const speakerName = msg.speaker_name || msg.speaker || "Member";
       const questionText = msg.question_text || "";
 
       if (msg.is_duplicate) {
         swalConfig.warning(
-          "Câu hỏi bị trùng",
-          `Câu hỏi từ ${speakerName} đã được ghi nhận trước đó.`
+          "Duplicate Question",
+          `Question from ${speakerName} was already recorded.`
         );
       } else {
         // Thêm vào danh sách và hiện popup thành công
@@ -494,8 +494,8 @@ export default function TranscriptPage({
           ]);
         }
         swalConfig.success(
-          "Câu hỏi hợp lệ",
-          `Đã ghi nhận câu hỏi từ ${speakerName}.`
+          "Valid Question",
+          `Question from ${speakerName} has been recorded.`
         );
       }
     } else if (eventType === "connected") {
@@ -560,6 +560,34 @@ export default function TranscriptPage({
       await startRecording();
       // Broadcast session:start cho member biết thư ký đã bắt đầu
       if (!hasStartedSession) {
+        // Gọi API start để chuyển status sang InProgress (chỉ khi chưa InProgress/Completed)
+        if (
+          session &&
+          session.status !== "InProgress" &&
+          session.status !== "Completed"
+        ) {
+          try {
+            const startResult = await defenseSessionsApi.start(Number(id));
+            console.log("✅ Defense session started:", startResult);
+            if (startResult.data) {
+              setSession(startResult.data);
+              swalConfig.toast.success("Defense session started");
+            }
+          } catch (error: any) {
+            console.error("❌ Failed to start defense session:", error);
+            // Không hiện toast error nếu là lỗi 409 (status đã đúng rồi)
+            if (
+              !error.message?.includes("409") &&
+              !error.message?.includes("Conflict")
+            ) {
+              swalConfig.toast.error("Failed to update session status");
+            }
+          }
+        } else {
+          console.log(
+            "⏭️ Skip API start - session already InProgress or Completed"
+          );
+        }
         // Chờ một chút để WS kết nối xong
         setTimeout(() => {
           broadcastSessionStart();
@@ -630,7 +658,7 @@ export default function TranscriptPage({
       );
     } catch (error: any) {
       console.error("Failed to start session recording:", error);
-      swalConfig.toast.error("Không thể bắt đầu ghi âm phiên");
+      swalConfig.toast.error("Unable to start session recording");
     }
   };
 
@@ -761,7 +789,7 @@ export default function TranscriptPage({
           throw new Error(`finalize failed: ${finRes.status}`);
         }
         console.log("✅ Recording finalized successfully");
-        swalConfig.toast.success("Đã lưu bản ghi âm phiên bảo vệ");
+        swalConfig.toast.success("Session recording saved");
 
         // Cleanup
         setIsSessionRecording(false);
@@ -770,7 +798,7 @@ export default function TranscriptPage({
         resolve();
       } catch (error: any) {
         console.error("❌ Recording upload error:", error);
-        swalConfig.toast.error("Không thể upload bản ghi âm: " + error.message);
+        swalConfig.toast.error("Unable to upload recording: " + error.message);
         setIsSessionRecording(false);
         resolve();
       } finally {
@@ -793,8 +821,8 @@ export default function TranscriptPage({
       // 2. Set flag và hiện loading popup
       waitingForQuestionResult.current = true;
       swalConfig.loading(
-        "Đang xử lý câu hỏi...",
-        "Vui lòng chờ hệ thống phân tích câu hỏi"
+        "Processing question...",
+        "Please wait while the system analyzes your question"
       );
 
       // 3. Sau 5s, nếu vẫn chưa có kết quả thì show nút "Tiếp tục"
@@ -802,8 +830,8 @@ export default function TranscriptPage({
       const upgradePopupTimeout = setTimeout(() => {
         if (waitingForQuestionResult.current) {
           swalConfig.warning(
-            "Đang xử lý câu hỏi...",
-            "Hệ thống đang phân tích câu hỏi. Bạn có thể tiếp tục buổi bảo vệ, kết quả sẽ hiển thị khi hoàn tất."
+            "Processing question...",
+            "The system is analyzing your question. You can continue with the defense session, results will be displayed when ready."
           );
         }
       }, 5000);
@@ -857,7 +885,7 @@ export default function TranscriptPage({
     const newEntry: STTEvent = {
       event: "recognized",
       text: "",
-      speaker: "Thư ký",
+      speaker: "Secretary",
       id: `manual_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       isNew: true,
     };
@@ -871,12 +899,12 @@ export default function TranscriptPage({
 
   const handleSaveTranscript = async () => {
     if (!session) {
-      swalConfig.error("Lỗi", "Không tìm thấy phiên bảo vệ");
+      swalConfig.error("Error", "Defense session not found");
       return;
     }
 
     if (transcript.length === 0) {
-      swalConfig.error("Lỗi", "Không có nội dung transcript để lưu");
+      swalConfig.error("Error", "No transcript content to save");
       return;
     }
 
@@ -924,12 +952,31 @@ export default function TranscriptPage({
         }
       }
 
+      // Gọi API complete để chuyển status sang Completed (chỉ khi chưa Completed)
+      if (session.status !== "Completed") {
+        try {
+          const completeResult = await defenseSessionsApi.complete(Number(id));
+          console.log("✅ Defense session completed:", completeResult);
+          if (completeResult.data) {
+            setSession(completeResult.data);
+          }
+        } catch (completeError: any) {
+          console.error(
+            "❌ Failed to complete defense session:",
+            completeError
+          );
+          // Không throw error ở đây vì transcript đã được lưu
+        }
+      } else {
+        console.log("⏭️ Skip API complete - session already Completed");
+      }
+
       setHasUnsavedChanges(false);
-      swalConfig.success("Thành công", "Đã lưu transcript vào Database!");
+      swalConfig.success("Success", "Session completed and transcript saved!");
 
       // Upload recording to Azure (if recording was active)
       if (isSessionRecording) {
-        swalConfig.loading("Đang upload bản ghi âm...", "Vui lòng chờ");
+        swalConfig.loading("Uploading recording...", "Please wait");
         await stopAndUploadRecording();
         closeSwal();
       }
@@ -946,10 +993,10 @@ export default function TranscriptPage({
       console.error("❌ Failed to save transcript:", error);
       console.error("   Error details:", JSON.stringify(error, null, 2));
       swalConfig.error(
-        "Lỗi lưu transcript",
+        "Save Error",
         error.message ||
           error.response?.data?.message ||
-          "Không thể lưu vào Database. Kiểm tra Console để biết chi tiết."
+          "Unable to save to Database. Check Console for details."
       );
     } finally {
       setSaving(false);
@@ -991,13 +1038,13 @@ export default function TranscriptPage({
       setHasUnsavedChanges(false);
       setLastSavedAt(new Date());
       if (showToast) {
-        swalConfig.toast.success("Đã lưu");
+        swalConfig.toast.success("Saved");
       }
       console.log("✅ Auto-saved transcript");
     } catch (error: any) {
       console.error("Failed to auto save:", error);
       if (showToast) {
-        swalConfig.toast.error("Không thể lưu");
+        swalConfig.toast.error("Unable to save");
       }
     } finally {
       setSaving(false);
@@ -1049,7 +1096,7 @@ export default function TranscriptPage({
         <div className="flex items-center justify-between mt-2">
           <div>
             <h1 className="text-xl font-semibold text-gray-800">
-              Phiên bảo vệ - Nhóm {session.groupId}
+              Defense Session - Group {session.groupId}
             </h1>
             <p className="text-gray-500 text-sm flex items-center gap-2">
               <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2 py-0.5 rounded">
@@ -1061,7 +1108,7 @@ export default function TranscriptPage({
                 }`}
               ></span>
               <span className="text-xs text-gray-400">
-                {wsConnected ? "Đã kết nối" : "Chưa kết nối"}
+                {wsConnected ? "Connected" : "Not connected"}
               </span>
             </p>
           </div>
@@ -1078,14 +1125,12 @@ export default function TranscriptPage({
               </h2>
               {transcript.length > 0 && (
                 <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
-                  {transcript.length} dòng
+                  {transcript.length} lines
                 </span>
               )}
               {/* Auto-save status */}
               {saving ? (
-                <span className="text-xs text-gray-400 italic">
-                  Đang lưu...
-                </span>
+                <span className="text-xs text-gray-400 italic">Saving...</span>
               ) : hasUnsavedChanges ? (
                 <span className="text-xs text-yellow-600">●</span>
               ) : lastSavedAt ? (
@@ -1104,7 +1149,7 @@ export default function TranscriptPage({
               <button
                 onClick={handleAddEntry}
                 className="p-1.5 text-gray-500 hover:text-purple-600 hover:bg-purple-50 rounded transition-colors"
-                title="Thêm dòng"
+                title="Add line"
               >
                 <Plus className="w-4 h-4" />
               </button>
@@ -1117,7 +1162,7 @@ export default function TranscriptPage({
                       ? "bg-red-500 hover:bg-red-600 text-white"
                       : "bg-purple-600 hover:bg-purple-700 text-white"
                   }`}
-                  title={isRecording ? "Dừng ghi âm" : "Bắt đầu ghi âm"}
+                  title={isRecording ? "Stop recording" : "Start recording"}
                 >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -1140,7 +1185,7 @@ export default function TranscriptPage({
                       : "bg-gray-100 hover:bg-gray-200 text-gray-700"
                   }`}
                 >
-                  {isAsking ? "Xong" : "❓"}
+                  {isAsking ? "Done" : "❓"}
                 </button>
               )}
             </div>
@@ -1154,9 +1199,9 @@ export default function TranscriptPage({
             !interimText &&
             !broadcastInterimText ? (
               <div className="text-gray-400 text-sm text-center py-8">
-                <p>Nhấn 🎤 để bắt đầu ghi âm</p>
+                <p>Press 🎤 to start recording</p>
                 <p className="text-xs mt-1">
-                  hoặc nhấn + để thêm nội dung thủ công
+                  or press + to add content manually
                 </p>
               </div>
             ) : (
@@ -1171,27 +1216,27 @@ export default function TranscriptPage({
                           value={editSpeaker}
                           onChange={(e) => setEditSpeaker(e.target.value)}
                           className="w-full text-xs font-medium text-purple-600 bg-white border border-purple-200 rounded px-2 py-1"
-                          placeholder="Người nói..."
+                          placeholder="Speaker..."
                         />
                         <textarea
                           value={editText}
                           onChange={(e) => setEditText(e.target.value)}
                           className="w-full text-sm bg-white border rounded px-2 py-1.5 min-h-[50px] resize-none"
-                          placeholder="Nội dung..."
+                          placeholder="Content..."
                           autoFocus
                         />
                         <div className="flex gap-1">
                           <button
                             onClick={handleSaveEdit}
                             className="p-1.5 bg-green-500 text-white rounded hover:bg-green-600"
-                            title="Lưu"
+                            title="Save"
                           >
                             <Check className="w-3 h-3" />
                           </button>
                           <button
                             onClick={handleCancelEdit}
                             className="p-1.5 bg-gray-400 text-white rounded hover:bg-gray-500"
-                            title="Hủy"
+                            title="Cancel"
                           >
                             <X className="w-3 h-3" />
                           </button>
@@ -1211,14 +1256,14 @@ export default function TranscriptPage({
                           <button
                             onClick={() => handleStartEdit(index)}
                             className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
-                            title="Sửa"
+                            title="Edit"
                           >
                             <Pencil className="w-3 h-3" />
                           </button>
                           <button
                             onClick={() => handleDeleteEntry(index)}
                             className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
-                            title="Xóa"
+                            title="Delete"
                           >
                             <Trash2 className="w-3 h-3" />
                           </button>
@@ -1231,7 +1276,7 @@ export default function TranscriptPage({
                 {broadcastInterimText && (
                   <div className="bg-green-50 rounded-lg px-3 py-2 border border-green-100 animate-pulse">
                     <span className="text-xs font-medium text-green-600">
-                      đang nói...
+                      speaking...
                     </span>
                     <p className="text-gray-600 text-sm mt-0.5 italic">
                       {broadcastInterimText}
@@ -1261,7 +1306,7 @@ export default function TranscriptPage({
           </div>
           <textarea
             className="flex-1 w-full p-4 bg-white border rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm shadow-inner"
-            placeholder="- Ghi chú nhanh...&#10;- Ví dụ: Nhóm trình bày rõ ràng, Demo ổn định."
+            placeholder="- Quick notes...&#10;- Example: The group presented clearly, Demo was stable."
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
           />
@@ -1272,7 +1317,7 @@ export default function TranscriptPage({
       {questionResults.length > 0 && (
         <div className="bg-white rounded-lg shadow-sm border p-4 mb-4">
           <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
-            Câu hỏi đã ghi nhận
+            Recorded Questions
             <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded">
               {questionResults.length}
             </span>
@@ -1290,29 +1335,29 @@ export default function TranscriptPage({
                     {/* Hiển thị người đặt câu hỏi */}
                     {q.from_member && (
                       <span className="text-xs font-medium text-green-700 mb-1 block">
-                        👤 {q.speaker_name || q.speaker || "Thành viên"}
+                        👤 {q.speaker_name || q.speaker || "Member"}
                       </span>
                     )}
                     <p className="text-sm text-gray-800 whitespace-pre-line">
-                      {q.question_text || q.text || "(Trống)"}
+                      {q.question_text || q.text || "(Empty)"}
                     </p>
                   </div>
                   <div className="flex gap-1">
                     {q.from_member && (
                       <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
-                        Từ Member
+                        From Member
                       </span>
                     )}
                     {q.is_duplicate && (
                       <span className="text-xs bg-red-100 text-red-600 px-2 py-1 rounded">
-                        Trùng lặp
+                        Duplicate
                       </span>
                     )}
                   </div>
                 </div>
                 {q.similar && q.similar.length > 0 && (
                   <div className="text-xs text-gray-600">
-                    <p className="font-medium mb-1">Câu hỏi tương tự:</p>
+                    <p className="font-medium mb-1">Similar questions:</p>
                     <ul className="list-disc ml-4 space-y-0.5">
                       {q.similar.map((s: any, idx: number) => (
                         <li key={idx}>{s.text}</li>
@@ -1338,7 +1383,7 @@ export default function TranscriptPage({
           disabled={saving || transcript.length === 0}
           className="px-4 py-2 text-white bg-purple-600 rounded-md hover:bg-purple-700 text-sm font-medium shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {saving ? "Đang lưu..." : "Hoàn tất phiên"}
+          {saving ? "Saving..." : "Complete Session"}
         </button>
       </div>
 

@@ -79,4 +79,18 @@ export const defenseSessionsApi = {
     formData.append("file", file);
     return apiClient.postFormData("/api/defense-sessions/import", formData);
   },
+
+  // Start a defense session (change status to InProgress)
+  start: async (id: number) => {
+    return apiClient.put<DefenseSessionDto>(
+      `/api/defense-sessions/${id}/start`
+    );
+  },
+
+  // Complete a defense session (change status to Completed)
+  complete: async (id: number) => {
+    return apiClient.put<DefenseSessionDto>(
+      `/api/defense-sessions/${id}/complete`
+    );
+  },
 };

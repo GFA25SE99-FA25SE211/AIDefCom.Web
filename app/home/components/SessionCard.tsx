@@ -5,7 +5,11 @@ import { useRouter } from "next/navigation";
 import { Calendar, MapPin, Users, Clock } from "lucide-react";
 import { defenseSessionsApi } from "@/lib/api/defense-sessions";
 
-export type SessionStatus = "Upcoming" | "Completed" | "Scheduled";
+export type SessionStatus =
+  | "Upcoming"
+  | "Completed"
+  | "Scheduled"
+  | "InProgress";
 
 interface SessionCardProps {
   sessionId: number;
@@ -48,7 +52,7 @@ const SessionCard: React.FC<SessionCardProps> = ({
     const checkSessionRole = async () => {
       try {
         setIsCheckingRole(true);
-        
+
         // Get current user from localStorage
         const storedUser = localStorage.getItem("user");
         if (!storedUser) {
@@ -61,11 +65,14 @@ const SessionCard: React.FC<SessionCardProps> = ({
 
         // Check role in session (not system role)
         try {
-          const lecturersRes = await defenseSessionsApi.getUsersBySessionId(sessionId);
+          const lecturersRes = await defenseSessionsApi.getUsersBySessionId(
+            sessionId
+          );
           if (lecturersRes.data) {
             const currentUserInSession = lecturersRes.data.find(
-              (user: any) => 
-                String(user.id).toLowerCase() === String(currentUserId).toLowerCase()
+              (user: any) =>
+                String(user.id).toLowerCase() ===
+                String(currentUserId).toLowerCase()
             );
 
             if (currentUserInSession && currentUserInSession.role) {
@@ -120,6 +127,8 @@ const SessionCard: React.FC<SessionCardProps> = ({
               className={`text-xs px-1.5 sm:px-2 py-1 rounded-full flex-shrink-0 ${
                 sessionStatusClass === "completed"
                   ? "bg-blue-100 text-blue-700"
+                  : sessionStatusClass === "inprogress"
+                  ? "bg-orange-100 text-orange-700"
                   : sessionStatusClass === "upcoming"
                   ? "bg-yellow-100 text-yellow-700"
                   : "bg-green-100 text-green-700"
@@ -155,14 +164,18 @@ const SessionCard: React.FC<SessionCardProps> = ({
 
         <div className="flex items-center gap-2 text-gray-600">
           <MapPin className="w-4 h-4 flex-shrink-0" />
-          <span className="text-xs sm:text-sm truncate">{location || "TBD"}</span>
+          <span className="text-xs sm:text-sm truncate">
+            {location || "TBD"}
+          </span>
         </div>
 
         {/* Session Info - Pushed to bottom */}
         <div className="pt-2 border-t border-gray-100 mt-auto">
           <div className="flex items-center gap-2 text-gray-600 mb-2">
             <Calendar className="w-4 h-4 flex-shrink-0" />
-            <span className="text-xs sm:text-sm">{formatDate(defenseDate)}</span>
+            <span className="text-xs sm:text-sm">
+              {formatDate(defenseDate)}
+            </span>
           </div>
           <div className="flex items-center gap-2 text-gray-600">
             <Clock className="w-4 h-4 flex-shrink-0" />
@@ -181,4 +194,3 @@ const SessionCard: React.FC<SessionCardProps> = ({
 };
 
 export default SessionCard;
-

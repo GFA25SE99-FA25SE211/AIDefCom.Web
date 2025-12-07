@@ -41,7 +41,7 @@ export default function LoginPage() {
       // Kiểm tra role student
       if (data.role?.toLowerCase() === "student") {
         setError(
-          "Tài khoản không được phép truy cập hệ thống. Vui lòng liên hệ người phụ trách."
+          "This account is not authorized to access the system. Please contact your administrator."
         );
         return;
       }
@@ -82,7 +82,7 @@ export default function LoginPage() {
       // Kiểm tra role student
       if (data.role?.toLowerCase() === "student") {
         setError(
-          "Tài khoản không được phép truy cập hệ thống. Vui lòng liên hệ người phụ trách."
+          "This account is not authorized to access the system. Please contact your administrator."
         );
         return;
       }
@@ -234,6 +234,7 @@ export default function LoginPage() {
                 shape="pill"
                 size="large"
                 width="100%"
+                locale="en"
               />
             </div>
 
@@ -376,8 +377,8 @@ function extractRole(token: string) {
 async function redirectByRole(role: string, router: any, user?: any) {
   const r = role?.toLowerCase();
 
-  // Check voice enrollment for non-admin users
-  if (user && r !== "admin" && r !== "administrator") {
+  // Check voice enrollment for non-admin and non-moderator users
+  if (user && r !== "admin" && r !== "administrator" && r !== "moderator") {
     try {
       // Import dynamically to avoid circular dependencies if any, or just use global import
       const { voiceApi } = await import("@/lib/api/voice");

@@ -74,7 +74,10 @@ export default function TranscriptSessionPage() {
 
   const handleSave = async () => {
     console.log("Saving local transcript...", { text, notes });
-    await swalConfig.success("Transcript saved", "Your local transcript was saved.");
+    await swalConfig.success(
+      "Transcript saved",
+      "Your local transcript was saved."
+    );
   };
 
   return (
@@ -141,7 +144,7 @@ export default function TranscriptSessionPage() {
             value={text}
             onChange={(e) => setText(e.target.value)}
             className="input-base h-[380px] resize-none leading-6 text-sm placeholder-gray-400"
-            placeholder={`- Transcript sẽ hiển thị ở đây...\n- Ghi âm, chỉnh sửa hoặc thêm nội dung thủ công.`}
+            placeholder={`- Transcript will be displayed here...\n- Record, edit or add content manually.`}
           />
         </div>
 
@@ -152,7 +155,7 @@ export default function TranscriptSessionPage() {
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             className="input-base h-[380px] resize-none leading-6"
-            placeholder={`- Ghi chú nhanh...\n- Ví dụ: Nhóm trình bày rõ ràng, Demo ổn định.`}
+            placeholder={`- Quick notes...\n- Example: The group presented clearly, Demo was stable.`}
           />
         </div>
       </div>

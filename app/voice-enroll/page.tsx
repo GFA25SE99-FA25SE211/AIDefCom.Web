@@ -75,8 +75,8 @@ export default function VoiceEnrollPage() {
 
       if (data.enrollment_status === "enrolled") {
         swalConfig.success(
-          "Đã hoàn tất!",
-          "Bạn đã đăng ký giọng nói thành công."
+          "Completed!",
+          "You have successfully registered your voice."
         );
         router.push("/dashboard");
       } else if (enrolledCount > 0) {
@@ -94,15 +94,15 @@ export default function VoiceEnrollPage() {
 
         // Notify user about resuming
         swalConfig.info(
-          "Tiếp tục ghi âm",
-          `Bạn đã ghi ${enrolledCount}/3 mẫu. Hãy tiếp tục ghi mẫu ${
+          "Continue Recording",
+          `You have recorded ${enrolledCount}/3 samples. Please continue with sample ${
             enrolledCount + 1
           }.`
         );
       }
     } catch (error) {
       console.error("Failed to fetch status:", error);
-      swalConfig.error("Lỗi", "Không thể tải trạng thái đăng ký giọng nói.");
+      swalConfig.error("Error", "Unable to load voice registration status.");
     } finally {
       setLoading(false);
     }
@@ -167,8 +167,8 @@ export default function VoiceEnrollPage() {
         } catch (err) {
           console.error("Audio processing failed:", err);
           swalConfig.error(
-            "Lỗi",
-            "Không thể xử lý file âm thanh. Vui lòng thử lại."
+            "Error",
+            "Unable to process audio file. Please try again."
           );
           setRecording(false);
         }
@@ -207,8 +207,8 @@ export default function VoiceEnrollPage() {
     } catch (err) {
       console.error("Error accessing microphone:", err);
       swalConfig.error(
-        "Lỗi Micro",
-        "Không thể truy cập microphone. Vui lòng kiểm tra quyền truy cập."
+        "Microphone Error",
+        "Unable to access microphone. Please check permissions."
       );
     }
   };
@@ -235,7 +235,7 @@ export default function VoiceEnrollPage() {
       const result = await voiceApi.enroll(user.id, audioBlob);
 
       if (result.error) {
-        swalConfig.error("Lỗi", result.error);
+        swalConfig.error("Error", result.error);
         // Mark as failed
         setSamples((prev) => {
           const updated = [...prev];
@@ -258,7 +258,7 @@ export default function VoiceEnrollPage() {
         });
 
         if (result.completed) {
-          swalConfig.success("Thành công", "Đăng ký giọng nói hoàn tất!");
+          swalConfig.success("Success", "Voice registration completed!");
 
           // Redirect based on role
           const role =
@@ -287,10 +287,10 @@ export default function VoiceEnrollPage() {
           }
         } else {
           swalConfig.success(
-            "Đã lưu",
-            `Mẫu ${
+            "Saved",
+            `Sample ${
               currentSampleIndex + 1
-            } đã được lưu. Hãy tiếp tục mẫu tiếp theo.`
+            } has been saved. Please continue with the next sample.`
           );
 
           // Move to next sample (simple increment)
@@ -326,8 +326,8 @@ export default function VoiceEnrollPage() {
         errorMessage.includes("Đã đủ 3 mẫu")
       ) {
         swalConfig.success(
-          "Đã hoàn tất",
-          "Hệ thống ghi nhận bạn đã có đủ mẫu giọng nói từ trước."
+          "Completed",
+          "System records that you already have enough voice samples."
         );
 
         // Redirect based on role
@@ -358,7 +358,10 @@ export default function VoiceEnrollPage() {
         return;
       }
 
-      swalConfig.error("Lỗi", errorMessage || "Gửi mẫu giọng nói thất bại.");
+      swalConfig.error(
+        "Error",
+        errorMessage || "Failed to submit voice sample."
+      );
       setTimeLeft(RECORDING_DURATION);
     } finally {
       setProcessing(false);
@@ -371,8 +374,8 @@ export default function VoiceEnrollPage() {
 
     // Confirm với user
     const result = await swalConfig.confirm(
-      "Xác nhận Reset",
-      "Bạn có chắc muốn xóa tất cả dữ liệu ghi âm và bắt đầu lại từ đầu?"
+      "Confirm Reset",
+      "Are you sure you want to delete all recording data and start over?"
     );
 
     if (!result.isConfirmed) return;
@@ -408,8 +411,8 @@ export default function VoiceEnrollPage() {
       setStatus(null);
 
       swalConfig.success(
-        "Đã reset",
-        "Dữ liệu đã được xóa. Bạn có thể ghi âm lại từ đầu."
+        "Reset Complete",
+        "Data has been deleted. You can start recording again."
       );
 
       // Refresh status
@@ -417,8 +420,8 @@ export default function VoiceEnrollPage() {
     } catch (error: any) {
       console.error("Reset enrollment failed:", error);
       swalConfig.error(
-        "Lỗi",
-        error.message || "Không thể reset dữ liệu. Vui lòng thử lại."
+        "Error",
+        error.message || "Unable to reset data. Please try again."
       );
     } finally {
       setResetting(false);
@@ -441,7 +444,7 @@ export default function VoiceEnrollPage() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-gray-500">Đang tải thông tin...</div>
+        <div className="text-gray-500">Loading...</div>
       </div>
     );
   }
@@ -479,9 +482,7 @@ export default function VoiceEnrollPage() {
               <h1 className="text-xl font-bold text-gray-800">
                 Voice Registration
               </h1>
-              <p className="text-sm text-gray-500">
-                Thiết lập bảo mật giọng nói
-              </p>
+              <p className="text-sm text-gray-500">Voice security setup</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -498,7 +499,7 @@ export default function VoiceEnrollPage() {
               {resetting ? (
                 <span className="flex items-center gap-2">
                   <div className="w-4 h-4 border-2 border-red-400 border-t-transparent rounded-full animate-spin" />
-                  Đang xóa...
+                  Deleting...
                 </span>
               ) : (
                 "Reset Data"
@@ -509,7 +510,7 @@ export default function VoiceEnrollPage() {
               onClick={handleLogout}
               className="px-5 py-2.5 text-sm font-medium text-gray-700 hover:text-gray-900 bg-white hover:bg-gray-50 border border-gray-300 rounded-lg transition-all shadow-sm hover:shadow"
             >
-              Đăng xuất
+              Logout
             </button>
           </div>
         </div>
@@ -523,17 +524,17 @@ export default function VoiceEnrollPage() {
             <div className="flex items-center justify-between mb-6">
               <div>
                 <h2 className="text-2xl font-bold text-gray-800 mb-1">
-                  Tiến độ đăng ký
+                  Registration Progress
                 </h2>
                 <p className="text-gray-600">
-                  {completedCount}/{maxCount} mẫu giọng nói đã hoàn thành
+                  {completedCount}/{maxCount} voice samples completed
                 </p>
               </div>
               <div className="text-right">
                 <div className="text-4xl font-bold text-purple-600">
                   {Math.round(progress)}%
                 </div>
-                <p className="text-sm text-gray-500 mt-1">Hoàn thành</p>
+                <p className="text-sm text-gray-500 mt-1">Completed</p>
               </div>
             </div>
 
@@ -595,18 +596,18 @@ export default function VoiceEnrollPage() {
                     </div>
                     <div className="flex-1">
                       <p className="font-semibold text-gray-800">
-                        Mẫu {idx + 1}
+                        Sample {idx + 1}
                       </p>
                       <p className="text-sm text-gray-600 capitalize">
                         {sample.status === "completed"
-                          ? "Hoàn thành"
+                          ? "Completed"
                           : sample.status === "recording"
-                          ? "Đang ghi âm"
+                          ? "Recording"
                           : sample.status === "processing"
-                          ? "Đang xử lý"
+                          ? "Processing"
                           : sample.status === "failed"
-                          ? "Thất bại"
-                          : "Chờ ghi âm"}
+                          ? "Failed"
+                          : "Pending"}
                       </p>
                     </div>
                   </div>
@@ -625,10 +626,10 @@ export default function VoiceEnrollPage() {
                 </div>
                 <div>
                   <h3 className="text-xl font-bold text-gray-800 mb-2">
-                    Hướng dẫn ghi âm
+                    Recording Instructions
                   </h3>
                   <p className="text-gray-600 text-sm">
-                    Vui lòng đọc to và rõ ràng đoạn văn bản dưới đây
+                    Please read the text below clearly and loudly
                   </p>
                 </div>
               </div>
@@ -648,7 +649,7 @@ export default function VoiceEnrollPage() {
                     />
                   </svg>
                   <p className="text-sm font-semibold text-blue-800">
-                    Văn bản mẫu {currentSampleIndex + 1}:
+                    Sample text {currentSampleIndex + 1}:
                   </p>
                 </div>
                 <p className="text-gray-700 leading-relaxed italic text-base">
@@ -671,7 +672,7 @@ export default function VoiceEnrollPage() {
                     />
                   </svg>
                   <p className="text-sm text-gray-600">
-                    Đọc với giọng tự nhiên, tốc độ vừa phải
+                    Read naturally at a moderate pace
                   </p>
                 </div>
                 <div className="flex items-start gap-3">
@@ -688,7 +689,7 @@ export default function VoiceEnrollPage() {
                     />
                   </svg>
                   <p className="text-sm text-gray-600">
-                    Đảm bảo môi trường yên tĩnh khi ghi âm
+                    Ensure a quiet environment while recording
                   </p>
                 </div>
                 <div className="flex items-start gap-3">
@@ -705,7 +706,7 @@ export default function VoiceEnrollPage() {
                     />
                   </svg>
                   <p className="text-sm text-gray-600">
-                    Thời gian ghi âm: 15 giây (tự động dừng)
+                    Recording time: 15 seconds (auto-stop)
                   </p>
                 </div>
               </div>
@@ -725,7 +726,7 @@ export default function VoiceEnrollPage() {
                       </div>
                       <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 bg-white px-4 py-1 rounded-full shadow-lg">
                         <span className="text-sm font-medium text-gray-600">
-                          giây
+                          sec
                         </span>
                       </div>
                     </div>
@@ -744,13 +745,13 @@ export default function VoiceEnrollPage() {
                         ))}
                       </div>
                       <span className="text-red-600 font-semibold text-lg">
-                        Đang ghi âm...
+                        Recording...
                       </span>
                     </div>
 
                     <p className="text-gray-500 text-center max-w-xs">
-                      Hệ thống sẽ tự động lưu khi hết thời gian. Vui lòng đọc
-                      đoạn văn bên trái.
+                      System will auto-save when time is up. Please read the
+                      text on the left.
                     </p>
                   </div>
                 ) : (
@@ -770,13 +771,13 @@ export default function VoiceEnrollPage() {
                     <div className="text-center">
                       <p className="text-xl font-semibold text-gray-700 mb-2">
                         {showNextButton
-                          ? "Mẫu đã được lưu thành công!"
-                          : "Sẵn sàng ghi âm"}
+                          ? "Sample saved successfully!"
+                          : "Ready to record"}
                       </p>
                       <p className="text-gray-500">
                         {showNextButton
-                          ? "Nhấn nút bên dưới để tiếp tục mẫu tiếp theo"
-                          : "Thời gian ghi âm: 15 giây"}
+                          ? "Press the button below to continue with the next sample"
+                          : "Recording time: 15 seconds"}
                       </p>
                     </div>
                   </div>
@@ -832,10 +833,10 @@ export default function VoiceEnrollPage() {
 
                   <p className="text-center text-sm font-medium text-gray-600">
                     {recording
-                      ? "Đang ghi âm - Vui lòng đọc đoạn văn"
+                      ? "Recording - Please read the text"
                       : showNextButton
-                      ? "Nhấn để tiếp tục"
-                      : "Nhấn để bắt đầu ghi âm"}
+                      ? "Tap to continue"
+                      : "Tap to start recording"}
                   </p>
                 </div>
               </div>

@@ -129,7 +129,7 @@ export default function GradeGroupPage() {
       // Thư ký đã kết thúc phiên
       setSessionStarted(false);
     } else if (eventType === "question_mode_started") {
-      swalConfig.info("Bắt đầu ghi nhận câu hỏi");
+      swalConfig.info("Recording question");
       setHasQuestionFinalText(false);
     } else if (eventType === "question_mode_result") {
       if (questionTimeoutRef.current) {
@@ -142,18 +142,18 @@ export default function GradeGroupPage() {
 
       if (msg.is_duplicate) {
         swalConfig.warning(
-          "Câu hỏi bị trùng",
-          "Hệ thống đã ghi nhận câu hỏi này trước đó."
+          "Duplicate Question",
+          "This question has already been recorded."
         );
       } else {
         setQuestionResults((prev) => [msg, ...prev]);
-        swalConfig.success("Câu hỏi hợp lệ", "Đã ghi nhận câu hỏi mới.");
+        swalConfig.success("Valid Question", "New question has been recorded.");
       }
     } else if (eventType === "error") {
       console.error("STT Error:", msg.message || msg.error);
       swalConfig.error(
-        "Lỗi STT",
-        msg.message || msg.error || "Đã xảy ra lỗi không xác định"
+        "STT Error",
+        msg.message || msg.error || "An unknown error occurred"
       );
     } else if (eventType === "broadcast_transcript") {
       // Transcript từ client khác trong cùng session (thư ký hoặc member khác nói)
@@ -175,8 +175,8 @@ export default function GradeGroupPage() {
       ) {
         return;
       }
-      const speakerName = msg.speaker_name || msg.speaker || "Thành viên";
-      swalConfig.toast.info(`${speakerName} đang đặt câu hỏi...`);
+      const speakerName = msg.speaker_name || msg.speaker || "Member";
+      swalConfig.toast.info(`${speakerName} is asking a question...`);
     } else if (eventType === "broadcast_question_processing") {
       // Người khác kết thúc đặt câu hỏi, đang xử lý - dùng toast nhẹ
       if (
@@ -185,8 +185,8 @@ export default function GradeGroupPage() {
       ) {
         return;
       }
-      const speakerName = msg.speaker_name || msg.speaker || "Thành viên";
-      swalConfig.toast.info(`Đang xử lý câu hỏi từ ${speakerName}...`);
+      const speakerName = msg.speaker_name || msg.speaker || "Member";
+      swalConfig.toast.info(`Processing question from ${speakerName}...`);
     } else if (eventType === "broadcast_question_result") {
       // Kết quả câu hỏi từ người khác
       if (
@@ -195,11 +195,11 @@ export default function GradeGroupPage() {
       ) {
         return;
       }
-      const speakerName = msg.speaker_name || msg.speaker || "Thành viên";
+      const speakerName = msg.speaker_name || msg.speaker || "Member";
       const questionText = msg.question_text || "";
 
       if (msg.is_duplicate) {
-        swalConfig.toast.info(`Câu hỏi từ ${speakerName} bị trùng`);
+        swalConfig.toast.info(`Question from ${speakerName} is duplicate`);
       } else {
         if (questionText) {
           setQuestionResults((prev) => [
@@ -207,7 +207,9 @@ export default function GradeGroupPage() {
             ...prev,
           ]);
         }
-        swalConfig.toast.success(`Câu hỏi từ ${speakerName} đã được ghi nhận`);
+        swalConfig.toast.success(
+          `Question from ${speakerName} has been recorded`
+        );
       }
     } else if (eventType === "connected") {
       console.log(
@@ -278,15 +280,15 @@ export default function GradeGroupPage() {
 
       waitingForQuestionResult.current = true;
       swalConfig.loading(
-        "Đang xử lý câu hỏi...",
-        "Vui lòng chờ hệ thống phân tích câu hỏi"
+        "Processing question...",
+        "Please wait while the system analyzes your question"
       );
 
       const upgradePopupTimeout = setTimeout(() => {
         if (waitingForQuestionResult.current) {
           swalConfig.warning(
-            "Đang xử lý câu hỏi...",
-            "Hệ thống đang phân tích câu hỏi. Bạn có thể tiếp tục buổi bảo vệ, kết quả sẽ hiển thị khi hoàn tất."
+            "Processing question...",
+            "The system is analyzing your question. You can continue with the defense session, results will be displayed when ready."
           );
         }
       }, 5000);
@@ -843,8 +845,8 @@ export default function GradeGroupPage() {
                     }`}
                     title={
                       !sessionStarted
-                        ? "Chờ thư ký bắt đầu phiên"
-                        : "Bắt đầu ghi âm"
+                        ? "Waiting for secretary to start session"
+                        : "Start recording"
                     }
                   >
                     <Mic className="w-4 h-4" />
@@ -873,12 +875,12 @@ export default function GradeGroupPage() {
                       {isAsking ? (
                         <>
                           <StopCircle className="w-4 h-4" />
-                          <span>Kết thúc câu hỏi</span>
+                          <span>End Question</span>
                         </>
                       ) : (
                         <>
                           <MessageSquare className="w-4 h-4" />
-                          <span>Đặt câu hỏi</span>
+                          <span>Ask Question</span>
                         </>
                       )}
                     </button>
@@ -890,7 +892,7 @@ export default function GradeGroupPage() {
                   className={`w-2 h-2 rounded-full ${
                     wsConnected ? "bg-green-500" : "bg-gray-400"
                   }`}
-                  title={wsConnected ? "Đã kết nối" : "Chưa kết nối"}
+                  title={wsConnected ? "Connected" : "Not connected"}
                 />
               </div>
 

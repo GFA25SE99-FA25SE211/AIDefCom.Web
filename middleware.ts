@@ -22,6 +22,15 @@ export function middleware(req: NextRequest) {
 
   // Nếu login rồi → redirect vào role page
   if (token && (path === "/" || path === "/login")) {
+    // Block student role - redirect to login with error
+    if (role?.toLowerCase() === "student") {
+      const response = NextResponse.redirect(new URL("/login", req.url));
+      // Clear cookies to prevent infinite loop
+      response.cookies.delete("token");
+      response.cookies.delete("role");
+      return response;
+    }
+
     const map: Record<string, string> = {
       administrator: "/administrator",
       lecturer: "/home",
@@ -30,7 +39,7 @@ export function middleware(req: NextRequest) {
       moderator: "/moderator",
       member: "/member",
     };
-    const dest = map[role || "member"];
+    const dest = map[role?.toLowerCase() || "member"] || "/member";
     return NextResponse.redirect(new URL(dest, req.url));
   }
 

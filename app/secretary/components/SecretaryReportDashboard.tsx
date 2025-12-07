@@ -53,7 +53,34 @@ export default function SecretaryReportDashboard() {
   const submittedReports = reports.filter(
     (r) => r.status === "Approved"
   ).length;
-  const pendingReports = reports.filter((r) => r.status !== "Approved").length;
+  const rejectedReports = reports.filter((r) => r.status === "Rejected").length;
+  const pendingReports = reports.filter(
+    (r) => r.status !== "Approved" && r.status !== "Rejected"
+  ).length;
+
+  // Handle download file from filePath
+  const handleDownload = async (filePath: string, fileName?: string) => {
+    try {
+      const response = await fetch(filePath);
+      if (!response.ok) {
+        throw new Error("Failed to download file");
+      }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      const extractedName =
+        fileName || filePath.split("/").pop() || "report.docx";
+      link.download = extractedName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Download failed:", error);
+      alert("Could not download the file. Please try again.");
+    }
+  };
 
   if (loading) {
     return (
@@ -113,80 +140,42 @@ export default function SecretaryReportDashboard() {
           📊 Manage Reports
         </h1>
         <p className="text-gray-600">
-          Download templates and collect completed reports from groups
+          Download and collect completed reports from groups
         </p>
       </div>
 
       {/* Stats Section */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600 mb-1">Total Reports</p>
-              <p className="text-3xl font-bold text-gray-900">{totalReports}</p>
-            </div>
-            <div className="bg-purple-50 rounded-lg p-3">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-                className="w-7 h-7 text-purple-600"
-              >
-                <path d="M5.625 1.5c-1.036 0-1.875.84-1.875 1.875v17.25c0 1.035.84 1.875 1.875 1.875h12.75c1.035 0 1.875-.84 1.875-1.875V12.75A3.75 3.75 0 0016.5 9h-1.875a1.875 1.875 0 01-1.875-1.875V5.25A3.75 3.75 0 009 1.5H5.625z" />
-                <path d="M12.971 1.816A5.23 5.23 0 0114.25 5.25v1.875c0 .207.168.375.375.375H16.5a5.23 5.23 0 013.434 1.279 9.768 9.768 0 00-6.963-6.963z" />
-              </svg>
-            </div>
+      <div className="dashboard-grid md:grid-cols-4 mb-8">
+        <div className="stat-card stat-card-purple">
+          <div className="stat-info">
+            <p className="label">Total Reports</p>
+            <p className="value">{totalReports}</p>
           </div>
+          <div className="stat-icon">📄</div>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600 mb-1">Approved</p>
-              <p className="text-3xl font-bold text-gray-900">
-                {submittedReports}
-              </p>
-            </div>
-            <div className="bg-green-50 rounded-lg p-3">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-                className="w-7 h-7 text-green-600"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12zm13.36-1.814a.75.75 0 10-1.22-.872l-3.236 4.53L9.53 12.22a.75.75 0 00-1.06 1.06l2.25 2.25a.75.75 0 001.14-.094l3.75-5.25z"
-                  clipRule="evenodd"
-                />
-              </svg>
-            </div>
+        <div className="stat-card stat-card-green">
+          <div className="stat-info">
+            <p className="label">Approved</p>
+            <p className="value">{submittedReports}</p>
           </div>
+          <div className="stat-icon">✔</div>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600 mb-1">Pending</p>
-              <p className="text-3xl font-bold text-gray-900">
-                {pendingReports}
-              </p>
-            </div>
-            <div className="bg-orange-50 rounded-lg p-3">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-                className="w-7 h-7 text-orange-600"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zM12.75 6a.75.75 0 00-1.5 0v6c0 .414.336.75.75.75h4.5a.75.75 0 000-1.5h-3.75V6z"
-                  clipRule="evenodd"
-                />
-              </svg>
-            </div>
+        <div className="stat-card stat-card-orange">
+          <div className="stat-info">
+            <p className="label">Rejected</p>
+            <p className="value">{rejectedReports}</p>
           </div>
+          <div className="stat-icon">✖</div>
+        </div>
+
+        <div className="stat-card stat-card-blue">
+          <div className="stat-info">
+            <p className="label">Pending</p>
+            <p className="value">{pendingReports}</p>
+          </div>
+          <div className="stat-icon">⏱</div>
         </div>
       </div>
 
@@ -371,10 +360,13 @@ export default function SecretaryReportDashboard() {
                       <td className="px-4 py-4 text-center">
                         <div className="flex gap-2 justify-center">
                           {report.filePath && (
-                            <a
-                              href={report.filePath}
-                              target="_blank"
-                              rel="noopener noreferrer"
+                            <button
+                              onClick={() =>
+                                handleDownload(
+                                  report.filePath,
+                                  `meeting-minutes-${report.sessionId}.docx`
+                                )
+                              }
                               className="inline-flex items-center gap-1 px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
                             >
                               <svg
@@ -387,7 +379,7 @@ export default function SecretaryReportDashboard() {
                                 <path d="M3.5 12.75a.75.75 0 00-1.5 0v2.5A2.75 2.75 0 004.75 18h10.5A2.75 2.75 0 0018 15.25v-2.5a.75.75 0 00-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5z" />
                               </svg>
                               Download
-                            </a>
+                            </button>
                           )}
 
                           <Link
