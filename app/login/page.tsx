@@ -41,7 +41,7 @@ export default function LoginPage() {
       // Kiểm tra role student
       if (data.role?.toLowerCase() === "student") {
         setError(
-          "Tài khoản không được phép truy cập hệ thống. Vui lòng liên hệ người phụ trách."
+          "This account is not authorized to access the system. Please contact your administrator."
         );
         return;
       }
@@ -82,7 +82,7 @@ export default function LoginPage() {
       // Kiểm tra role student
       if (data.role?.toLowerCase() === "student") {
         setError(
-          "Tài khoản không được phép truy cập hệ thống. Vui lòng liên hệ người phụ trách."
+          "This account is not authorized to access the system. Please contact your administrator."
         );
         return;
       }
@@ -234,6 +234,7 @@ export default function LoginPage() {
                 shape="pill"
                 size="large"
                 width="100%"
+                locale="en"
               />
             </div>
 
