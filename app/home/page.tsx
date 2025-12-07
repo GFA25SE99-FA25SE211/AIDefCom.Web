@@ -183,18 +183,32 @@ export default function HomePage() {
                       .join(", ")
                   : "No members assigned";
 
-              const sessionDate = new Date(session.defenseDate);
-              const isCompleted = sessionDate < new Date();
-              const isUpcoming = sessionDate >= new Date();
-
               const displayName = getGroupDisplayName(group);
               const projectTitle = getProjectTitle(group);
 
+              // Sử dụng status từ API thay vì tính theo ngày
               let displayStatus: SessionStatus = "Scheduled";
-              if (isCompleted) {
+              const apiStatus = session.status?.toLowerCase();
+              if (apiStatus === "completed") {
                 displayStatus = "Completed";
-              } else if (isUpcoming) {
-                displayStatus = "Upcoming";
+              } else if (apiStatus === "inprogress") {
+                displayStatus = "InProgress";
+              } else if (apiStatus === "scheduled") {
+                // Nếu scheduled nhưng ngày defense đã đến/qua thì hiện Upcoming
+                const sessionDate = new Date(session.defenseDate);
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                if (sessionDate >= today) {
+                  displayStatus = "Upcoming";
+                } else {
+                  displayStatus = "Scheduled";
+                }
+              } else {
+                // Fallback: nếu không có status, dùng logic cũ
+                const sessionDate = new Date(session.defenseDate);
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                displayStatus = sessionDate >= today ? "Upcoming" : "Scheduled";
               }
 
               return {

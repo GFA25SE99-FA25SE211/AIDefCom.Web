@@ -560,6 +560,34 @@ export default function TranscriptPage({
       await startRecording();
       // Broadcast session:start cho member biết thư ký đã bắt đầu
       if (!hasStartedSession) {
+        // Gọi API start để chuyển status sang InProgress (chỉ khi chưa InProgress/Completed)
+        if (
+          session &&
+          session.status !== "InProgress" &&
+          session.status !== "Completed"
+        ) {
+          try {
+            const startResult = await defenseSessionsApi.start(Number(id));
+            console.log("✅ Defense session started:", startResult);
+            if (startResult.data) {
+              setSession(startResult.data);
+              swalConfig.toast.success("Defense session started");
+            }
+          } catch (error: any) {
+            console.error("❌ Failed to start defense session:", error);
+            // Không hiện toast error nếu là lỗi 409 (status đã đúng rồi)
+            if (
+              !error.message?.includes("409") &&
+              !error.message?.includes("Conflict")
+            ) {
+              swalConfig.toast.error("Failed to update session status");
+            }
+          }
+        } else {
+          console.log(
+            "⏭️ Skip API start - session already InProgress or Completed"
+          );
+        }
         // Chờ một chút để WS kết nối xong
         setTimeout(() => {
           broadcastSessionStart();
@@ -924,8 +952,27 @@ export default function TranscriptPage({
         }
       }
 
+      // Gọi API complete để chuyển status sang Completed (chỉ khi chưa Completed)
+      if (session.status !== "Completed") {
+        try {
+          const completeResult = await defenseSessionsApi.complete(Number(id));
+          console.log("✅ Defense session completed:", completeResult);
+          if (completeResult.data) {
+            setSession(completeResult.data);
+          }
+        } catch (completeError: any) {
+          console.error(
+            "❌ Failed to complete defense session:",
+            completeError
+          );
+          // Không throw error ở đây vì transcript đã được lưu
+        }
+      } else {
+        console.log("⏭️ Skip API complete - session already Completed");
+      }
+
       setHasUnsavedChanges(false);
-      swalConfig.success("Success", "Transcript saved to Database!");
+      swalConfig.success("Success", "Session completed and transcript saved!");
 
       // Upload recording to Azure (if recording was active)
       if (isSessionRecording) {
