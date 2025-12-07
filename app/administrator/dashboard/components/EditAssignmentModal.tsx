@@ -8,6 +8,7 @@ interface Assignment {
   lecturerId: string;
   councilId: string;
   role: string;
+  roleName?: string;
 }
 
 interface EditAssignmentModalProps {
@@ -39,7 +40,10 @@ const EditAssignmentModal: React.FC<EditAssignmentModalProps> = ({
       setLecturerId(assignmentData.lecturerId || "");
       // Only set councilId if council exists in the array, otherwise empty
       setCouncilId(foundCouncil ? stringCouncilId : "");
-      setRole(assignmentData.role || "");
+      // Use roleName if available, otherwise use role
+      const roleToSet = assignmentData.roleName || assignmentData.role || "";
+      setRole(roleToSet);
+      console.log("Setting role:", roleToSet, "from assignmentData:", assignmentData);
 
       // Log warning if council not found
       if (!foundCouncil && councils.length > 0) {
@@ -138,10 +142,9 @@ const EditAssignmentModal: React.FC<EditAssignmentModalProps> = ({
             required
           >
             <option value="">Select Role</option>
-            <option value="Administrator">Administrator</option>
-            <option value="Lecturer">Lecturer</option>
-            <option value="Student">Student</option>
-            <option value="Moderator">Moderator</option>
+            <option value="Chair">Chair</option>
+            <option value="Secretary">Secretary</option>
+            <option value="Member">Member</option>
           </select>
         </div>
       </form>

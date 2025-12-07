@@ -12,6 +12,7 @@ import { majorRubricsApi } from "@/lib/api/major-rubrics";
 import { scoresApi, type ScoreReadDto } from "@/lib/api/scores";
 import { defenseSessionsApi } from "@/lib/api/defense-sessions";
 import { projectTasksApi } from "@/lib/api/project-tasks";
+import { committeeAssignmentsApi } from "@/lib/api/committee-assignments";
 import { swalConfig, closeSwal } from "@/lib/utils/sweetAlert";
 import { useAudioRecorder } from "@/lib/hooks/useAudioRecorder";
 import { authUtils } from "@/lib/utils/auth";
@@ -196,6 +197,53 @@ export default function ViewScorePage() {
           }
         }
 
+        // Kiểm tra committee-assignments/lecturer trước để xem có rubrics không
+        let shouldShowRubrics = true;
+        if (currentUserId) {
+          try {
+            const assignmentRes = await committeeAssignmentsApi.getByLecturerId(currentUserId);
+            const assignments = Array.isArray(assignmentRes.data) ? assignmentRes.data : [];
+            
+            console.log("🔍 Checking committee assignments for rubrics:", {
+              lecturerId: currentUserId,
+              assignmentsCount: assignments.length,
+              assignments: assignments
+            });
+            
+            // Kiểm tra nếu assignment có rubrics null hoặc không có rubrics
+            if (assignments.length > 0) {
+              // Kiểm tra từng assignment xem có rubrics null không
+              const hasRubrics = assignments.some((assignment: any) => {
+                // Kiểm tra nếu có rubrics trong assignment (có thể là field rubrics hoặc rubricIds)
+                const hasRubricsField = assignment.rubrics !== null && assignment.rubrics !== undefined;
+                const hasRubricIds = assignment.rubricIds && Array.isArray(assignment.rubricIds) && assignment.rubricIds.length > 0;
+                return hasRubricsField || hasRubricIds;
+              });
+              
+              // Nếu tất cả assignments đều có rubrics null hoặc không có rubrics, không hiển thị
+              if (!hasRubrics) {
+                console.log("⚠️ No rubrics found in committee assignments (all null or empty), hiding rubrics");
+                shouldShowRubrics = false;
+                setRubrics([]);
+              }
+            } else {
+              // Nếu không có assignment nào, vẫn hiển thị rubrics (fallback behavior)
+              console.log("⚠️ No committee assignments found, will load rubrics as fallback");
+            }
+          } catch (error: any) {
+            console.warn("⚠️ Error checking committee assignments:", error);
+            // Nếu lỗi, vẫn tiếp tục load rubrics như bình thường
+          }
+        }
+
+        // Nếu không nên hiển thị rubrics, dừng lại và không load rubrics
+        if (!shouldShowRubrics) {
+          console.log("✅ Skipping rubrics loading - no rubrics in committee assignments");
+          // Set empty rubrics và return early
+          setRubrics([]);
+          return;
+        }
+
         // Ưu tiên 1: Lấy rubrics từ API theo lecturer và session
         if (groupSession && currentUserId) {
           try {
@@ -311,9 +359,9 @@ export default function ViewScorePage() {
           });
         }
 
-        // Nếu vẫn không có rubrics, để trống (sẽ dùng default criteria)
+        // Nếu vẫn không có rubrics, để trống (không dùng default criteria)
         if (rubricsList.length === 0) {
-          console.warn("⚠️ No rubrics found for group/session, will use default criteria");
+          console.warn("⚠️ No rubrics found for group/session, will leave empty (no default criteria)");
           setRubrics([]);
         } else {
           console.log("✅ Final rubrics list:", rubricsList.length, "items");
@@ -347,8 +395,8 @@ export default function ViewScorePage() {
                   )
                 : [];
 
-              // Create scores array based on rubrics (fallback to 5 if no rubrics)
-              const rubricCount = rubricsList.length > 0 ? rubricsList.length : 5;
+              // Create scores array based on rubrics (no fallback if no rubrics)
+              const rubricCount = rubricsList.length;
               const scoresArray = new Array(rubricCount).fill(0);
               const scoreIds = new Array(rubricCount).fill(0);
               const commentsArray = new Array(rubricCount).fill("");
@@ -396,8 +444,7 @@ export default function ViewScorePage() {
           setStudentScores(groupData.students);
         } else {
           const defaultData = allGroupsData[groupId] || allGroupsData["1"];
-          const rubricCountFallback =
-            rubricsList.length > 0 ? rubricsList.length : criteria.length;
+          const rubricCountFallback = rubricsList.length;
           const normalizedStudents = buildFallbackStudents(
             defaultData?.students || [],
             rubricCountFallback
@@ -412,8 +459,7 @@ export default function ViewScorePage() {
       } catch (error) {
         console.error("Error fetching group data:", error);
         const defaultData = allGroupsData[groupId] || allGroupsData["1"];
-        const rubricCountFallback =
-          rubricsList.length > 0 ? rubricsList.length : criteria.length;
+        const rubricCountFallback = rubricsList.length;
         const normalizedStudents = buildFallbackStudents(
           defaultData?.students || [],
           rubricCountFallback
@@ -614,6 +660,7 @@ export default function ViewScorePage() {
   };
 
   const calculateAverage = (scores: number[]) => {
+    if (scores.length === 0) return "0.00";
     const total = scores.reduce((acc, score) => acc + score, 0);
     const avg = total / scores.length;
     return avg.toFixed(2);
@@ -910,13 +957,10 @@ export default function ViewScorePage() {
                   <thead>
                     <tr className="text-left text-gray-600">
                       <th className="py-2 pr-4">Student</th>
-                      {(rubrics.length > 0
-                        ? rubrics.map((r: any) => r.rubricName)
-                        : criteria
-                      ).map((name) => (
-                        <th key={name} className="py-2 px-3">
+                      {rubrics.length > 0 && rubrics.map((r: any) => (
+                        <th key={r.id || r.rubricName} className="py-2 px-3">
                           <div className="flex flex-col">
-                            <span className="font-medium">{name}</span>
+                            <span className="font-medium">{r.rubricName || r.name}</span>
                             <span className="text-xs text-gray-400">
                               (Max: 10)
                             </span>
@@ -1087,7 +1131,7 @@ export default function ViewScorePage() {
 
                           {notesVisibility[student.id] && (
                             <tr>
-                              <td colSpan={(rubrics.length > 0 ? rubrics.length : criteria.length) + 3} className="py-3">
+                              <td colSpan={rubrics.length + 3} className="py-3">
                                 <div className="bg-gray-50 border rounded-md p-3">
                                   <textarea
                                     className="w-full p-3 rounded-md bg-white border text-sm"
