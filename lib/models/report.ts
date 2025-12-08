@@ -16,7 +16,9 @@ export interface ReportCreateDto {
 }
 
 export interface ReportUpdateDto {
-  summary?: string;
-  filePath?: string;
+  sessionId: number;
+  filePath: string;
+  summaryText?: string;
+  status: string;
 }
 
