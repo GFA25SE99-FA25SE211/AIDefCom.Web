@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Modal from "../../../moderator/create-sessions/components/Modal";
 import { CalendarPlus } from "lucide-react";
+import { swalConfig } from "@/lib/utils/sweetAlert";
 
 interface AddSemesterData {
   name: string;
@@ -94,7 +95,28 @@ const AddSemesterModal: React.FC<AddSemesterModalProps> = ({
               type="number"
               placeholder="2025"
               value={year}
-              onChange={(e) => setYear(Number(e.target.value))}
+              onChange={(e) => {
+                const newYear = Number(e.target.value);
+                setYear(newYear);
+                
+                // Auto-fill dates when year changes (only if dates are empty or don't match the new year)
+                if (newYear >= 2000 && newYear <= 2100) {
+                  const currentStartYear = startDate ? new Date(startDate).getFullYear() : null;
+                  const currentEndYear = endDate ? new Date(endDate).getFullYear() : null;
+                  
+                  // If start date is empty or doesn't match new year, suggest default
+                  if (!startDate || (currentStartYear !== null && currentStartYear !== newYear)) {
+                    setStartDate(`${newYear}-01-01`);
+                  }
+                  
+                  // If end date is empty or doesn't match new year, suggest default
+                  if (!endDate || (currentEndYear !== null && currentEndYear !== newYear)) {
+                    setEndDate(`${newYear}-05-31`);
+                  }
+                }
+              }}
+              min={2000}
+              max={2100}
               required
             />
           </div>
@@ -107,7 +129,22 @@ const AddSemesterModal: React.FC<AddSemesterModalProps> = ({
               id="start-date"
               type="date"
               value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
+              onChange={(e) => {
+                const selectedDate = e.target.value;
+                const selectedYear = selectedDate ? new Date(selectedDate).getFullYear() : null;
+                
+                // Validate that date is in the selected year
+                if (selectedDate && selectedYear && selectedYear !== year) {
+                  swalConfig.warning(
+                    "Invalid Date",
+                    `Start date must be in year ${year}. Please select a date in ${year}.`
+                  );
+                  return;
+                }
+                setStartDate(selectedDate);
+              }}
+              min={`${year}-01-01`}
+              max={`${year}-12-31`}
               required
             />
           </div>
@@ -117,14 +154,38 @@ const AddSemesterModal: React.FC<AddSemesterModalProps> = ({
               id="end-date"
               type="date"
               value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
+              onChange={(e) => {
+                const selectedDate = e.target.value;
+                const selectedYear = selectedDate ? new Date(selectedDate).getFullYear() : null;
+                
+                // Validate that date is in the selected year
+                if (selectedDate && selectedYear && selectedYear !== year) {
+                  swalConfig.warning(
+                    "Invalid Date",
+                    `End date must be in year ${year}. Please select a date in ${year}.`
+                  );
+                  return;
+                }
+                
+                // Validate that end date is after start date
+                if (selectedDate && startDate && selectedDate < startDate) {
+                  swalConfig.warning(
+                    "Invalid Date",
+                    "End date must be after start date."
+                  );
+                  return;
+                }
+                setEndDate(selectedDate);
+              }}
+              min={startDate || `${year}-01-01`}
+              max={`${year}-12-31`}
               required
             />
           </div>
         </div>
 
         <div className="form-group">
-          <label htmlFor="major-id">Major ID</label>
+          <label htmlFor="major-id">Major Name</label>
           <select
             id="major-id"
             value={majorID}

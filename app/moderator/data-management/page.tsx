@@ -156,6 +156,15 @@ export default function DataManagementPage() {
 
   const [isStudentImportModalOpen, setIsStudentImportModalOpen] =
     useState(false);
+
+  // Loading states for import/export operations
+  const [isDownloadingCouncilTemplate, setIsDownloadingCouncilTemplate] =
+    useState(false);
+  const [isDownloadingStudentTemplate, setIsDownloadingStudentTemplate] =
+    useState(false);
+  const [isImportingCouncil, setIsImportingCouncil] = useState(false);
+  const [isImportingStudent, setIsImportingStudent] = useState(false);
+  const [isDownloadingReport, setIsDownloadingReport] = useState(false);
   const studentFileInputRef = useRef<HTMLInputElement | null>(null);
 
   // State data
@@ -457,7 +466,11 @@ export default function DataManagementPage() {
 
   const handleCouncilDownloadTemplate = async () => {
     try {
+      setIsDownloadingCouncilTemplate(true);
+      swalConfig.loading("Đang tải template...", "Vui lòng chờ trong giây lát");
+
       await councilsApi.downloadTemplate();
+
       await swalConfig.success(
         "Template Downloaded",
         "Council template has been downloaded successfully."
@@ -468,6 +481,8 @@ export default function DataManagementPage() {
         "Download Failed",
         error.message || "Unable to download council template."
       );
+    } finally {
+      setIsDownloadingCouncilTemplate(false);
     }
   };
 
@@ -487,6 +502,12 @@ export default function DataManagementPage() {
     }
 
     try {
+      setIsImportingCouncil(true);
+      swalConfig.loading(
+        "Đang import dữ liệu...",
+        "Vui lòng chờ hệ thống xử lý file"
+      );
+
       const result = await councilsApi.importWithCommittees(
         Number(councilImportMajorId),
         file
@@ -503,14 +524,17 @@ export default function DataManagementPage() {
       await fetchData();
       setIsCouncilImportModalOpen(false);
       setCouncilImportMajorId("");
+      event.target.value = "";
     } catch (error: any) {
+      setIsImportingCouncil(false);
       console.error("Import council error:", error);
       await swalConfig.error(
         "Import Failed",
         error.message || "Unable to import councils."
       );
-    } finally {
       event.target.value = "";
+    } finally {
+      setIsImportingCouncil(false);
     }
   };
 
@@ -647,7 +671,11 @@ export default function DataManagementPage() {
 
   const handleStudentDownloadTemplate = async () => {
     try {
+      setIsDownloadingStudentTemplate(true);
+      swalConfig.loading("Đang tải template...", "Vui lòng chờ trong giây lát");
+
       await studentsApi.downloadTemplate();
+
       await swalConfig.success(
         "Template Downloaded",
         "Student template has been downloaded successfully."
@@ -658,6 +686,8 @@ export default function DataManagementPage() {
         "Download Failed",
         error.message || "Unable to download student template."
       );
+    } finally {
+      setIsDownloadingStudentTemplate(false);
     }
   };
 
@@ -668,6 +698,12 @@ export default function DataManagementPage() {
     if (!file) return;
 
     try {
+      setIsImportingStudent(true);
+      swalConfig.loading(
+        "Đang import dữ liệu sinh viên...",
+        "Vui lòng chờ hệ thống xử lý file"
+      );
+
       const result = await studentsApi.import(file);
       const data = result?.data || result;
       const message =
@@ -678,14 +714,17 @@ export default function DataManagementPage() {
       await swalConfig.success("Import Complete", message);
       await fetchData();
       setIsStudentImportModalOpen(false);
+      event.target.value = "";
     } catch (error: any) {
+      setIsImportingStudent(false);
       console.error("Import student error:", error);
       await swalConfig.error(
         "Import Failed",
         error.message || "Unable to import students."
       );
-    } finally {
       event.target.value = "";
+    } finally {
+      setIsImportingStudent(false);
     }
   };
 
@@ -1145,11 +1184,47 @@ export default function DataManagementPage() {
   };
 
   const handleDownloadReport = async (filePath: string) => {
-    // simulate download
-    await swalConfig.info(
-      "Download Started",
-      `Simulating download: ${filePath}`
-    );
+    try {
+      if (!filePath) {
+        await swalConfig.error(
+          "Download Failed",
+          "File path is not available."
+        );
+        return;
+      }
+
+      setIsDownloadingReport(true);
+      
+      // If filePath is a URL, open it in a new window
+      if (filePath.startsWith("http://") || filePath.startsWith("https://")) {
+        window.open(filePath, "_blank");
+        await swalConfig.success(
+          "Download Started",
+          "Report is being opened in a new tab."
+        );
+      } else {
+        // If it's a relative path, try to download it
+        const link = document.createElement("a");
+        link.href = filePath;
+        link.download = filePath.split("/").pop() || "report.pdf";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        await swalConfig.success(
+          "Download Complete",
+          "Report has been downloaded successfully."
+        );
+      }
+    } catch (error: any) {
+      console.error("Download report error:", error);
+      await swalConfig.error(
+        "Download Failed",
+        error.message || "Unable to download report."
+      );
+    } finally {
+      setIsDownloadingReport(false);
+    }
   };
 
   // Pagination calculations
@@ -1244,16 +1319,36 @@ export default function DataManagementPage() {
         </h2>
         <div className="flex items-center gap-2">
           <button
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-md border border-green-500 text-sm font-medium text-green-600 hover:bg-green-50"
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-md border border-green-500 text-sm font-medium text-green-600 hover:bg-green-50 disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={handleCouncilDownloadTemplate}
+            disabled={isDownloadingCouncilTemplate}
           >
-            <Download className="w-4 h-4" /> Template
+            {isDownloadingCouncilTemplate ? (
+              <>
+                <div className="w-4 h-4 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
+                Downloading...
+              </>
+            ) : (
+              <>
+                <Download className="w-4 h-4" /> Template
+              </>
+            )}
           </button>
           <button
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-md border border-purple-500 text-sm font-medium text-purple-600 hover:bg-purple-50"
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-md border border-purple-500 text-sm font-medium text-purple-600 hover:bg-purple-50 disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={handleOpenCouncilImport}
+            disabled={isImportingCouncil}
           >
-            <Upload className="w-4 h-4" /> Import File
+            {isImportingCouncil ? (
+              <>
+                <div className="w-4 h-4 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+                Importing...
+              </>
+            ) : (
+              <>
+                <Upload className="w-4 h-4" /> Import File
+              </>
+            )}
           </button>
           <button
             className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-gradient-to-r from-purple-600 to-blue-500 text-white text-sm"
@@ -1448,16 +1543,36 @@ export default function DataManagementPage() {
         </h2>
         <div className="flex items-center gap-2">
           <button
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-md border border-green-500 text-sm font-medium text-green-600 hover:bg-green-50"
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-md border border-green-500 text-sm font-medium text-green-600 hover:bg-green-50 disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={handleStudentDownloadTemplate}
+            disabled={isDownloadingStudentTemplate}
           >
-            <Download className="w-4 h-4" /> Template
+            {isDownloadingStudentTemplate ? (
+              <>
+                <div className="w-4 h-4 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
+                Downloading...
+              </>
+            ) : (
+              <>
+                <Download className="w-4 h-4" /> Template
+              </>
+            )}
           </button>
           <button
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-md border border-purple-500 text-sm font-medium text-purple-600 hover:bg-purple-50"
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-md border border-purple-500 text-sm font-medium text-purple-600 hover:bg-purple-50 disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={() => studentFileInputRef.current?.click()}
+            disabled={isImportingStudent}
           >
-            <Upload className="w-4 h-4" /> Import File
+            {isImportingStudent ? (
+              <>
+                <div className="w-4 h-4 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+                Importing...
+              </>
+            ) : (
+              <>
+                <Upload className="w-4 h-4" /> Import File
+              </>
+            )}
           </button>
           <button
             className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-gradient-to-r from-purple-600 to-blue-500 text-white text-sm"
@@ -1755,14 +1870,19 @@ export default function DataManagementPage() {
                         >
                           View
                         </button>
-                        {/* Tạm ẩn button download */}
-                        {/* <button
-                          className="p-2 rounded-md hover:bg-gray-100"
+                        {/* Download button with loading state */}
+                        <button
+                          className="p-2 rounded-md hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
                           onClick={() => handleDownloadReport(r.filePath)}
+                          disabled={isDownloadingReport}
                           title="Download"
                         >
-                          <Download className="w-4 h-4" />
-                        </button> */}
+                          {isDownloadingReport ? (
+                            <div className="w-4 h-4 border-2 border-gray-500 border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <Download className="w-4 h-4" />
+                          )}
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -2024,16 +2144,36 @@ export default function DataManagementPage() {
 
             <div className="space-y-3">
               <button
-                className="inline-flex items-center gap-2 px-3 py-2 rounded-md border border-green-500 text-sm font-medium text-green-600 hover:bg-green-50 w-full justify-center"
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-md border border-green-500 text-sm font-medium text-green-600 hover:bg-green-50 w-full justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                 onClick={handleStudentDownloadTemplate}
+                disabled={isDownloadingStudentTemplate}
               >
-                <Download className="w-4 h-4" /> Template
+                {isDownloadingStudentTemplate ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
+                    Downloading...
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-4 h-4" /> Template
+                  </>
+                )}
               </button>
               <button
-                className="inline-flex items-center gap-2 px-3 py-2 rounded-md border border-purple-500 text-sm font-medium text-purple-600 hover:bg-purple-50 w-full justify-center"
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-md border border-purple-500 text-sm font-medium text-purple-600 hover:bg-purple-50 w-full justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                 onClick={() => studentFileInputRef.current?.click()}
+                disabled={isImportingStudent}
               >
-                <Upload className="w-4 h-4" /> Choose File
+                {isImportingStudent ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+                    Importing...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-4 h-4" /> Choose File
+                  </>
+                )}
               </button>
             </div>
           </div>

@@ -12,6 +12,7 @@ import { councilsApi } from "@/lib/api/councils";
 import { authApi } from "@/lib/api/auth";
 import { memberNotesApi } from "@/lib/api/member-notes";
 import { reportsApi } from "@/lib/api/reports";
+import { defenseSessionsApi } from "@/lib/api/defense-sessions";
 import { swalConfig } from "@/lib/utils/sweetAlert";
 import type {
   MajorDto,
@@ -24,6 +25,7 @@ import type {
   UserDto,
   MemberNoteDto,
   ReportDto,
+  DefenseSessionDto,
 } from "@/lib/models";
 
 // Import các Modal đã tạo:
@@ -48,6 +50,7 @@ import AddRubricModal from "../dashboard/components/AddRubricModal";
 import EditRubricModal from "../dashboard/components/EditRubricModal";
 import EditAssignmentModal from "../dashboard/components/EditAssignmentModal";
 import EditGroupModal from "../../moderator/create-sessions/components/EditGroupModal";
+import EditReportModal from "../dashboard/components/EditReportModal";
 
 import {
   ClipboardList,
@@ -184,6 +187,7 @@ export default function AdminDataManagementPage() {
   const [reports, setReports] = useState<ReportDto[]>([]);
   const [assignments, setAssignments] = useState<CommitteeAssignmentDto[]>([]);
   const [users, setUsers] = useState<UserDto[]>([]);
+  const [defenseSessions, setDefenseSessions] = useState<DefenseSessionDto[]>([]);
 
   // Pagination state for each tab
   const [taskPage, setTaskPage] = useState(1);
@@ -225,6 +229,23 @@ export default function AdminDataManagementPage() {
     return map;
   }, [councils]);
 
+  // Map sessionId to session name for quick lookup
+  const sessionMap = useMemo(() => {
+    const map = new Map<number, string>();
+    defenseSessions.forEach((session) => {
+      // Create session name from topic title or defense date
+      let sessionName = session.topicTitle_VN || session.topicTitle_EN;
+      if (!sessionName && session.defenseDate) {
+        sessionName = `Session ${new Date(session.defenseDate).toLocaleDateString("vi-VN")}`;
+      }
+      if (!sessionName) {
+        sessionName = `Session ${session.id}`;
+      }
+      map.set(session.id, sessionName);
+    });
+    return map;
+  }, [defenseSessions]);
+
   // Reset page to 1 when switching tabs
   useEffect(() => {
     setTaskPage(1);
@@ -252,6 +273,7 @@ export default function AdminDataManagementPage() {
           usersRes,
           notesRes,
           reportsRes,
+          sessionsRes,
         ] = await Promise.all([
           majorsApi.getAll().catch(() => ({ data: [] })),
           semestersApi.getAll().catch(() => ({ data: [] })),
@@ -263,6 +285,7 @@ export default function AdminDataManagementPage() {
           authApi.getAllUsers().catch(() => ({ data: [] })),
           memberNotesApi.getAll().catch(() => ({ data: [] })),
           reportsApi.getAll().catch(() => ({ data: [] })),
+          defenseSessionsApi.getAll().catch(() => ({ data: [] })),
         ]);
 
         setMajors(majorsRes.data || []);
@@ -274,6 +297,7 @@ export default function AdminDataManagementPage() {
         setUsers(usersRes.data || []);
         setNotes(notesRes.data || []);
         setReports(reportsRes.data || []);
+        setDefenseSessions(sessionsRes.data || []);
 
         // Transform tasks
         const transformedTasks = (tasksRes.data || []).map(
@@ -994,14 +1018,14 @@ export default function AdminDataManagementPage() {
         councilRoleId,
       });
 
-      await swalConfig.success(
-        "Success!",
-        "Assignment updated successfully!"
-      );
-      // Reload assignments to get updated data
-      const response = await committeeAssignmentsApi.getAll();
-      setAssignments(response.data || []);
-      setEditingAssignment(null);
+        await swalConfig.success(
+          "Success!",
+          "Assignment updated successfully!"
+        );
+        // Reload assignments to get updated data
+        const response = await committeeAssignmentsApi.getAll();
+        setAssignments(response.data || []);
+        setEditingAssignment(null);
     } catch (error: any) {
       console.error("Error updating assignment:", error);
       await swalConfig.error(
@@ -1112,9 +1136,30 @@ export default function AdminDataManagementPage() {
     }
   };
 
-  const handleEditReport = async (id: number, summary: string) => {
+  const handleEditReport = async (
+    id: number,
+    data: { summary?: string; filePath?: string }
+  ) => {
     try {
-      await reportsApi.update(id, { summary });
+      // Find the original report to get sessionId and status
+      const originalReport = reports.find((r) => r.id === id);
+      if (!originalReport) {
+        await swalConfig.error("Error", "Report not found");
+        return;
+      }
+
+      // Prepare update data matching backend ReportUpdateDto
+      // Backend requires: SessionId (int), FilePath (string), SummaryText (string?), Status (string)
+      const updateData = {
+        sessionId: originalReport.sessionId,
+        filePath: data.filePath !== undefined ? data.filePath : (originalReport.filePath || ""),
+        summaryText: data.summary !== undefined ? data.summary : (originalReport.summary || originalReport.summaryText || undefined),
+        status: originalReport.status || "",
+      };
+      
+      console.log("Updating report with data:", updateData);
+
+      await reportsApi.update(id, updateData);
       const response = await reportsApi.getAll();
       setReports(response.data || []);
       setEditingReport(null);
@@ -1567,11 +1612,11 @@ export default function AdminDataManagementPage() {
           {renderHeader("Reports")}
           {renderSearch("Search reports...")}
           {renderTable(
-            ["ID", "Session ID", "Summary", "File Path", "Generated Date", "Actions"],
+            ["ID", "Session Name", "Summary", "File Path", "Generated Date", "Actions"],
             paginatedReports.map((r) => (
               <tr key={r.id}>
                 <td>{r.id}</td>
-                <td>{r.sessionId}</td>
+                <td>{sessionMap.get(r.sessionId) || `Session ${r.sessionId}`}</td>
                 <td className="max-w-md truncate">{r.summary}</td>
                 <td className="max-w-md truncate">{r.filePath || "N/A"}</td>
                 <td>{r.generatedDate ? new Date(r.generatedDate).toLocaleString() : "N/A"}</td>
@@ -1579,12 +1624,8 @@ export default function AdminDataManagementPage() {
                   <div className="flex gap-2 justify-center items-center">
                     <button
                       className="btn-subtle"
-                      onClick={() => {
-                        const newSummary = prompt("Edit report summary:", r.summary);
-                        if (newSummary !== null && newSummary !== r.summary) {
-                          handleEditReport(r.id, newSummary);
-                        }
-                      }}
+                      onClick={() => setEditingReport(r)}
+                      title="Edit"
                     >
                       <Pencil className="w-4 h-4" />
                     </button>
@@ -1798,6 +1839,20 @@ export default function AdminDataManagementPage() {
             id: String(c.id),
             councilName: c.councilName || `Council ${c.id}`,
           }))}
+        />
+      )}
+      {editingReport && (
+        <EditReportModal
+          isOpen
+          onClose={() => setEditingReport(null)}
+          onSubmit={(id, data) => handleEditReport(id, data)}
+          reportData={{
+            id: editingReport.id,
+            sessionId: editingReport.sessionId,
+            summary: editingReport.summary,
+            filePath: editingReport.filePath,
+          }}
+          sessionName={sessionMap.get(editingReport.sessionId) || `Session ${editingReport.sessionId}`}
         />
       )}
     </main>

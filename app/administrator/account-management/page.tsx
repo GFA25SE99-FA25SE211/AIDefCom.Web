@@ -133,11 +133,20 @@ export default function AccountManagementPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-  const [uploadStep, setUploadStep] = useState<null | "student" | "lecturer">(null);
+  const [uploadStep, setUploadStep] = useState<null | "student" | "lecturer">(
+    null
+  );
   const [studentUploadParams, setStudentUploadParams] = useState({
     semesterId: "",
     majorId: "",
   });
+
+  // Loading states for download/import operations
+  const [isDownloadingStudentTemplate, setIsDownloadingStudentTemplate] =
+    useState(false);
+  const [isDownloadingLecturerTemplate, setIsDownloadingLecturerTemplate] =
+    useState(false);
+  const [isImportingFile, setIsImportingFile] = useState(false);
   const [semesters, setSemesters] = useState<SemesterDto[]>([]);
   const [majors, setMajors] = useState<MajorDto[]>([]);
   const [uploadMetaLoading, setUploadMetaLoading] = useState(false);
@@ -351,11 +360,7 @@ export default function AccountManagementPage() {
 
       await authApi.updateAccount(String(id), updateData);
 
-      if (
-        data.role &&
-        editingUser &&
-        data.role !== editingUser.primaryRole
-      ) {
+      if (data.role && editingUser && data.role !== editingUser.primaryRole) {
         // Gửi "Admin" thay vì "Administrator" cho backend
         const roleToSend = data.role === "Administrator" ? "Admin" : data.role;
         await authApi.assignRole(data.email, roleToSend);
@@ -385,27 +390,32 @@ export default function AccountManagementPage() {
 
     // Lấy thông tin user hiện tại đang login
     const currentUser = authUtils.getCurrentUserInfo();
-    
+
     // Kiểm tra xem user đang được xóa có phải là admin không
-    const isUserAdmin = user.roles?.some(r => {
-      const roleLower = r?.toLowerCase();
-      return roleLower === "administrator" || roleLower === "admin";
-    }) || user.primaryRole?.toLowerCase() === "administrator" || 
-        user.primaryRole?.toLowerCase() === "admin";
-    
+    const isUserAdmin =
+      user.roles?.some((r) => {
+        const roleLower = r?.toLowerCase();
+        return roleLower === "administrator" || roleLower === "admin";
+      }) ||
+      user.primaryRole?.toLowerCase() === "administrator" ||
+      user.primaryRole?.toLowerCase() === "admin";
+
     // Kiểm tra xem có phải đang xóa chính mình không
     let isDeletingSelf = false;
-    
+
     // So sánh bằng userId (chuyển về string để so sánh chính xác)
     if (currentUser.userId) {
       const currentUserIdStr = String(currentUser.userId).trim();
       const userToDeleteIdStr = String(user.id).trim();
       const idToDeleteStr = String(id).trim();
-      if (currentUserIdStr === userToDeleteIdStr || currentUserIdStr === idToDeleteStr) {
+      if (
+        currentUserIdStr === userToDeleteIdStr ||
+        currentUserIdStr === idToDeleteStr
+      ) {
         isDeletingSelf = true;
       }
     }
-    
+
     // So sánh bằng email (case-insensitive) nếu chưa match bằng id
     if (!isDeletingSelf && currentUser.email && user.email) {
       const currentEmailLower = currentUser.email.toLowerCase().trim();
@@ -414,14 +424,14 @@ export default function AccountManagementPage() {
         isDeletingSelf = true;
       }
     }
-    
+
     // Nếu đang cố xóa chính mình và là admin, chặn lại
     if (isDeletingSelf && isUserAdmin) {
       console.log("BLOCKED: Admin trying to delete themselves", {
         currentUser: currentUser,
         userToDelete: { id: user.id, email: user.email, roles: user.roles },
         isDeletingSelf,
-        isUserAdmin
+        isUserAdmin,
       });
       await swalConfig.error(
         "Không thể xóa",
@@ -480,27 +490,47 @@ export default function AccountManagementPage() {
 
   const handleDownloadStudentTemplate = async () => {
     try {
+      setIsDownloadingStudentTemplate(true);
+      swalConfig.loading("Đang tải template...", "Vui lòng chờ trong giây lát");
+
       await studentsApi.downloadStudentGroupTemplate();
+
       setIsDownloadModalOpen(false);
+      await swalConfig.success(
+        "Template Downloaded",
+        "Student template has been downloaded successfully."
+      );
     } catch (error: any) {
       console.error("Error downloading student-group template:", error);
       swalConfig.error(
         "Download Failed",
         error.message || "Unable to download student-group template."
       );
+    } finally {
+      setIsDownloadingStudentTemplate(false);
     }
   };
 
   const handleDownloadLecturerTemplate = async () => {
     try {
+      setIsDownloadingLecturerTemplate(true);
+      swalConfig.loading("Đang tải template...", "Vui lòng chờ trong giây lát");
+
       await lecturersApi.downloadTemplate();
+
       setIsDownloadModalOpen(false);
+      await swalConfig.success(
+        "Template Downloaded",
+        "Lecturer template has been downloaded successfully."
+      );
     } catch (error: any) {
       console.error("Error downloading lecturer template:", error);
       swalConfig.error(
         "Download Failed",
         error.message || "Unable to download lecturer template."
       );
+    } finally {
+      setIsDownloadingLecturerTemplate(false);
     }
   };
 
@@ -548,7 +578,7 @@ export default function AccountManagementPage() {
       // Validate semester and major IDs
       const semesterId = Number(studentUploadParams.semesterId);
       const majorId = Number(studentUploadParams.majorId);
-      
+
       if (!semesterId || !majorId || isNaN(semesterId) || isNaN(majorId)) {
         swalConfig.error(
           "Invalid Selection",
@@ -559,8 +589,8 @@ export default function AccountManagementPage() {
       }
 
       // Validate file type
-      const fileExtension = file.name.split('.').pop()?.toLowerCase();
-      if (fileExtension !== 'xlsx' && fileExtension !== 'xls') {
+      const fileExtension = file.name.split(".").pop()?.toLowerCase();
+      if (fileExtension !== "xlsx" && fileExtension !== "xls") {
         swalConfig.error(
           "Invalid File Type",
           "Please upload an Excel file (.xlsx or .xls)"
@@ -574,33 +604,34 @@ export default function AccountManagementPage() {
         majorId,
         file,
       });
-      
+
       // Refresh users list after successful upload
       const usersResponse = await authApi.getAllUsers();
       setUsers(mapUsersFromApi(usersResponse.data || []));
-      
-      swalConfig.success("Upload Complete", "Student-group data uploaded successfully!");
+
+      swalConfig.success(
+        "Upload Complete",
+        "Student-group data uploaded successfully!"
+      );
       closeUploadModal();
     } catch (error: any) {
       console.error("Error uploading student-group file:", error);
-      
+
       // Extract detailed error message
-      let errorMessage = error.message || "Unable to upload student-group file.";
-      
+      let errorMessage =
+        error.message || "Unable to upload student-group file.";
+
       // If error has errorData, try to get more details
       if (error.errorData) {
         if (error.errorData.details) {
           errorMessage += `\n\n${error.errorData.details}`;
         }
-        if (error.errorData.data && typeof error.errorData.data === 'string') {
+        if (error.errorData.data && typeof error.errorData.data === "string") {
           errorMessage += `\n\n${error.errorData.data}`;
         }
       }
-      
-      swalConfig.error(
-        "Upload Failed",
-        errorMessage
-      );
+
+      swalConfig.error("Upload Failed", errorMessage);
     } finally {
       event.target.value = "";
     }
@@ -635,7 +666,7 @@ export default function AccountManagementPage() {
   // Lấy thông tin user hiện tại đang login
   const currentUserInfo = useMemo(() => {
     // Thử lấy từ localStorage trước (cách chính)
-    if (typeof window !== 'undefined') {
+    if (typeof window !== "undefined") {
       try {
         const userStr = localStorage.getItem("user");
         if (userStr) {
@@ -652,7 +683,7 @@ export default function AccountManagementPage() {
         console.error("Error parsing user from localStorage:", error);
       }
     }
-    
+
     // Fallback: thử lấy từ authUtils (token)
     const userInfo = authUtils.getCurrentUserInfo();
     console.log("Current logged in user from token:", userInfo);
@@ -662,35 +693,45 @@ export default function AccountManagementPage() {
   // Kiểm tra xem user có phải là admin đang login chính mình không
   const isCurrentUserAdminSelf = (user: UserAccount): boolean => {
     // Kiểm tra role của user - phải là admin
-    const isUserAdmin = user.roles?.some(r => {
-      const roleLower = r?.toLowerCase();
-      return roleLower === "administrator" || roleLower === "admin";
-    }) || user.primaryRole?.toLowerCase() === "administrator" || 
-        user.primaryRole?.toLowerCase() === "admin";
-    
+    const isUserAdmin =
+      user.roles?.some((r) => {
+        const roleLower = r?.toLowerCase();
+        return roleLower === "administrator" || roleLower === "admin";
+      }) ||
+      user.primaryRole?.toLowerCase() === "administrator" ||
+      user.primaryRole?.toLowerCase() === "admin";
+
     if (!isUserAdmin) return false;
-    
+
     // Kiểm tra xem có phải chính mình không
     // So sánh bằng userId
     if (currentUserInfo.userId) {
       const currentUserIdStr = String(currentUserInfo.userId).trim();
       const userToCheckIdStr = String(user.id).trim();
       if (currentUserIdStr === userToCheckIdStr) {
-        console.log("Match by userId:", { currentUserIdStr, userToCheckIdStr, userEmail: user.email });
+        console.log("Match by userId:", {
+          currentUserIdStr,
+          userToCheckIdStr,
+          userEmail: user.email,
+        });
         return true;
       }
     }
-    
+
     // So sánh bằng email (case-insensitive)
     if (currentUserInfo.email && user.email) {
       const currentEmailLower = currentUserInfo.email.toLowerCase().trim();
       const userEmailLower = user.email.toLowerCase().trim();
       if (currentEmailLower === userEmailLower) {
-        console.log("Match by email:", { currentEmailLower, userEmailLower, userId: user.id });
+        console.log("Match by email:", {
+          currentEmailLower,
+          userEmailLower,
+          userId: user.id,
+        });
         return true;
       }
     }
-    
+
     return false;
   };
 
@@ -929,24 +970,38 @@ export default function AccountManagementPage() {
               <button
                 type="button"
                 onClick={handleDownloadStudentTemplate}
-                className="flex w-full items-center justify-between rounded-2xl bg-gradient-to-r from-purple-600 to-[#7c3aed] px-5 py-4 text-white"
+                disabled={isDownloadingStudentTemplate}
+                className="flex w-full items-center justify-between rounded-2xl bg-gradient-to-r from-purple-600 to-[#7c3aed] px-5 py-4 text-white disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <span className="flex items-center gap-2 text-sm font-semibold">
                   <GraduationCap className="w-4 h-4" />
-                  Student-Group Template
+                  {isDownloadingStudentTemplate
+                    ? "Downloading..."
+                    : "Student-Group Template"}
                 </span>
-                <Download className="w-4 h-4" />
+                {isDownloadingStudentTemplate ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Download className="w-4 h-4" />
+                )}
               </button>
               <button
                 type="button"
                 onClick={handleDownloadLecturerTemplate}
-                className="flex w-full items-center justify-between rounded-2xl bg-gradient-to-r from-blue-500 to-cyan-500 px-5 py-4 text-white"
+                disabled={isDownloadingLecturerTemplate}
+                className="flex w-full items-center justify-between rounded-2xl bg-gradient-to-r from-blue-500 to-cyan-500 px-5 py-4 text-white disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <span className="flex items-center gap-2 text-sm font-semibold">
                   <UserRound className="w-4 h-4" />
-                  Lecturer Template
+                  {isDownloadingLecturerTemplate
+                    ? "Downloading..."
+                    : "Lecturer Template"}
                 </span>
-                <Download className="w-4 h-4" />
+                {isDownloadingLecturerTemplate ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Download className="w-4 h-4" />
+                )}
               </button>
             </div>
           </div>
