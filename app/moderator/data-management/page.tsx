@@ -1185,16 +1185,37 @@ export default function DataManagementPage() {
 
   const handleDownloadReport = async (filePath: string) => {
     try {
+      if (!filePath) {
+        await swalConfig.error(
+          "Download Failed",
+          "File path is not available."
+        );
+        return;
+      }
+
       setIsDownloadingReport(true);
-      swalConfig.loading("Đang tải báo cáo...", "Vui lòng chờ trong giây lát");
-
-      // Call the actual download API
-      await reportsApi.downloadByPath(filePath);
-
-      await swalConfig.success(
-        "Download Complete",
-        "Report has been downloaded successfully."
-      );
+      
+      // If filePath is a URL, open it in a new window
+      if (filePath.startsWith("http://") || filePath.startsWith("https://")) {
+        window.open(filePath, "_blank");
+        await swalConfig.success(
+          "Download Started",
+          "Report is being opened in a new tab."
+        );
+      } else {
+        // If it's a relative path, try to download it
+        const link = document.createElement("a");
+        link.href = filePath;
+        link.download = filePath.split("/").pop() || "report.pdf";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        await swalConfig.success(
+          "Download Complete",
+          "Report has been downloaded successfully."
+        );
+      }
     } catch (error: any) {
       console.error("Download report error:", error);
       await swalConfig.error(
