@@ -18,6 +18,7 @@ import {
   Eye,
 } from "lucide-react";
 import { swalConfig } from "@/lib/utils/sweetAlert";
+import { getApiErrorMessage } from "@/lib/utils/apiError";
 import { councilsApi } from "@/lib/api/councils";
 import { groupsApi } from "@/lib/api/groups";
 import { studentsApi } from "@/lib/api/students";
@@ -183,6 +184,14 @@ export default function DataManagementPage() {
   const [sessionPage, setSessionPage] = useState(1);
   const [transcriptPage, setTranscriptPage] = useState(1);
   const [reportPage, setReportPage] = useState(1);
+
+  // Search state for each tab
+  const [councilSearch, setCouncilSearch] = useState("");
+  const [groupSearch, setGroupSearch] = useState("");
+  const [studentSearch, setStudentSearch] = useState("");
+  const [sessionSearch, setSessionSearch] = useState("");
+  const [transcriptSearch, setTranscriptSearch] = useState("");
+  const [reportSearch, setReportSearch] = useState("");
 
   const studentGroupOptions = useMemo(
     () =>
@@ -447,7 +456,7 @@ export default function DataManagementPage() {
     } catch (error: any) {
       await swalConfig.error(
         "Error Creating Council",
-        error.message || "Failed to create council"
+        getApiErrorMessage(error, "Failed to create council")
       );
     }
   };
@@ -479,7 +488,7 @@ export default function DataManagementPage() {
       console.error("Download template error:", error);
       await swalConfig.error(
         "Download Failed",
-        error.message || "Unable to download council template."
+        getApiErrorMessage(error, "Unable to download council template.")
       );
     } finally {
       setIsDownloadingCouncilTemplate(false);
@@ -530,7 +539,7 @@ export default function DataManagementPage() {
       console.error("Import council error:", error);
       await swalConfig.error(
         "Import Failed",
-        error.message || "Unable to import councils."
+        getApiErrorMessage(error, "Unable to import councils.")
       );
       event.target.value = "";
     } finally {
@@ -572,7 +581,7 @@ export default function DataManagementPage() {
     } catch (error: any) {
       await swalConfig.error(
         "Error Creating Group",
-        error.message || "Failed to create group"
+        getApiErrorMessage(error, "Failed to create group")
       );
     }
   };
@@ -627,7 +636,7 @@ export default function DataManagementPage() {
     } catch (error: any) {
       await swalConfig.error(
         "Error Adding Student",
-        error.message || "Failed to add student"
+        getApiErrorMessage(error, "Failed to add student")
       );
     }
   };
@@ -660,7 +669,7 @@ export default function DataManagementPage() {
     } catch (error: any) {
       await swalConfig.error(
         "Error Creating Session",
-        error.message || "Failed to create defense session"
+        getApiErrorMessage(error, "Failed to create defense session")
       );
     }
   };
@@ -684,7 +693,7 @@ export default function DataManagementPage() {
       console.error("Download template error:", error);
       await swalConfig.error(
         "Download Failed",
-        error.message || "Unable to download student template."
+        getApiErrorMessage(error, "Unable to download student template.")
       );
     } finally {
       setIsDownloadingStudentTemplate(false);
@@ -720,7 +729,7 @@ export default function DataManagementPage() {
       console.error("Import student error:", error);
       await swalConfig.error(
         "Import Failed",
-        error.message || "Unable to import students."
+        getApiErrorMessage(error, "Unable to import students.")
       );
       event.target.value = "";
     } finally {
@@ -756,7 +765,7 @@ export default function DataManagementPage() {
     } catch (error: any) {
       await swalConfig.error(
         "Error Updating Council",
-        error.message || "Failed to update council"
+        getApiErrorMessage(error, "Failed to update council")
       );
     }
   };
@@ -772,8 +781,19 @@ export default function DataManagementPage() {
     }
   ) => {
     try {
+      // Find the original group to get projectCode
+      const originalGroup = groups.find((g) => g.id === id);
+      if (!originalGroup) {
+        await swalConfig.error("Error", "Group not found");
+        return;
+      }
+
+      // Use existing projectCode from the group, don't change it
+      // projectCode has strict format validation (FA25SE135 format)
+      const projectCode = originalGroup.projectCode || "";
+
       await groupsApi.update(id, {
-        projectCode: data.topicEN,
+        projectCode: projectCode, // Keep existing projectCode
         topicTitle_EN: data.topicEN,
         topicTitle_VN: data.topicVN,
         semesterId: parseInt(data.semesterId) || 1,
@@ -799,7 +819,7 @@ export default function DataManagementPage() {
     } catch (error: any) {
       await swalConfig.error(
         "Error Updating Group",
-        error.message || "Failed to update group"
+        getApiErrorMessage(error, "Failed to update group")
       );
     }
   };
@@ -836,7 +856,7 @@ export default function DataManagementPage() {
     } catch (error: any) {
       await swalConfig.error(
         "Error Updating Student",
-        error.message || "Failed to update student"
+        getApiErrorMessage(error, "Failed to update student")
       );
     }
   };
@@ -959,7 +979,7 @@ export default function DataManagementPage() {
     } catch (error: any) {
       await swalConfig.error(
         "Error Updating Session",
-        error.message || "Failed to update session"
+        getApiErrorMessage(error, "Failed to update session")
       );
     }
   };
@@ -980,7 +1000,7 @@ export default function DataManagementPage() {
         console.error("Error deleting council:", error);
         await swalConfig.error(
           "Error Deleting Council",
-          error.message || "Failed to delete council"
+          getApiErrorMessage(error, "Failed to delete council")
         );
       }
     }
@@ -1003,7 +1023,7 @@ export default function DataManagementPage() {
       console.error("Error deleting group:", error);
       await swalConfig.error(
         "Error Deleting Group",
-        error.message || "Failed to delete group"
+        getApiErrorMessage(error, "Failed to delete group")
       );
     }
   };
@@ -1038,7 +1058,7 @@ export default function DataManagementPage() {
       console.error("Error deleting student:", error);
       await swalConfig.error(
         "Error Deleting Student",
-        error.message || "Failed to delete student"
+        getApiErrorMessage(error, "Failed to delete student")
       );
     }
   };
@@ -1060,7 +1080,7 @@ export default function DataManagementPage() {
       console.error("Error deleting session:", error);
       await swalConfig.error(
         "Error Deleting Session",
-        error.message || "Failed to delete session"
+        getApiErrorMessage(error, "Failed to delete session")
       );
     }
   };
@@ -1085,7 +1105,7 @@ export default function DataManagementPage() {
       console.error("Error deleting transcript:", error);
       await swalConfig.error(
         "Error Deleting Transcript",
-        error.message || "Failed to delete transcript"
+        getApiErrorMessage(error, "Failed to delete transcript")
       );
     }
   };
@@ -1110,7 +1130,7 @@ export default function DataManagementPage() {
       console.error("Error deleting report:", error);
       await swalConfig.error(
         "Error Deleting Report",
-        error.message || "Failed to delete report"
+        getApiErrorMessage(error, "Failed to delete report")
       );
     }
   };
@@ -1144,7 +1164,7 @@ export default function DataManagementPage() {
     } catch (error: any) {
       await swalConfig.error(
         "Error Approving Transcript",
-        error.message || "Failed to approve transcript"
+        getApiErrorMessage(error, "Failed to approve transcript")
       );
     }
   };
@@ -1178,7 +1198,7 @@ export default function DataManagementPage() {
     } catch (error: any) {
       await swalConfig.error(
         "Error Rejecting Transcript",
-        error.message || "Failed to reject transcript"
+        getApiErrorMessage(error, "Failed to reject transcript")
       );
     }
   };
@@ -1220,54 +1240,172 @@ export default function DataManagementPage() {
       console.error("Download report error:", error);
       await swalConfig.error(
         "Download Failed",
-        error.message || "Unable to download report."
+        getApiErrorMessage(error, "Unable to download report.")
       );
     } finally {
       setIsDownloadingReport(false);
     }
   };
 
-  // Pagination calculations
+  // Filtered data based on search
+  const filteredCouncils = useMemo(() => {
+    if (!councilSearch.trim()) return councils;
+    const searchLower = councilSearch.toLowerCase().trim();
+    return councils.filter(
+      (c) =>
+        c.id.toString().includes(searchLower) ||
+        c.name.toLowerCase().includes(searchLower) ||
+        c.description.toLowerCase().includes(searchLower) ||
+        c.createdDate.toLowerCase().includes(searchLower) ||
+        c.status.toLowerCase().includes(searchLower)
+    );
+  }, [councils, councilSearch]);
+
+  const filteredGroups = useMemo(() => {
+    if (!groupSearch.trim()) return groups;
+    const searchLower = groupSearch.toLowerCase().trim();
+    return groups.filter(
+      (g) =>
+        (g.id && String(g.id).toLowerCase().includes(searchLower)) ||
+        (g.projectCode && g.projectCode.toLowerCase().includes(searchLower)) ||
+        (g.topicTitle_EN && g.topicTitle_EN.toLowerCase().includes(searchLower)) ||
+        (g.topicTitle_VN && g.topicTitle_VN.toLowerCase().includes(searchLower)) ||
+        (g.projectTitle && g.projectTitle.toLowerCase().includes(searchLower)) ||
+        (g.semesterName && g.semesterName.toLowerCase().includes(searchLower)) ||
+        (g.majorName && g.majorName.toLowerCase().includes(searchLower)) ||
+        (g.status && g.status.toLowerCase().includes(searchLower))
+    );
+  }, [groups, groupSearch]);
+
+  const filteredStudents = useMemo(() => {
+    if (!studentSearch.trim()) return students;
+    const searchLower = studentSearch.toLowerCase().trim();
+    return students.filter(
+      (s) =>
+        s.displayId.toString().includes(searchLower) ||
+        s.userId.toLowerCase().includes(searchLower) ||
+        s.groupName.toLowerCase().includes(searchLower) ||
+        s.dob.toLowerCase().includes(searchLower) ||
+        s.gender.toLowerCase().includes(searchLower) ||
+        s.role.toLowerCase().includes(searchLower)
+    );
+  }, [students, studentSearch]);
+
+  const filteredSessions = useMemo(() => {
+    if (!sessionSearch.trim()) return sessions;
+    const searchLower = sessionSearch.toLowerCase().trim();
+    return sessions.filter(
+      (s) =>
+        s.id.toString().includes(searchLower) ||
+        String(s.groupId).toLowerCase().includes(searchLower) ||
+        s.location.toLowerCase().includes(searchLower) ||
+        s.date.toLowerCase().includes(searchLower) ||
+        s.time.toLowerCase().includes(searchLower) ||
+        s.status.toLowerCase().includes(searchLower)
+    );
+  }, [sessions, sessionSearch]);
+
+  const filteredTranscripts = useMemo(() => {
+    if (!transcriptSearch.trim()) return transcripts;
+    const searchLower = transcriptSearch.toLowerCase().trim();
+    return transcripts.filter((t) => {
+      const session = sessions.find((s) => s.id === t.sessionId);
+      const sessionName = session
+        ? `${session.groupId} - ${session.date} ${session.time}`
+        : `Session ${t.sessionId}`;
+      return (
+        t.id.toString().includes(searchLower) ||
+        sessionName.toLowerCase().includes(searchLower) ||
+        t.createdAt.toLowerCase().includes(searchLower) ||
+        t.status.toLowerCase().includes(searchLower) ||
+        (t.isApproved ? "yes" : "no").includes(searchLower)
+      );
+    });
+  }, [transcripts, transcriptSearch, sessions]);
+
+  const filteredReports = useMemo(() => {
+    if (!reportSearch.trim()) return reports;
+    const searchLower = reportSearch.toLowerCase().trim();
+    return reports.filter((r) => {
+      const session = sessions.find((s) => s.id === r.sessionId);
+      const sessionName = session
+        ? `${session.groupId} - ${session.date} ${session.time}`
+        : `Session ${r.sessionId}`;
+      return (
+        r.id.toString().includes(searchLower) ||
+        sessionName.toLowerCase().includes(searchLower) ||
+        r.generatedDate.toLowerCase().includes(searchLower) ||
+        (r.summary && r.summary.toLowerCase().includes(searchLower))
+      );
+    });
+  }, [reports, reportSearch, sessions]);
+
+  // Pagination calculations (based on filtered data)
   const paginatedCouncils = useMemo(() => {
     const startIndex = (councilPage - 1) * PAGE_SIZE;
-    return councils.slice(startIndex, startIndex + PAGE_SIZE);
-  }, [councils, councilPage]);
+    return filteredCouncils.slice(startIndex, startIndex + PAGE_SIZE);
+  }, [filteredCouncils, councilPage]);
 
   const paginatedGroups = useMemo(() => {
     const startIndex = (groupPage - 1) * PAGE_SIZE;
-    return groups.slice(startIndex, startIndex + PAGE_SIZE);
-  }, [groups, groupPage]);
+    return filteredGroups.slice(startIndex, startIndex + PAGE_SIZE);
+  }, [filteredGroups, groupPage]);
 
   const paginatedStudents = useMemo(() => {
     const startIndex = (studentPage - 1) * PAGE_SIZE;
-    return students.slice(startIndex, startIndex + PAGE_SIZE);
-  }, [students, studentPage]);
+    return filteredStudents.slice(startIndex, startIndex + PAGE_SIZE);
+  }, [filteredStudents, studentPage]);
 
   const paginatedSessions = useMemo(() => {
     const startIndex = (sessionPage - 1) * PAGE_SIZE;
-    return sessions.slice(startIndex, startIndex + PAGE_SIZE);
-  }, [sessions, sessionPage]);
+    return filteredSessions.slice(startIndex, startIndex + PAGE_SIZE);
+  }, [filteredSessions, sessionPage]);
 
   const paginatedTranscripts = useMemo(() => {
     const startIndex = (transcriptPage - 1) * PAGE_SIZE;
-    return transcripts.slice(startIndex, startIndex + PAGE_SIZE);
-  }, [transcripts, transcriptPage]);
+    return filteredTranscripts.slice(startIndex, startIndex + PAGE_SIZE);
+  }, [filteredTranscripts, transcriptPage]);
 
   const paginatedReports = useMemo(() => {
     const startIndex = (reportPage - 1) * PAGE_SIZE;
-    return reports.slice(startIndex, startIndex + PAGE_SIZE);
-  }, [reports, reportPage]);
+    return filteredReports.slice(startIndex, startIndex + PAGE_SIZE);
+  }, [filteredReports, reportPage]);
 
-  // Total pages calculations
-  const councilTotalPages = Math.max(1, Math.ceil(councils.length / PAGE_SIZE));
-  const groupTotalPages = Math.max(1, Math.ceil(groups.length / PAGE_SIZE));
-  const studentTotalPages = Math.max(1, Math.ceil(students.length / PAGE_SIZE));
-  const sessionTotalPages = Math.max(1, Math.ceil(sessions.length / PAGE_SIZE));
+  // Total pages calculations (based on filtered data)
+  const councilTotalPages = Math.max(1, Math.ceil(filteredCouncils.length / PAGE_SIZE));
+  const groupTotalPages = Math.max(1, Math.ceil(filteredGroups.length / PAGE_SIZE));
+  const studentTotalPages = Math.max(1, Math.ceil(filteredStudents.length / PAGE_SIZE));
+  const sessionTotalPages = Math.max(1, Math.ceil(filteredSessions.length / PAGE_SIZE));
   const transcriptTotalPages = Math.max(
     1,
-    Math.ceil(transcripts.length / PAGE_SIZE)
+    Math.ceil(filteredTranscripts.length / PAGE_SIZE)
   );
-  const reportTotalPages = Math.max(1, Math.ceil(reports.length / PAGE_SIZE));
+  const reportTotalPages = Math.max(1, Math.ceil(filteredReports.length / PAGE_SIZE));
+
+  // Reset page to 1 when search changes
+  useEffect(() => {
+    setCouncilPage(1);
+  }, [councilSearch]);
+
+  useEffect(() => {
+    setGroupPage(1);
+  }, [groupSearch]);
+
+  useEffect(() => {
+    setStudentPage(1);
+  }, [studentSearch]);
+
+  useEffect(() => {
+    setSessionPage(1);
+  }, [sessionSearch]);
+
+  useEffect(() => {
+    setTranscriptPage(1);
+  }, [transcriptSearch]);
+
+  useEffect(() => {
+    setReportPage(1);
+  }, [reportSearch]);
 
   // Pagination component helper
   const renderPagination = (
@@ -1365,9 +1503,20 @@ export default function DataManagementPage() {
             <Search className="w-4 h-4 text-gray-400" />
           </div>
           <input
+            type="text"
+            value={councilSearch}
+            onChange={(e) => setCouncilSearch(e.target.value)}
             className="w-full pl-10 pr-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-200 outline-none"
             placeholder="Search councils..."
           />
+          {councilSearch && (
+            <button
+              onClick={() => setCouncilSearch("")}
+              className="absolute right-3 top-2 text-gray-400 hover:text-gray-600"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -1459,9 +1608,20 @@ export default function DataManagementPage() {
             <Search className="w-4 h-4 text-gray-400" />
           </div>
           <input
+            type="text"
+            value={groupSearch}
+            onChange={(e) => setGroupSearch(e.target.value)}
             className="w-full pl-10 pr-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-200 outline-none"
             placeholder="Search groups..."
           />
+          {groupSearch && (
+            <button
+              onClick={() => setGroupSearch("")}
+              className="absolute right-3 top-2 text-gray-400 hover:text-gray-600"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -1589,9 +1749,20 @@ export default function DataManagementPage() {
             <Search className="w-4 h-4 text-gray-400" />
           </div>
           <input
+            type="text"
+            value={studentSearch}
+            onChange={(e) => setStudentSearch(e.target.value)}
             className="w-full pl-10 pr-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-200 outline-none"
             placeholder="Search students..."
           />
+          {studentSearch && (
+            <button
+              onClick={() => setStudentSearch("")}
+              className="absolute right-3 top-2 text-gray-400 hover:text-gray-600"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -1669,6 +1840,29 @@ export default function DataManagementPage() {
           >
             <Plus className="w-4 h-4" /> Add Session
           </button>
+        </div>
+      </div>
+
+      <div className="mb-4">
+        <div className="relative w-96">
+          <div className="absolute left-3 top-2">
+            <Search className="w-4 h-4 text-gray-400" />
+          </div>
+          <input
+            type="text"
+            value={sessionSearch}
+            onChange={(e) => setSessionSearch(e.target.value)}
+            className="w-full pl-10 pr-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-200 outline-none"
+            placeholder="Search sessions..."
+          />
+          {sessionSearch && (
+            <button
+              onClick={() => setSessionSearch("")}
+              className="absolute right-3 top-2 text-gray-400 hover:text-gray-600"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
       {loading ? (
@@ -1752,6 +1946,29 @@ export default function DataManagementPage() {
         Transcripts are automatically generated from defense sessions. You can
         view and approve them here.
       </p>
+
+      <div className="mb-4">
+        <div className="relative w-96">
+          <div className="absolute left-3 top-2">
+            <Search className="w-4 h-4 text-gray-400" />
+          </div>
+          <input
+            type="text"
+            value={transcriptSearch}
+            onChange={(e) => setTranscriptSearch(e.target.value)}
+            className="w-full pl-10 pr-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-200 outline-none"
+            placeholder="Search transcripts..."
+          />
+          {transcriptSearch && (
+            <button
+              onClick={() => setTranscriptSearch("")}
+              className="absolute right-3 top-2 text-gray-400 hover:text-gray-600"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+      </div>
       {loading ? (
         <div className="text-center py-8 text-gray-500">
           Loading transcripts...
@@ -1833,6 +2050,29 @@ export default function DataManagementPage() {
         Reports are generated after defense sessions. You can download and view
         them here.
       </p>
+
+      <div className="mb-4">
+        <div className="relative w-96">
+          <div className="absolute left-3 top-2">
+            <Search className="w-4 h-4 text-gray-400" />
+          </div>
+          <input
+            type="text"
+            value={reportSearch}
+            onChange={(e) => setReportSearch(e.target.value)}
+            className="w-full pl-10 pr-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-200 outline-none"
+            placeholder="Search reports..."
+          />
+          {reportSearch && (
+            <button
+              onClick={() => setReportSearch("")}
+              className="absolute right-3 top-2 text-gray-400 hover:text-gray-600"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+      </div>
       {loading ? (
         <div className="text-center py-8 text-gray-500">Loading reports...</div>
       ) : (
@@ -1952,6 +2192,7 @@ export default function DataManagementPage() {
         onSubmit={handleAddGroup}
         majorOptions={majors}
         semesterOptions={semesters}
+        existingGroups={groups}
       />
       <AddStudentModal
         isOpen={isAddStudentModalOpen}
@@ -2044,9 +2285,22 @@ export default function DataManagementPage() {
       <ReportDetailModal
         isOpen={!!selectedReport}
         onClose={() => setSelectedReport(null)}
-        report={selectedReport}
-        // Tạm ẩn download
-        // onDownload={handleDownloadReport}
+        report={
+          selectedReport
+            ? {
+                ...selectedReport,
+                sessionName: (() => {
+                  const session = sessions.find(
+                    (s) => s.id === selectedReport.sessionId
+                  );
+                  return session
+                    ? `${session.groupId} - ${session.date} ${session.time}`
+                    : undefined;
+                })(),
+              }
+            : null
+        }
+        onDownload={handleDownloadReport}
       />
 
       {/* Hidden import inputs */}

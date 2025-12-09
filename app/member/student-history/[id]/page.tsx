@@ -2,7 +2,14 @@
 
 import React, { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, User, FileText, Clock, Calendar, ClipboardList } from "lucide-react";
+import {
+  ArrowLeft,
+  User,
+  FileText,
+  Clock,
+  Calendar,
+  ClipboardList,
+} from "lucide-react";
 import { studentsApi } from "@/lib/api/students";
 import { defenseSessionsApi } from "@/lib/api/defense-sessions";
 import type { StudentDto, DefenseSessionDto } from "@/lib/models";
@@ -83,7 +90,7 @@ const studentDetailData: StudentDetailData = {
         date: "2023-12-10",
         group: "Group 3",
         topic: "Smart Learning Management System",
-            role: "Member",
+        role: "Member",
         score: 4.5,
         grade: "F",
         status: "Not Passed",
@@ -113,13 +120,17 @@ export default function StudentHistoryDetailPage() {
         setLoading(true);
         const [studentRes, sessionsRes] = await Promise.all([
           studentsApi.getById(studentId).catch(() => ({ data: null })),
-          defenseSessionsApi.getByStudentId(studentId).catch(() => ({ data: [] })),
+          defenseSessionsApi
+            .getByStudentId(studentId)
+            .catch(() => ({ data: [] })),
         ]);
 
         const studentData = studentRes.data;
         if (!studentData) {
           // Fallback to mock data if not found
-          setStudent(studentDetailData[studentId] || studentDetailData["SV001"]);
+          setStudent(
+            studentDetailData[studentId] || studentDetailData["SV001"]
+          );
           return;
         }
 
@@ -132,17 +143,19 @@ export default function StudentHistoryDetailPage() {
           name: studentData.fullName || studentData.userName || "Unknown",
           email: studentData.email || "",
           failedCount: 0, // TODO: Calculate from scores
-          attempts: studentSessions.map((s: DefenseSessionDto, index: number) => ({
-            attempt: `Attempt #${studentSessions.length - index}`,
-            id: `DEF-${s.id}`,
-            date: s.defenseDate || "",
-            group: s.groupId || "N/A", // Use groupId from session
-            topic: "Project", // TODO: Get project title from group
-            role: "Member",
-            score: 0, // TODO: Get from scores
-            grade: "N/A",
-            status: "Completed",
-          })),
+          attempts: studentSessions.map(
+            (s: DefenseSessionDto, index: number) => ({
+              attempt: `Attempt #${studentSessions.length - index}`,
+              id: `DEF-${s.id}`,
+              date: s.defenseDate || "",
+              group: s.groupId || "N/A", // Use groupId from session
+              topic: "Project", // TODO: Get project title from group
+              role: "Member",
+              score: 0, // TODO: Get from scores
+              grade: "N/A",
+              status: "Completed",
+            })
+          ),
         };
 
         setStudent(studentDetail);
@@ -164,7 +177,9 @@ export default function StudentHistoryDetailPage() {
   if (loading || !student) {
     return (
       <main className="main-content">
-        <div className="text-center py-8 text-gray-500">Loading student data...</div>
+        <div className="text-center py-8 text-gray-500">
+          Loading student data...
+        </div>
       </main>
     );
   }
@@ -215,32 +230,6 @@ export default function StudentHistoryDetailPage() {
               <p className="font-medium text-gray-800">{student.email}</p>
             </div>
           </div>
-        </div>
-
-        {/* Summary Card */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 mb-6">
-          <div className="flex items-center gap-2 mb-4">
-            <FileText className="w-5 h-5 text-violet-600" />
-            <h2 className="text-lg font-semibold text-gray-800">
-              Defense History Summary
-            </h2>
-          </div>
-
-          {student.failedCount > 0 ? (
-            <div className="bg-red-50 border border-red-100 rounded-xl p-4 text-sm">
-              <p className="font-medium text-red-700">
-                Total Failed Defenses: {student.failedCount}
-              </p>
-              <p className="text-gray-600 mt-1">
-                This student has failed {student.failedCount} time(s) and is now
-                retaking the defense.
-              </p>
-            </div>
-          ) : (
-            <p className="text-center text-gray-500 py-6 text-sm">
-              This student has not failed any previous defense attempts.
-            </p>
-          )}
         </div>
 
         {/* Attempts Table */}

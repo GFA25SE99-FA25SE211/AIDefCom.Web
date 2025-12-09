@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import Modal from "../../../moderator/create-sessions/components/Modal";
 import { CalendarPlus } from "lucide-react";
 import { swalConfig } from "@/lib/utils/sweetAlert";
@@ -23,7 +23,6 @@ interface AddSemesterModalProps {
   onClose: () => void;
   onSubmit: (data: AddSemesterData) => void;
   majorOptions?: MajorOption[];
-  existingSemesters?: { name: string }[];
 }
 
 const AddSemesterModal: React.FC<AddSemesterModalProps> = ({
@@ -31,16 +30,12 @@ const AddSemesterModal: React.FC<AddSemesterModalProps> = ({
   onClose,
   onSubmit,
   majorOptions = [],
-  existingSemesters = [],
 }) => {
   const [name, setName] = useState("");
   const [year, setYear] = useState(new Date().getFullYear());
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [majorID, setMajorID] = useState("");
-  const [nameError, setNameError] = useState("");
-  const [isCheckingName, setIsCheckingName] = useState(false);
-  const debounceTimer = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (majorOptions.length > 0 && !majorID) {
@@ -48,91 +43,9 @@ const AddSemesterModal: React.FC<AddSemesterModalProps> = ({
     }
   }, [majorOptions, majorID]);
 
-  // Reset states when modal opens/closes
-  useEffect(() => {
-    if (isOpen) {
-      setName("");
-      setYear(new Date().getFullYear());
-      setStartDate("");
-      setEndDate("");
-      setNameError("");
-      setIsCheckingName(false);
-      if (majorOptions.length > 0) {
-        setMajorID(majorOptions[0].id);
-      }
-    }
-  }, [isOpen, majorOptions]);
-
-  // Cleanup debounce timer
-  useEffect(() => {
-    return () => {
-      if (debounceTimer.current) {
-        clearTimeout(debounceTimer.current);
-      }
-    };
-  }, []);
-
-  // Check for duplicate semester name
-  const checkNameDuplicate = async (nameValue: string) => {
-    if (!nameValue.trim()) {
-      setNameError("");
-      setIsCheckingName(false);
-      return;
-    }
-
-    // Simulate API delay
-    await new Promise((resolve) => setTimeout(resolve, 300));
-
-    const isDuplicate = existingSemesters.some(
-      (semester) =>
-        semester.name.toLowerCase() === nameValue.trim().toLowerCase()
-    );
-
-    if (isDuplicate) {
-      setNameError("Tên học kỳ này đã tồn tại trong hệ thống");
-    } else {
-      setNameError("");
-    }
-    setIsCheckingName(false);
-  };
-
-  // Handle name change with debounce
-  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setName(value);
-
-    // Clear previous timer
-    if (debounceTimer.current) {
-      clearTimeout(debounceTimer.current);
-    }
-
-    if (value.trim()) {
-      setIsCheckingName(true);
-      setNameError("");
-
-      // Set new timer
-      debounceTimer.current = setTimeout(() => {
-        checkNameDuplicate(value);
-      }, 500);
-    } else {
-      setNameError("");
-      setIsCheckingName(false);
-    }
-  };
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (nameError) {
-      swalConfig.error("Tên học kỳ không hợp lệ", "Vui lòng sử dụng tên khác.");
-      return;
-    }
-
-    if (!name || !startDate || !endDate || !majorID) {
-      swalConfig.error("Thiếu thông tin", "Vui lòng điền đầy đủ thông tin.");
-      return;
-    }
-
+    if (!name || !startDate || !endDate || !majorID) return;
     onSubmit({ name, year, startDate, endDate, majorID });
     onClose();
   };
@@ -165,36 +78,14 @@ const AddSemesterModal: React.FC<AddSemesterModalProps> = ({
         <div className="flex gap-4">
           <div className="form-group flex-1">
             <label htmlFor="semester-name">Semester Name</label>
-            <div className="relative">
-              <input
-                id="semester-name"
-                type="text"
-                placeholder="e.g., Fall 2025"
-                value={name}
-                onChange={handleNameChange}
-                className={`w-full ${
-                  nameError
-                    ? "border-red-300 focus:border-red-500 focus:ring-red-500"
-                    : isCheckingName
-                    ? "border-blue-300 focus:border-blue-500 focus:ring-blue-500"
-                    : ""
-                }`}
-                required
-              />
-              {isCheckingName && (
-                <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                  <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                </div>
-              )}
-            </div>
-            {nameError && (
-              <span className="text-red-500 text-sm mt-1">{nameError}</span>
-            )}
-            {isCheckingName && (
-              <span className="text-blue-500 text-sm mt-1">
-                Đang kiểm tra tên học kỳ...
-              </span>
-            )}
+            <input
+              id="semester-name"
+              type="text"
+              placeholder="e.g., Fall 2025"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
           </div>
 
           <div className="form-group w-32">
@@ -207,29 +98,19 @@ const AddSemesterModal: React.FC<AddSemesterModalProps> = ({
               onChange={(e) => {
                 const newYear = Number(e.target.value);
                 setYear(newYear);
-
+                
                 // Auto-fill dates when year changes (only if dates are empty or don't match the new year)
                 if (newYear >= 2000 && newYear <= 2100) {
-                  const currentStartYear = startDate
-                    ? new Date(startDate).getFullYear()
-                    : null;
-                  const currentEndYear = endDate
-                    ? new Date(endDate).getFullYear()
-                    : null;
-
+                  const currentStartYear = startDate ? new Date(startDate).getFullYear() : null;
+                  const currentEndYear = endDate ? new Date(endDate).getFullYear() : null;
+                  
                   // If start date is empty or doesn't match new year, suggest default
-                  if (
-                    !startDate ||
-                    (currentStartYear !== null && currentStartYear !== newYear)
-                  ) {
+                  if (!startDate || (currentStartYear !== null && currentStartYear !== newYear)) {
                     setStartDate(`${newYear}-01-01`);
                   }
-
+                  
                   // If end date is empty or doesn't match new year, suggest default
-                  if (
-                    !endDate ||
-                    (currentEndYear !== null && currentEndYear !== newYear)
-                  ) {
+                  if (!endDate || (currentEndYear !== null && currentEndYear !== newYear)) {
                     setEndDate(`${newYear}-05-31`);
                   }
                 }
@@ -250,10 +131,8 @@ const AddSemesterModal: React.FC<AddSemesterModalProps> = ({
               value={startDate}
               onChange={(e) => {
                 const selectedDate = e.target.value;
-                const selectedYear = selectedDate
-                  ? new Date(selectedDate).getFullYear()
-                  : null;
-
+                const selectedYear = selectedDate ? new Date(selectedDate).getFullYear() : null;
+                
                 // Validate that date is in the selected year
                 if (selectedDate && selectedYear && selectedYear !== year) {
                   swalConfig.warning(
@@ -277,10 +156,8 @@ const AddSemesterModal: React.FC<AddSemesterModalProps> = ({
               value={endDate}
               onChange={(e) => {
                 const selectedDate = e.target.value;
-                const selectedYear = selectedDate
-                  ? new Date(selectedDate).getFullYear()
-                  : null;
-
+                const selectedYear = selectedDate ? new Date(selectedDate).getFullYear() : null;
+                
                 // Validate that date is in the selected year
                 if (selectedDate && selectedYear && selectedYear !== year) {
                   swalConfig.warning(
@@ -289,7 +166,7 @@ const AddSemesterModal: React.FC<AddSemesterModalProps> = ({
                   );
                   return;
                 }
-
+                
                 // Validate that end date is after start date
                 if (selectedDate && startDate && selectedDate < startDate) {
                   swalConfig.warning(

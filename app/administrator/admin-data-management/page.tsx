@@ -14,6 +14,7 @@ import { memberNotesApi } from "@/lib/api/member-notes";
 import { reportsApi } from "@/lib/api/reports";
 import { defenseSessionsApi } from "@/lib/api/defense-sessions";
 import { swalConfig } from "@/lib/utils/sweetAlert";
+import { getApiErrorMessage } from "@/lib/utils/apiError";
 import type {
   MajorDto,
   SemesterDto,
@@ -25,7 +26,6 @@ import type {
   UserDto,
   MemberNoteDto,
   ReportDto,
-  ReportUpdateDto,
   DefenseSessionDto,
 } from "@/lib/models";
 
@@ -133,8 +133,6 @@ export default function AdminDataManagementPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<AdminTabKey>("tasks");
   const [loading, setLoading] = useState(false);
-  const [connectionError, setConnectionError] = useState<string | null>(null);
-  const [retryCount, setRetryCount] = useState(0);
 
   // --- Modal states ---
   const [isAddTaskModalOpen, setIsAddTaskModalOpen] = useState(false);
@@ -269,27 +267,6 @@ export default function AdminDataManagementPage() {
     const fetchData = async () => {
       try {
         setLoading(true);
-        setConnectionError(null);
-
-        // Helper function to handle API errors
-        const handleApiError = (error: any, resourceName: string) => {
-          console.warn(`Failed to fetch ${resourceName}:`, error);
-
-          // Check if this is a database connection error
-          if (
-            error?.message?.includes("database error") ||
-            error?.message?.includes("connection") ||
-            error?.response?.status === 500 ||
-            error?.code === "NETWORK_ERROR"
-          ) {
-            setConnectionError(
-              "Không thể kết nối với database. Vui lòng kiểm tra kết nối mạng và thử lại."
-            );
-          }
-
-          return { data: [] };
-        };
-
         const [
           majorsRes,
           semestersRes,
@@ -303,37 +280,17 @@ export default function AdminDataManagementPage() {
           reportsRes,
           sessionsRes,
         ] = await Promise.all([
-          majorsApi.getAll().catch((error) => handleApiError(error, "majors")),
-          semestersApi
-            .getAll()
-            .catch((error) => handleApiError(error, "semesters")),
-          rubricsApi
-            .getAll()
-            .catch((error) => handleApiError(error, "rubrics")),
-          projectTasksApi
-            .getAll()
-            .catch((error) => handleApiError(error, "tasks")),
-          groupsApi
-            .getAll(false)
-            .catch((error) => handleApiError(error, "groups")),
-          committeeAssignmentsApi
-            .getAll()
-            .catch((error) => handleApiError(error, "assignments")),
-          councilsApi
-            .getAll(false)
-            .catch((error) => handleApiError(error, "councils")),
-          authApi
-            .getAllUsers()
-            .catch((error) => handleApiError(error, "users")),
-          memberNotesApi
-            .getAll()
-            .catch((error) => handleApiError(error, "notes")),
-          reportsApi
-            .getAll()
-            .catch((error) => handleApiError(error, "reports")),
-          defenseSessionsApi
-            .getAll()
-            .catch((error) => handleApiError(error, "sessions")),
+          majorsApi.getAll().catch(() => ({ data: [] })),
+          semestersApi.getAll().catch(() => ({ data: [] })),
+          rubricsApi.getAll().catch(() => ({ data: [] })),
+          projectTasksApi.getAll().catch(() => ({ data: [] })),
+          groupsApi.getAll(false).catch(() => ({ data: [] })), // includeDeleted=false
+          committeeAssignmentsApi.getAll().catch(() => ({ data: [] })),
+          councilsApi.getAll(false).catch(() => ({ data: [] })),
+          authApi.getAllUsers().catch(() => ({ data: [] })),
+          memberNotesApi.getAll().catch(() => ({ data: [] })),
+          reportsApi.getAll().catch(() => ({ data: [] })),
+          defenseSessionsApi.getAll().catch(() => ({ data: [] })),
         ]);
 
         setMajors(majorsRes.data || []);
@@ -363,36 +320,15 @@ export default function AdminDataManagementPage() {
           })
         );
         setTasks(transformedTasks);
-
-        // Reset retry count on successful load
-        setRetryCount(0);
       } catch (error) {
         console.error("Error fetching data:", error);
-        setConnectionError(
-          "Có lỗi xảy ra khi tải dữ liệu. Vui lòng thử lại sau ít phút."
-        );
       } finally {
         setLoading(false);
       }
     };
 
     fetchData();
-  }, [retryCount]);
-
-  const handleRetry = () => {
-    // Clear any existing connection errors before retrying
-    setConnectionError(null);
-
-    // Maximum retry limit to prevent infinite retries
-    const MAX_RETRIES = 3;
-    if (retryCount < MAX_RETRIES) {
-      setRetryCount((prev) => prev + 1);
-    } else {
-      setConnectionError(
-        "Đã thử lại nhiều lần nhưng vẫn không thể kết nối. Vui lòng liên hệ quản trị viên hệ thống."
-      );
-    }
-  };
+  }, []);
 
   /* ============ Filters ============ */
   const getFilteredData = (
@@ -600,7 +536,6 @@ export default function AdminDataManagementPage() {
     title: string;
     description: string;
     assignedTo: string;
-    sessionId: string;
     status: "Pending" | "Completed" | "InProgress";
   }) => {
     try {
@@ -672,8 +607,8 @@ export default function AdminDataManagementPage() {
         assignedById: String(assignedByAssignment.id),
         assignedToId: String(assignedToAssignment.id),
         rubricId: firstRubric,
-        sessionId: parseInt(data.sessionId),
         status: backendStatus,
+        sessionId: 0, // Default sessionId value
       });
       const response = await projectTasksApi.getAll();
       const transformedTasks = (response.data || []).map(
@@ -697,7 +632,7 @@ export default function AdminDataManagementPage() {
       console.error("Error creating task:", error);
       await swalConfig.error(
         "Error Creating Task",
-        error.message || "Failed to create task"
+        getApiErrorMessage(error, "Failed to create task")
       );
     }
   };
@@ -732,8 +667,8 @@ export default function AdminDataManagementPage() {
         assignedToId:
           originalTask?.assignedTo || "18D005EB-D9DB-4C84-9AD3-459C209708FE", // Keep original assignedTo
         rubricId: 1, // Default rubric ID - you may want to make this configurable
-        sessionId: 1, // Default session ID - should be made configurable later
         status: backendStatus,
+        sessionId: 0, // Default sessionId value for update
       };
 
       console.log("Update payload:", updatePayload);
@@ -762,19 +697,7 @@ export default function AdminDataManagementPage() {
       console.error("Error updating task:", error);
       console.error("Full error object:", JSON.stringify(error, null, 2));
 
-      let errorMessage = error.message || "Failed to update task";
-
-      // Check for more detailed error info
-      if (error.response?.data?.message) {
-        errorMessage = error.response.data.message;
-      } else if (error.response?.data?.details) {
-        errorMessage = error.response.data.details;
-      }
-      if (error.message?.includes("500")) {
-        errorMessage =
-          "Server error while updating the task. Please verify the task exists and try again.";
-      }
-
+      const errorMessage = getApiErrorMessage(error, "Failed to update task");
       await swalConfig.error("Error Updating Task", errorMessage);
     }
   };
@@ -795,7 +718,7 @@ export default function AdminDataManagementPage() {
         console.error("Error deleting task:", error);
         await swalConfig.error(
           "Error Deleting Task",
-          error.message || "Failed to delete task"
+          getApiErrorMessage(error, "Failed to delete task")
         );
       }
     }
@@ -922,7 +845,7 @@ export default function AdminDataManagementPage() {
         console.error("Error deleting semester:", error);
         await swalConfig.error(
           "Error Deleting Semester",
-          error.message || "Failed to delete semester"
+          getApiErrorMessage(error, "Failed to delete semester")
         );
       }
     }
@@ -940,38 +863,10 @@ export default function AdminDataManagementPage() {
       await swalConfig.success("Success!", "Major created successfully!");
     } catch (error: any) {
       console.error("Error creating major:", error);
-
-      // Handle specific validation errors
-      if (error.status === 400 && error.data?.errors) {
-        const errorMessages = [];
-
-        // Handle validation errors
-        for (const [field, messages] of Object.entries(error.data.errors)) {
-          if (Array.isArray(messages)) {
-            errorMessages.push(...messages);
-          } else {
-            errorMessages.push(String(messages));
-          }
-        }
-
-        await swalConfig.error(
-          "Validation Error",
-          errorMessages.join("\n") || "Please check your input and try again."
-        );
-      } else if (
-        error.message?.includes("duplicate") ||
-        error.message?.includes("already exists")
-      ) {
-        await swalConfig.error(
-          "Duplicate Major",
-          "A major with this name already exists. Please choose a different name."
-        );
-      } else {
-        await swalConfig.error(
-          "Error Creating Major",
-          error.message || "Failed to create major. Please try again."
-        );
-      }
+      await swalConfig.error(
+        "Error Creating Major",
+        getApiErrorMessage(error, "Failed to create major")
+      );
     }
   };
 
@@ -989,7 +884,7 @@ export default function AdminDataManagementPage() {
       console.error("Error updating major:", error);
       await swalConfig.error(
         "Error Updating Major",
-        error.message || "Failed to update major"
+        getApiErrorMessage(error, "Failed to update major")
       );
     }
   };
@@ -1021,7 +916,7 @@ export default function AdminDataManagementPage() {
       await rubricsApi.create({
         rubricName: data.name,
         description: data.description,
-        majorId: data.majorId,
+        majorId: 1, // Default majorId value
       });
       const response = await rubricsApi.getAll();
       setRubrics(response.data || []);
@@ -1031,7 +926,7 @@ export default function AdminDataManagementPage() {
       console.error("Error creating rubric:", error);
       await swalConfig.error(
         "Error Creating Rubric",
-        error.message || "Failed to create rubric"
+        getApiErrorMessage(error, "Failed to create rubric")
       );
     }
   };
@@ -1050,7 +945,7 @@ export default function AdminDataManagementPage() {
       console.error("Error updating rubric:", error);
       await swalConfig.error(
         "Error Updating Rubric",
-        error.message || "Failed to update rubric"
+        getApiErrorMessage(error, "Failed to update rubric")
       );
     }
   };
@@ -1179,7 +1074,7 @@ export default function AdminDataManagementPage() {
     } catch (error: any) {
       await swalConfig.error(
         "Error Editing Group",
-        error.message || "Failed to edit group"
+        getApiErrorMessage(error, "Failed to edit group")
       );
     }
   };
@@ -1200,7 +1095,7 @@ export default function AdminDataManagementPage() {
         console.error("Error deleting rubric:", error);
         await swalConfig.error(
           "Error Deleting Rubric",
-          error.message || "Failed to delete rubric"
+          getApiErrorMessage(error, "Failed to delete rubric")
         );
       }
     }
@@ -1216,7 +1111,7 @@ export default function AdminDataManagementPage() {
     } catch (error: any) {
       await swalConfig.error(
         "Error Editing Note",
-        error.message || "Failed to edit note"
+        getApiErrorMessage(error, "Failed to edit note")
       );
     }
   };
@@ -1238,7 +1133,7 @@ export default function AdminDataManagementPage() {
         console.error("Error deleting note:", error);
         await swalConfig.error(
           "Error Deleting Note",
-          error.message || "Failed to delete note"
+          getApiErrorMessage(error, "Failed to delete note")
         );
       }
     }
@@ -1258,7 +1153,7 @@ export default function AdminDataManagementPage() {
 
       // Prepare update data matching backend ReportUpdateDto
       // Backend requires: SessionId (int), FilePath (string), SummaryText (string?), Status (string)
-      const updateData: ReportUpdateDto = {
+      const updateData: any = {
         sessionId: originalReport.sessionId,
         filePath:
           data.filePath !== undefined
@@ -1282,7 +1177,7 @@ export default function AdminDataManagementPage() {
     } catch (error: any) {
       await swalConfig.error(
         "Error Editing Report",
-        error.message || "Failed to edit report"
+        getApiErrorMessage(error, "Failed to edit report")
       );
     }
   };
@@ -1339,14 +1234,10 @@ export default function AdminDataManagementPage() {
         );
       } catch (error: any) {
         console.error("Error deleting assignment:", error);
-
-        // Provide more detailed error message
-        let errorMessage = error.message || "Failed to delete assignment";
-        if (error.errorData?.message) {
-          errorMessage = error.errorData.message;
-        }
-
-        await swalConfig.error("Error Deleting Assignment", errorMessage);
+        await swalConfig.error(
+          "Error Deleting Assignment",
+          getApiErrorMessage(error, "Failed to delete assignment")
+        );
       }
     }
   };
@@ -1367,7 +1258,7 @@ export default function AdminDataManagementPage() {
         console.error("Error deleting group:", error);
         await swalConfig.error(
           "Error Deleting Group",
-          error.message || "Failed to delete group"
+          getApiErrorMessage(error, "Failed to delete group")
         );
       }
     }
@@ -1430,72 +1321,6 @@ export default function AdminDataManagementPage() {
           </p>
         </div>
       </header>
-
-      {/* Connection Error Alert */}
-      {connectionError && (
-        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-          <div className="flex items-start gap-3">
-            <div className="flex-shrink-0">
-              <svg
-                className="w-5 h-5 text-red-400 mt-0.5"
-                fill="currentColor"
-                viewBox="0 0 20 20"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                  clipRule="evenodd"
-                />
-              </svg>
-            </div>
-            <div className="flex-1">
-              <h3 className="text-sm font-medium text-red-800 mb-1">
-                Lỗi kết nối database
-              </h3>
-              <p className="text-sm text-red-700 mb-3">{connectionError}</p>
-              <button
-                onClick={handleRetry}
-                disabled={loading}
-                className="inline-flex items-center gap-2 px-3 py-1.5 bg-red-600 text-white text-sm font-medium rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                {loading ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    Đang thử lại...
-                  </>
-                ) : (
-                  <>
-                    <svg
-                      className="w-4 h-4"
-                      fill="currentColor"
-                      viewBox="0 0 20 20"
-                    >
-                      <path
-                        fillRule="evenodd"
-                        d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
-                    Thử lại
-                  </>
-                )}
-              </button>
-            </div>
-            <button
-              onClick={() => setConnectionError(null)}
-              className="flex-shrink-0 p-1 text-red-400 hover:text-red-600 transition-colors"
-            >
-              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                <path
-                  fillRule="evenodd"
-                  d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-                  clipRule="evenodd"
-                />
-              </svg>
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Tabs */}
       <div className="flex flex-wrap gap-2 mb-6">
@@ -1915,13 +1740,6 @@ export default function AdminDataManagementPage() {
             );
           })
           .map((u) => ({ id: u.id, name: u.fullName }))}
-        existingTasks={tasks.map((task) => ({ title: task.title }))}
-        sessionOptions={defenseSessions.map((session) => ({
-          id: session.id,
-          name: `Session ${session.id} - ${session.location} (${new Date(
-            session.defenseDate
-          ).toLocaleDateString()})`,
-        }))}
       />
       <AddSemesterModal
         isOpen={isAddSemesterModalOpen}
@@ -1931,20 +1749,16 @@ export default function AdminDataManagementPage() {
           id: String(m.id),
           name: m.majorName || `Major ${m.id}`,
         }))}
-        existingSemesters={semesters.map((s) => ({ name: s.semesterName }))}
       />
       <AddMajorModal
         isOpen={isAddMajorModalOpen}
         onClose={() => setIsAddMajorModalOpen(false)}
         onSubmit={handleAddMajor}
-        existingMajors={majors.map((m) => ({ majorName: m.majorName }))}
       />
       <AddRubricModal
         isOpen={isAddRubricModalOpen}
         onClose={() => setIsAddRubricModalOpen(false)}
         onSubmit={handleAddRubric}
-        existingRubrics={rubrics.map((r) => ({ name: r.rubricName }))}
-        majors={majors}
       />
       {editingTask && (
         <EditTaskModal
@@ -1963,7 +1777,6 @@ export default function AdminDataManagementPage() {
               );
             })
             .map((u) => ({ id: u.id, name: u.fullName }))}
-          existingTasks={tasks.map((task) => ({ title: task.title }))}
         />
       )}
       {editingSemester && (

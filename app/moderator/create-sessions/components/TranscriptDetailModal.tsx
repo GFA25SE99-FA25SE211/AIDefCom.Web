@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useMemo } from "react";
 import Modal from "./Modal";
 
 interface TranscriptData {
@@ -15,6 +15,18 @@ interface TranscriptData {
   location: string;
   transcriptText: string;
   audioFile: string;
+}
+
+interface TranscriptEntry {
+  id?: string;
+  text: string;
+  speaker: string;
+  timestamp?: string;
+  start_time_vtt?: string;
+  end_time_vtt?: string;
+  edited_speaker?: string;
+  edited_text?: string | null;
+  user_id?: string;
 }
 
 interface TranscriptDetailModalProps {
@@ -33,6 +45,41 @@ const TranscriptDetailModal: React.FC<TranscriptDetailModalProps> = ({
   onReject,
 }) => {
   if (!isOpen || !transcript) return null;
+
+  // Parse transcript JSON
+  const transcriptEntries = useMemo(() => {
+    if (!transcript.transcriptText) return [];
+    
+    try {
+      // Try to parse as JSON
+      const parsed = typeof transcript.transcriptText === 'string' 
+        ? JSON.parse(transcript.transcriptText) 
+        : transcript.transcriptText;
+      
+      // If it's an array, return it
+      if (Array.isArray(parsed)) {
+        return parsed as TranscriptEntry[];
+      }
+      
+      // If it's a single object, wrap it in an array
+      if (typeof parsed === 'object' && parsed !== null) {
+        return [parsed as TranscriptEntry];
+      }
+      
+      return [];
+    } catch (error) {
+      // If parsing fails, treat as plain text
+      console.warn("Failed to parse transcript as JSON:", error);
+      return [];
+    }
+  }, [transcript.transcriptText]);
+
+  // Format time from VTT format (00:00:19.208) to readable format
+  const formatTime = (timeStr?: string) => {
+    if (!timeStr) return "";
+    // Remove milliseconds if present
+    return timeStr.split(".")[0];
+  };
 
   const footer = (
     <>
@@ -102,12 +149,70 @@ const TranscriptDetailModal: React.FC<TranscriptDetailModalProps> = ({
         </div>
 
         <div className="border rounded-md p-4 bg-white">
-          <h3 className="text-sm font-semibold text-gray-700 mb-2">
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">
             Transcript
           </h3>
-          <div className="text-sm text-gray-700 whitespace-pre-wrap max-h-72 overflow-auto">
-            {transcript.transcriptText}
-          </div>
+          {transcriptEntries.length > 0 ? (
+            <div className="max-h-96 overflow-y-auto space-y-3">
+              {transcriptEntries.map((entry, index) => {
+                const displaySpeaker = entry.edited_speaker || entry.speaker;
+                const displayText = entry.edited_text !== null && entry.edited_text !== undefined 
+                  ? entry.edited_text 
+                  : entry.text;
+                const timeRange = entry.start_time_vtt && entry.end_time_vtt
+                  ? `${formatTime(entry.start_time_vtt)} - ${formatTime(entry.end_time_vtt)}`
+                  : entry.timestamp
+                  ? new Date(entry.timestamp).toLocaleTimeString()
+                  : "";
+
+                return (
+                  <div
+                    key={entry.id || `entry-${index}`}
+                    className="border-l-4 border-blue-500 pl-3 py-2 bg-gray-50 rounded-r"
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-blue-700 bg-blue-100 px-2 py-0.5 rounded">
+                          {displaySpeaker}
+                        </span>
+                        {timeRange && (
+                          <span className="text-xs text-gray-500">
+                            {timeRange}
+                          </span>
+                        )}
+                      </div>
+                      {entry.edited_text !== null && entry.edited_text !== undefined && (
+                        <span className="text-xs text-green-600 bg-green-100 px-2 py-0.5 rounded">
+                          Edited
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-gray-800 leading-relaxed">
+                      {displayText || "(No text)"}
+                    </p>
+                    {entry.edited_text !== null && entry.edited_text !== undefined && entry.text !== entry.edited_text && (
+                      <div className="mt-2 pt-2 border-t border-gray-200">
+                        <p className="text-xs text-gray-500 mb-1">Original:</p>
+                        <p className="text-xs text-gray-600 line-through italic">
+                          {entry.text}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-sm text-gray-500 italic">
+              {transcript.transcriptText ? (
+                <div className="whitespace-pre-wrap max-h-72 overflow-auto">
+                  {transcript.transcriptText}
+                </div>
+              ) : (
+                "No transcript data available"
+              )}
+            </div>
+          )}
         </div>
 
         <div className="border rounded-md p-4 bg-white">
