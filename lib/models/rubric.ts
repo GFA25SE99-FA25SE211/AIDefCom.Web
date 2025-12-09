@@ -8,6 +8,7 @@ export interface RubricDto {
 export interface RubricCreateDto {
   rubricName: string;
   description?: string;
+  majorId: number;
 }
 
 export interface RubricUpdateDto {
