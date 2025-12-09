@@ -46,7 +46,7 @@ export default function CreateTaskModal({
         assignedToId: formData.assignedToId,
         rubricId: formData.rubricId ? Number(formData.rubricId) : null,
         status: "Pending",
-        sessionId: sessionId,
+        sessionId: sessionId || 1, // Default to sessionId 1 if not provided
       };
 
       console.log("Creating task with payload:", payload);

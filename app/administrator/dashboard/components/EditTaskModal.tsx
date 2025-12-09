@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Modal from "../../../moderator/create-sessions/components/Modal";
 import { Save } from "lucide-react";
+import { swalConfig } from "@/lib/utils/sweetAlert";
 
 interface Task {
   id: number;
@@ -22,6 +23,7 @@ interface EditTaskModalProps {
   ) => void;
   taskData: Task | null;
   userOptions?: { id: string; name: string }[];
+  existingTasks?: { title: string }[];
 }
 
 const EditTaskModal: React.FC<EditTaskModalProps> = ({
@@ -30,6 +32,7 @@ const EditTaskModal: React.FC<EditTaskModalProps> = ({
   onSubmit,
   taskData,
   userOptions = [],
+  existingTasks = [],
 }) => {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -38,6 +41,9 @@ const EditTaskModal: React.FC<EditTaskModalProps> = ({
   const [status, setStatus] = useState<"Pending" | "Completed" | "Inprogress">(
     "Pending"
   );
+  const [titleError, setTitleError] = useState("");
+  const [isCheckingTitle, setIsCheckingTitle] = useState(false);
+  const debounceTimer = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (taskData) {
@@ -46,18 +52,86 @@ const EditTaskModal: React.FC<EditTaskModalProps> = ({
       setAssignedBy(taskData.assignedBy);
       setAssignedTo(taskData.assignedTo);
       setStatus(taskData.status);
+      setTitleError("");
+      setIsCheckingTitle(false);
     } else {
       setTitle("");
       setDescription("");
       setAssignedBy("");
       setAssignedTo("");
       setStatus("Pending");
+      setTitleError("");
+      setIsCheckingTitle(false);
     }
   }, [taskData]);
+
+  // Cleanup debounce timer
+  useEffect(() => {
+    return () => {
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current);
+      }
+    };
+  }, []);
+
+  // Check for duplicate task title (exclude current task)
+  const checkTitleDuplicate = async (titleValue: string) => {
+    if (!titleValue.trim()) {
+      setTitleError("");
+      setIsCheckingTitle(false);
+      return;
+    }
+
+    setIsCheckingTitle(true);
+    setTitleError("");
+
+    // Simulate delay for better UX
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    try {
+      const titleExists = existingTasks.some(
+        (task) =>
+          task.title.toLowerCase() === titleValue.toLowerCase() &&
+          task.title.toLowerCase() !== taskData?.title.toLowerCase() // Exclude current task
+      );
+
+      if (titleExists) {
+        setTitleError("Tên task này đã tồn tại trong hệ thống");
+      } else {
+        setTitleError("");
+      }
+    } catch (error) {
+      console.error("Error checking title:", error);
+      setTitleError("");
+    } finally {
+      setIsCheckingTitle(false);
+    }
+  };
+
+  const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const titleValue = e.target.value;
+    setTitle(titleValue);
+
+    // Clear previous debounce timer
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current);
+    }
+
+    // Set new debounce timer
+    debounceTimer.current = setTimeout(() => {
+      checkTitleDuplicate(titleValue);
+    }, 500);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!taskData) return;
+
+    if (titleError) {
+      swalConfig.error("Tên task không hợp lệ", "Vui lòng sử dụng tên khác.");
+      return;
+    }
+
     onSubmit(taskData.id, {
       title,
       description,
@@ -94,7 +168,12 @@ const EditTaskModal: React.FC<EditTaskModalProps> = ({
       <button type="button" className="btn-secondary" onClick={onClose}>
         Cancel
       </button>
-      <button type="submit" form="edit-task-form" className="btn-primary">
+      <button
+        type="submit"
+        form="edit-task-form"
+        className="btn-primary"
+        disabled={!!titleError || isCheckingTitle}
+      >
         <Save className="w-4 h-4 mr-2" />
         Save Changes
       </button>
@@ -110,16 +189,34 @@ const EditTaskModal: React.FC<EditTaskModalProps> = ({
       footerContent={footer}
     >
       <form id="edit-task-form" onSubmit={handleSubmit} className="form-grid">
-        <div className="form-group">
+        <div className="form-group col-span-2">
           <label htmlFor="task-title">Title</label>
-          <input
-            id="task-title"
-            type="text"
-            placeholder="Review defense session reports"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            required
-          />
+          <div className="relative">
+            <input
+              id="task-title"
+              type="text"
+              placeholder="Review defense session reports"
+              value={title}
+              onChange={handleTitleChange}
+              required
+              className={`w-full ${titleError ? "border-red-500" : ""} ${
+                isCheckingTitle ? "pr-8" : ""
+              }`}
+            />
+            {isCheckingTitle && (
+              <div className="absolute inset-y-0 right-2 flex items-center">
+                <div className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full"></div>
+              </div>
+            )}
+          </div>
+          {titleError && (
+            <span className="text-red-500 text-sm mt-1">{titleError}</span>
+          )}
+          {isCheckingTitle && (
+            <span className="text-blue-500 text-sm mt-1">
+              Đang kiểm tra tên task...
+            </span>
+          )}
         </div>
 
         <div className="form-group">

@@ -15,12 +15,16 @@ export interface ProjectTaskCreateDto {
   assignedById: string;
   assignedToId: string;
   rubricId?: number | null;
+  sessionId: number;
   status: string;
 }
 
 export interface ProjectTaskUpdateDto {
   title: string;
   description?: string;
+  assignedById: string;
   assignedToId: string;
+  rubricId: number;
+  sessionId: number;
   status?: string;
 }
