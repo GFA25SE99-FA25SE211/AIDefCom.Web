@@ -27,6 +27,7 @@ import { lecturersApi } from "@/lib/api/lecturers";
 import { semestersApi } from "@/lib/api/semesters";
 import { majorsApi } from "@/lib/api/majors";
 import { swalConfig } from "@/lib/utils/sweetAlert";
+import { getApiErrorMessage } from "@/lib/utils/apiError";
 import { authUtils } from "@/lib/utils/auth";
 import type { SemesterDto, MajorDto } from "@/lib/models";
 
@@ -267,6 +268,28 @@ export default function AccountManagementPage() {
 
   const handleCreateAccount = async (data: CreateAccountData) => {
     try {
+      console.log("Creating account with data:", data);
+      console.log(
+        "Current users emails:",
+        users.map((u) => u.email)
+      );
+
+      // Check if email already exists
+      const emailExists = users.some(
+        (user) => user.email.toLowerCase() === data.email.toLowerCase()
+      );
+
+      console.log("Email exists check:", emailExists);
+
+      if (emailExists) {
+        console.log("Email already exists, showing error");
+        swalConfig.error(
+          "Email đã tồn tại!",
+          "Email này đã được sử dụng trong hệ thống. Vui lòng sử dụng email khác."
+        );
+        return;
+      }
+
       // Generate a proper UUID for the account
       const generateUUID = () => {
         return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(
@@ -320,24 +343,10 @@ export default function AccountManagementPage() {
     } catch (error: any) {
       console.error("Error creating account:", error);
 
-      // Enhanced error handling
-      let errorMessage = "Failed to create account";
-      if (error.response?.data?.errors) {
-        // Handle validation errors
-        const validationErrors = error.response.data.errors;
-        const errorMessages = Object.entries(validationErrors)
-          .map(
-            ([field, messages]) =>
-              `${field}: ${(messages as string[]).join(", ")}`
-          )
-          .join("\n");
-        errorMessage = `Validation errors:\n${errorMessages}`;
-      } else if (error.response?.data?.title) {
-        errorMessage = error.response.data.title;
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
-
+      const errorMessage = getApiErrorMessage(
+        error,
+        "Failed to create account"
+      );
       swalConfig.error("Error Creating Account", errorMessage);
     }
   };
@@ -349,7 +358,6 @@ export default function AccountManagementPage() {
     try {
       const updateData: any = {
         fullName: data.fullName,
-        email: data.email,
       };
 
       // Include password if provided
@@ -363,7 +371,8 @@ export default function AccountManagementPage() {
       if (data.role && editingUser && data.role !== editingUser.primaryRole) {
         // Gửi "Admin" thay vì "Administrator" cho backend
         const roleToSend = data.role === "Administrator" ? "Admin" : data.role;
-        await authApi.assignRole(data.email, roleToSend);
+        // Use email from editingUser since it cannot be changed
+        await authApi.assignRole(editingUser.email, roleToSend);
       }
 
       // Refresh users list
@@ -374,10 +383,11 @@ export default function AccountManagementPage() {
       swalConfig.success("Success!", "Account updated successfully!");
     } catch (error: any) {
       console.error("Error updating account:", error);
-      swalConfig.error(
-        "Error Updating Account",
-        error.message || "Failed to update account"
+      const errorMessage = getApiErrorMessage(
+        error,
+        "Failed to update account"
       );
+      swalConfig.error("Error Updating Account", errorMessage);
     }
   };
 
@@ -575,6 +585,12 @@ export default function AccountManagementPage() {
     }
 
     try {
+      setIsImportingFile(true);
+      swalConfig.loading(
+        "Đang import dữ liệu sinh viên...",
+        "Vui lòng chờ hệ thống xử lý file"
+      );
+
       // Validate semester and major IDs
       const semesterId = Number(studentUploadParams.semesterId);
       const majorId = Number(studentUploadParams.majorId);
@@ -633,6 +649,7 @@ export default function AccountManagementPage() {
 
       swalConfig.error("Upload Failed", errorMessage);
     } finally {
+      setIsImportingFile(false);
       event.target.value = "";
     }
   };
@@ -644,6 +661,12 @@ export default function AccountManagementPage() {
     if (!file) return;
 
     try {
+      setIsImportingFile(true);
+      swalConfig.loading(
+        "Đang import dữ liệu giảng viên...",
+        "Vui lòng chờ hệ thống xử lý file"
+      );
+
       await lecturersApi.importLecturers(file);
       swalConfig.success("Upload Complete", "Lecturer data uploaded!");
       closeUploadModal();
@@ -654,6 +677,7 @@ export default function AccountManagementPage() {
         error.message || "Unable to upload lecturer file."
       );
     } finally {
+      setIsImportingFile(false);
       event.target.value = "";
     }
   };
@@ -935,6 +959,7 @@ export default function AccountManagementPage() {
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
         onSubmit={handleCreateAccount}
+        existingEmails={users.map((user) => user.email)}
       />
       <EditAccountModal
         isOpen={isEditModalOpen}
@@ -1126,14 +1151,19 @@ export default function AccountManagementPage() {
                     !studentUploadParams.majorId ||
                     uploadMetaLoading ||
                     !semesters.length ||
-                    !majors.length
+                    !majors.length ||
+                    isImportingFile
                   }
                 >
                   <span className="flex items-center gap-2 text-sm font-semibold">
                     <GraduationCap className="w-4 h-4" />
                     Choose Student-Group File
                   </span>
-                  <Upload className="w-4 h-4" />
+                  {isImportingFile ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Upload className="w-4 h-4" />
+                  )}
                 </button>
                 <input
                   ref={studentFileInputRef}
@@ -1162,12 +1192,17 @@ export default function AccountManagementPage() {
                   type="button"
                   onClick={() => lecturerFileInputRef.current?.click()}
                   className="flex w-full items-center justify-between rounded-2xl bg-gradient-to-r from-blue-500 to-cyan-500 px-5 py-4 text-white"
+                  disabled={isImportingFile}
                 >
                   <span className="flex items-center gap-2 text-sm font-semibold">
                     <UserRound className="w-4 h-4" />
                     Choose Lecturer File
                   </span>
-                  <Upload className="w-4 h-4" />
+                  {isImportingFile ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Upload className="w-4 h-4" />
+                  )}
                 </button>
                 <input
                   ref={lecturerFileInputRef}

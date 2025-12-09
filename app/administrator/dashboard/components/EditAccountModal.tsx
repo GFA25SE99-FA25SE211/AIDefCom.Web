@@ -17,7 +17,6 @@ interface UserAccount {
 
 export interface AccountEditFormData {
   fullName: string;
-  email: string;
   role: string;
   newPassword?: string;
   confirmNewPassword?: string;
@@ -83,7 +82,6 @@ const EditAccountModal: React.FC<EditAccountModalProps> = ({
 
     const formData: AccountEditFormData = {
       fullName,
-      email,
       role,
     };
 
@@ -142,9 +140,13 @@ const EditAccountModal: React.FC<EditAccountModalProps> = ({
             type="email"
             placeholder="nguyenvana@university.edu"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
+            readOnly
+            className="bg-gray-100 cursor-not-allowed"
+            title="Email không thể thay đổi"
           />
+          <small className="text-gray-500 text-sm mt-1">
+            Email không thể thay đổi sau khi tạo tài khoản
+          </small>
         </div>
 
         <div className="form-group">
@@ -183,7 +185,11 @@ const EditAccountModal: React.FC<EditAccountModalProps> = ({
               onClick={() => setShowNewPassword((prev) => !prev)}
               aria-label={showNewPassword ? "Hide password" : "Show password"}
             >
-              {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              {showNewPassword ? (
+                <EyeOff className="w-4 h-4" />
+              ) : (
+                <Eye className="w-4 h-4" />
+              )}
             </button>
           </div>
         </div>
@@ -204,7 +210,11 @@ const EditAccountModal: React.FC<EditAccountModalProps> = ({
               type="button"
               className="absolute inset-y-0 right-2 flex items-center text-gray-500"
               onClick={() => setShowConfirmPassword((prev) => !prev)}
-              aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
+              aria-label={
+                showConfirmPassword
+                  ? "Hide confirm password"
+                  : "Show confirm password"
+              }
             >
               {showConfirmPassword ? (
                 <EyeOff className="w-4 h-4" />

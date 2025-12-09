@@ -1210,11 +1210,11 @@ export default function DataManagementPage() {
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-        
-        await swalConfig.success(
-          "Download Complete",
-          "Report has been downloaded successfully."
-        );
+
+      await swalConfig.success(
+        "Download Complete",
+        "Report has been downloaded successfully."
+      );
       }
     } catch (error: any) {
       console.error("Download report error:", error);
