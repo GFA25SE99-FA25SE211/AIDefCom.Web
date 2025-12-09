@@ -61,7 +61,28 @@ export default function SecretaryReportDashboard() {
   // Handle download file from filePath
   const handleDownload = async (filePath: string, fileName?: string) => {
     try {
-      const response = await fetch(filePath);
+      const renewResponse = await fetch(
+        `https://aidefcomapi.azurewebsites.net/api/defense-reports/download?blobUrl=${encodeURIComponent(
+          filePath
+        )}&expiryMinutes=60`,
+        {
+          method: "GET",
+          headers: {
+            Accept: "*/*",
+          },
+        }
+      );
+
+      if (!renewResponse.ok) {
+        throw new Error("Failed to get download link");
+      }
+
+      const renewData = await renewResponse.json();
+
+      // Lấy URL mới từ response (giả sử nằm trong data)
+      const downloadUrl = renewData.data || renewData.url || filePath;
+
+      const response = await fetch(downloadUrl);
       if (!response.ok) {
         throw new Error("Failed to download file");
       }
