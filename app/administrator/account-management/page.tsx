@@ -268,28 +268,6 @@ export default function AccountManagementPage() {
 
   const handleCreateAccount = async (data: CreateAccountData) => {
     try {
-      console.log("Creating account with data:", data);
-      console.log(
-        "Current users emails:",
-        users.map((u) => u.email)
-      );
-
-      // Check if email already exists
-      const emailExists = users.some(
-        (user) => user.email.toLowerCase() === data.email.toLowerCase()
-      );
-
-      console.log("Email exists check:", emailExists);
-
-      if (emailExists) {
-        console.log("Email already exists, showing error");
-        swalConfig.error(
-          "Email đã tồn tại!",
-          "Email này đã được sử dụng trong hệ thống. Vui lòng sử dụng email khác."
-        );
-        return;
-      }
-
       // Generate a proper UUID for the account
       const generateUUID = () => {
         return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(
@@ -356,8 +334,16 @@ export default function AccountManagementPage() {
     data: AccountEditFormData
   ) => {
     try {
+      // Find the original user to get email (required by backend)
+      const originalUser = users.find((u) => u.id === id);
+      if (!originalUser) {
+        await swalConfig.error("Error", "User not found");
+        return;
+      }
+
       const updateData: any = {
         fullName: data.fullName,
+        email: originalUser.email, // Email is required by backend
       };
 
       // Include password if provided
@@ -371,7 +357,6 @@ export default function AccountManagementPage() {
       if (data.role && editingUser && data.role !== editingUser.primaryRole) {
         // Gửi "Admin" thay vì "Administrator" cho backend
         const roleToSend = data.role === "Administrator" ? "Admin" : data.role;
-        // Use email from editingUser since it cannot be changed
         await authApi.assignRole(editingUser.email, roleToSend);
       }
 
@@ -959,7 +944,6 @@ export default function AccountManagementPage() {
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
         onSubmit={handleCreateAccount}
-        existingEmails={users.map((user) => user.email)}
       />
       <EditAccountModal
         isOpen={isEditModalOpen}

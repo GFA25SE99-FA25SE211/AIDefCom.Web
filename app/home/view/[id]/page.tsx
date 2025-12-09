@@ -75,12 +75,12 @@ export default function GroupDetailsPage() {
         let isSystemChair = false;
         let currentUserName = "";
         let currentUserRole = "";
-        
+
         if (storedUser) {
           const parsedUser = JSON.parse(storedUser);
           currentUid = parsedUser.id;
           setCurrentUserId(currentUid);
-          
+
           // Get user name
           currentUserName = parsedUser.fullName || parsedUser.userName || "";
           setUserName(currentUserName);
@@ -125,46 +125,67 @@ export default function GroupDetailsPage() {
           // Ưu tiên: Lấy rubrics từ API theo lecturer và session
           if (currentUid) {
             try {
-              console.log("🔍 Attempting to load rubrics from lecturer/session API:", {
-                lecturerId: currentUid,
-                sessionId: session.id
-              });
-              
-              const rubricsRes = await projectTasksApi.getRubricsByLecturerAndSession(
-                currentUid,
-                session.id
+              console.log(
+                "🔍 Attempting to load rubrics from lecturer/session API:",
+                {
+                  lecturerId: currentUid,
+                  sessionId: session.id,
+                }
               );
-              
-              if (rubricsRes.data && Array.isArray(rubricsRes.data) && rubricsRes.data.length > 0) {
+
+              const rubricsRes =
+                await projectTasksApi.getRubricsByLecturerAndSession(
+                  currentUid,
+                  session.id
+                );
+
+              if (
+                rubricsRes.data &&
+                Array.isArray(rubricsRes.data) &&
+                rubricsRes.data.length > 0
+              ) {
                 // Lấy tất cả rubrics để map với tên
-                const allRubricsRes = await rubricsApi.getAll().catch(() => ({ data: [] }));
-                const allRubrics = Array.isArray(allRubricsRes.data) ? allRubricsRes.data : [];
-                
+                const allRubricsRes = await rubricsApi
+                  .getAll()
+                  .catch(() => ({ data: [] }));
+                const allRubrics = Array.isArray(allRubricsRes.data)
+                  ? allRubricsRes.data
+                  : [];
+
                 // Map tên rubrics với full rubric objects
                 const rubricsList = rubricsRes.data
                   .map((rubricName: string) => {
                     const rubric = allRubrics.find(
-                      (r: any) => 
-                        r.rubricName?.toLowerCase() === rubricName.toLowerCase() ||
-                        r.name?.toLowerCase() === rubricName.toLowerCase()
+                      (r: any) =>
+                        r.rubricName?.toLowerCase() === rubricName.toLowerCase()
                     );
                     return rubric;
                   })
-                  .filter((r: any): r is RubricDto => r !== null && r !== undefined);
-                
+                  .filter(
+                    (r: any): r is RubricDto => r !== null && r !== undefined
+                  );
+
                 if (rubricsList.length > 0) {
                   setRubrics(rubricsList);
-                  console.log("✅ Rubrics loaded from lecturer/session API:", rubricsList.length);
+                  console.log(
+                    "✅ Rubrics loaded from lecturer/session API:",
+                    rubricsList.length
+                  );
                 } else {
                   // Fallback to getByMajorId or getAll
                   if (groupRes.data?.majorId) {
                     try {
-                      const fallbackRes = await rubricsApi.getByMajorId(groupRes.data.majorId);
+                      const fallbackRes = await rubricsApi.getByMajorId(
+                        groupRes.data.majorId
+                      );
                       if (fallbackRes.data) {
                         setRubrics(fallbackRes.data);
                       }
                     } catch (rubricError) {
-                      console.error("Error fetching rubrics by major:", rubricError);
+                      console.error(
+                        "Error fetching rubrics by major:",
+                        rubricError
+                      );
                       const fallbackAllRes = await rubricsApi.getAll();
                       if (fallbackAllRes.data) {
                         setRubrics(fallbackAllRes.data);
@@ -181,12 +202,17 @@ export default function GroupDetailsPage() {
                 // Fallback to getByMajorId or getAll
                 if (groupRes.data?.majorId) {
                   try {
-                    const fallbackRes = await rubricsApi.getByMajorId(groupRes.data.majorId);
+                    const fallbackRes = await rubricsApi.getByMajorId(
+                      groupRes.data.majorId
+                    );
                     if (fallbackRes.data) {
                       setRubrics(fallbackRes.data);
                     }
                   } catch (rubricError) {
-                    console.error("Error fetching rubrics by major:", rubricError);
+                    console.error(
+                      "Error fetching rubrics by major:",
+                      rubricError
+                    );
                     const fallbackAllRes = await rubricsApi.getAll();
                     if (fallbackAllRes.data) {
                       setRubrics(fallbackAllRes.data);
@@ -201,21 +227,34 @@ export default function GroupDetailsPage() {
               }
             } catch (error: any) {
               // Nếu là 404 hoặc endpoint chưa có, fallback về logic cũ
-              const is404 = error?.status === 404 || error?.message?.includes('404') || error?.message?.includes('not found');
+              const is404 =
+                error?.status === 404 ||
+                error?.message?.includes("404") ||
+                error?.message?.includes("not found");
               if (is404) {
-                console.warn("⚠️ Lecturer/session API endpoint not found (404), falling back to old logic");
+                console.warn(
+                  "⚠️ Lecturer/session API endpoint not found (404), falling back to old logic"
+                );
               } else {
-                console.error("❌ Error fetching rubrics from lecturer/session API:", error);
+                console.error(
+                  "❌ Error fetching rubrics from lecturer/session API:",
+                  error
+                );
               }
               // Fallback to getByMajorId or getAll
               if (groupRes.data?.majorId) {
                 try {
-                  const fallbackRes = await rubricsApi.getByMajorId(groupRes.data.majorId);
+                  const fallbackRes = await rubricsApi.getByMajorId(
+                    groupRes.data.majorId
+                  );
                   if (fallbackRes.data) {
                     setRubrics(fallbackRes.data);
                   }
                 } catch (rubricError) {
-                  console.error("Error fetching rubrics by major:", rubricError);
+                  console.error(
+                    "Error fetching rubrics by major:",
+                    rubricError
+                  );
                   const fallbackAllRes = await rubricsApi.getAll();
                   if (fallbackAllRes.data) {
                     setRubrics(fallbackAllRes.data);
@@ -232,7 +271,9 @@ export default function GroupDetailsPage() {
             // No currentUid, fallback to getByMajorId or getAll
             if (groupRes.data?.majorId) {
               try {
-                const fallbackRes = await rubricsApi.getByMajorId(groupRes.data.majorId);
+                const fallbackRes = await rubricsApi.getByMajorId(
+                  groupRes.data.majorId
+                );
                 if (fallbackRes.data) {
                   setRubrics(fallbackRes.data);
                 }
@@ -275,11 +316,18 @@ export default function GroupDetailsPage() {
 
                 // Update user name and role from session if available
                 if (currentUserInSession) {
-                  if (currentUserInSession.fullName || currentUserInSession.userName) {
-                    setUserName(currentUserInSession.fullName || currentUserInSession.userName);
+                  if (
+                    currentUserInSession.fullName ||
+                    currentUserInSession.userName
+                  ) {
+                    setUserName(
+                      currentUserInSession.fullName ||
+                        currentUserInSession.userName
+                    );
                   }
                   if (currentUserInSession.role) {
-                    const sessionRoleValue = currentUserInSession.role.toLowerCase();
+                    const sessionRoleValue =
+                      currentUserInSession.role.toLowerCase();
                     setUserRole(sessionRoleValue);
                     // Lưu session role vào localStorage để sidebar hiển thị
                     localStorage.setItem("sessionRole", sessionRoleValue);

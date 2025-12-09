@@ -55,9 +55,15 @@ const criteria = [
 ];
 
 // Chuẩn hóa dữ liệu sinh viên fallback (tránh thiếu field)
-const buildFallbackStudents = (students: any[], rubricCount: number): StudentScore[] =>
+const buildFallbackStudents = (
+  students: any[],
+  rubricCount: number
+): StudentScore[] =>
   students.map((s, index) => {
-    const scores = Array.from({ length: rubricCount }, (_, i) => s.scores?.[i] ?? 0);
+    const scores = Array.from(
+      { length: rubricCount },
+      (_, i) => s.scores?.[i] ?? 0
+    );
     const criterionComments = Array.from(
       { length: rubricCount },
       (_, i) => s.criterionComments?.[i] ?? ""
@@ -91,7 +97,7 @@ export default function ViewScorePage() {
   const [rubrics, setRubrics] = useState<any[]>([]);
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string>("");
-  
+
   // Get sessionId from URL if available
   const urlSessionId = searchParams?.get("sessionId");
 
@@ -110,21 +116,18 @@ export default function ViewScorePage() {
 
       try {
         setLoading(true);
-        const [groupRes, studentsRes, sessionsRes] =
-          await Promise.all([
-            groupsApi.getById(groupId).catch(() => ({ data: null })),
-            studentsApi.getByGroupId(groupId).catch(() => ({ data: [] })),
-            defenseSessionsApi.getAll().catch(() => ({ data: [] })),
-          ]);
+        const [groupRes, studentsRes, sessionsRes] = await Promise.all([
+          groupsApi.getById(groupId).catch(() => ({ data: null })),
+          studentsApi.getByGroupId(groupId).catch(() => ({ data: [] })),
+          defenseSessionsApi.getAll().catch(() => ({ data: [] })),
+        ]);
 
         const group = groupRes.data;
         const students = studentsRes.data || [];
         const sessions = sessionsRes.data || [];
-        
+
         // Find session for this group (ưu tiên sessionId trên URL nếu có)
-        const urlSessionIdNumber = urlSessionId
-          ? parseInt(urlSessionId)
-          : null;
+        const urlSessionIdNumber = urlSessionId ? parseInt(urlSessionId) : null;
         const groupSession = urlSessionIdNumber
           ? sessions.find(
               (s: any) => s.groupId === groupId && s.id === urlSessionIdNumber
@@ -132,7 +135,7 @@ export default function ViewScorePage() {
           : sessions.find((s: any) => s.groupId === groupId);
         if (groupSession) {
           setSessionId(groupSession.id);
-          
+
           // Get current user ID from auth token
           const userInfo = authUtils.getCurrentUserInfo();
           let userId = userInfo.userId;
@@ -146,23 +149,27 @@ export default function ViewScorePage() {
           }
 
           setCurrentUserId(userId);
-          
+
           // Lấy session role của user hiện tại
           try {
             const storedUser = localStorage.getItem("user");
             if (storedUser) {
               const parsedUser = JSON.parse(storedUser);
               const currentUserId = parsedUser.id;
-              
-              const lecturersRes = await defenseSessionsApi.getUsersBySessionId(groupSession.id);
+
+              const lecturersRes = await defenseSessionsApi.getUsersBySessionId(
+                groupSession.id
+              );
               if (lecturersRes.data) {
                 const currentUserInSession = lecturersRes.data.find(
-                  (user: any) => 
-                    String(user.id).toLowerCase() === String(currentUserId).toLowerCase()
+                  (user: any) =>
+                    String(user.id).toLowerCase() ===
+                    String(currentUserId).toLowerCase()
                 );
-                
+
                 if (currentUserInSession && currentUserInSession.role) {
-                  const sessionRoleValue = currentUserInSession.role.toLowerCase();
+                  const sessionRoleValue =
+                    currentUserInSession.role.toLowerCase();
                   localStorage.setItem("sessionRole", sessionRoleValue);
                 }
               }
@@ -175,7 +182,7 @@ export default function ViewScorePage() {
         // Fetch rubrics: ưu tiên từ project tasks (theo session và user), sau đó theo majorId
         const storedUser = localStorage.getItem("user");
         let currentUserId = "";
-        
+
         if (storedUser) {
           try {
             const parsedUser = JSON.parse(storedUser);
@@ -188,53 +195,88 @@ export default function ViewScorePage() {
         // Ưu tiên 1: Lấy rubrics từ API theo lecturer và session
         if (groupSession && currentUserId) {
           try {
-            console.log("🔍 Attempting to load rubrics from lecturer/session API:", {
-              lecturerId: currentUserId,
-              sessionId: groupSession.id
-            });
-            
-            // Gọi API mới để lấy danh sách tên rubrics
-            const rubricsRes = await projectTasksApi.getRubricsByLecturerAndSession(
-              currentUserId,
-              groupSession.id
+            console.log(
+              "🔍 Attempting to load rubrics from lecturer/session API:",
+              {
+                lecturerId: currentUserId,
+                sessionId: groupSession.id,
+              }
             );
-            
+
+            // Gọi API mới để lấy danh sách tên rubrics
+            const rubricsRes =
+              await projectTasksApi.getRubricsByLecturerAndSession(
+                currentUserId,
+                groupSession.id
+              );
+
             console.log("📋 Rubrics API response:", {
               hasData: !!rubricsRes.data,
-              dataLength: Array.isArray(rubricsRes.data) ? rubricsRes.data.length : 0,
-              rubricNames: rubricsRes.data
+              dataLength: Array.isArray(rubricsRes.data)
+                ? rubricsRes.data.length
+                : 0,
+              rubricNames: rubricsRes.data,
             });
-            
-            if (rubricsRes.data && Array.isArray(rubricsRes.data) && rubricsRes.data.length > 0) {
+
+            if (
+              rubricsRes.data &&
+              Array.isArray(rubricsRes.data) &&
+              rubricsRes.data.length > 0
+            ) {
               // Lấy tất cả rubrics để map với tên
-              const allRubricsRes = await rubricsApi.getAll().catch(() => ({ data: [] }));
-              const allRubrics = Array.isArray(allRubricsRes.data) ? allRubricsRes.data : [];
-                
+              const allRubricsRes = await rubricsApi
+                .getAll()
+                .catch(() => ({ data: [] }));
+              const allRubrics = Array.isArray(allRubricsRes.data)
+                ? allRubricsRes.data
+                : [];
+
               // Map tên rubrics với full rubric objects, giữ nguyên thứ tự từ API
-              rubricsList = rubricsRes.data
-                .map((rubricName: string) => {
-                  // Tìm rubric theo tên (case-insensitive)
-                  const rubric = allRubrics.find(
-                    (r: any) => 
-                      r.rubricName?.toLowerCase() === rubricName.toLowerCase() ||
-                      r.name?.toLowerCase() === rubricName.toLowerCase()
-                  );
-                  return rubric;
-                })
-                .filter((r: any): r is any => r !== null && r !== undefined);
-                
-                setRubrics(rubricsList);
-              console.log("✅ Rubrics loaded from lecturer/session API:", rubricsList.length, "rubrics:", rubricsList);
-              } else {
+              rubricsList = rubricsRes.data.map((rubricName: string) => {
+                // Tìm rubric theo tên (case-insensitive)
+                const rubric = allRubrics.find(
+                  (r: any) =>
+                    r.rubricName?.toLowerCase() === rubricName.toLowerCase()
+                );
+
+                // If not found, create a fallback rubric object
+                if (!rubric) {
+                  console.warn("⚠️ Creating fallback rubric for:", rubricName);
+                  return {
+                    id: Date.now() + Math.random(),
+                    rubricName: rubricName,
+                    description: `Fallback rubric for ${rubricName}`,
+                    isFallback: true,
+                  };
+                }
+
+                return rubric;
+              });
+              setRubrics(rubricsList);
+              console.log(
+                "✅ Rubrics loaded from lecturer/session API:",
+                rubricsList.length,
+                "rubrics:",
+                rubricsList
+              );
+            } else {
               console.warn("⚠️ No rubrics found from lecturer/session API");
-              }
+            }
           } catch (error: any) {
             // Nếu là 404 hoặc endpoint chưa có, fallback về logic cũ
-            const is404 = error?.status === 404 || error?.message?.includes('404') || error?.message?.includes('not found');
+            const is404 =
+              error?.status === 404 ||
+              error?.message?.includes("404") ||
+              error?.message?.includes("not found");
             if (is404) {
-              console.warn("⚠️ Lecturer/session API endpoint not found (404), falling back to old logic");
+              console.warn(
+                "⚠️ Lecturer/session API endpoint not found (404), falling back to old logic"
+              );
             } else {
-              console.error("❌ Error fetching rubrics from lecturer/session API:", error);
+              console.error(
+                "❌ Error fetching rubrics from lecturer/session API:",
+                error
+              );
             }
             // Continue to fallback logic below
           }
@@ -243,30 +285,45 @@ export default function ViewScorePage() {
             hasSession: !!groupSession,
             hasUserId: !!currentUserId,
             sessionId: groupSession?.id,
-            userId: currentUserId
+            userId: currentUserId,
           });
         }
 
         // Fallback: Lấy rubrics theo majorId nếu chưa có từ project tasks
         if (rubricsList.length === 0 && group?.majorId) {
           try {
-            console.log("🔍 Fallback: Loading rubrics from majorId:", group.majorId);
-            const majorRubricsRes = await majorRubricsApi.getByMajorId(group.majorId);
+            console.log(
+              "🔍 Fallback: Loading rubrics from majorId:",
+              group.majorId
+            );
+            const majorRubricsRes = await majorRubricsApi.getByMajorId(
+              group.majorId
+            );
             console.log("📋 Major rubrics response:", {
               hasData: !!majorRubricsRes.data,
-              dataLength: Array.isArray(majorRubricsRes.data) ? majorRubricsRes.data.length : 0,
-              data: majorRubricsRes.data
+              dataLength: Array.isArray(majorRubricsRes.data)
+                ? majorRubricsRes.data.length
+                : 0,
+              data: majorRubricsRes.data,
             });
-            
-            if (majorRubricsRes.data && Array.isArray(majorRubricsRes.data) && majorRubricsRes.data.length > 0) {
+
+            if (
+              majorRubricsRes.data &&
+              Array.isArray(majorRubricsRes.data) &&
+              majorRubricsRes.data.length > 0
+            ) {
               // Backend trả về MajorRubricReadDto có RubricId và RubricName, không có full Rubric object
               // Extract unique rubricIds từ major-rubrics
-              const rubricIds = [...new Set(
-                majorRubricsRes.data
-                  .map((mr: any) => mr.rubricId)
-                  .filter((id: any) => id !== null && id !== undefined && id > 0)
-              )];
-              
+              const rubricIds = [
+                ...new Set(
+                  majorRubricsRes.data
+                    .map((mr: any) => mr.rubricId)
+                    .filter(
+                      (id: any) => id !== null && id !== undefined && id > 0
+                    )
+                ),
+              ];
+
               if (rubricIds.length > 0) {
                 // Lấy full rubric info từ các rubricIds
                 const rubricPromises = rubricIds.map((rubricId: number) =>
@@ -276,19 +333,28 @@ export default function ViewScorePage() {
                   })
                 );
                 const rubricResults = await Promise.all(rubricPromises);
-                
+
                 // Filter và map rubrics
                 rubricsList = rubricResults
                   .map((res: any) => res.data)
                   .filter((r: any): r is any => r !== null && r !== undefined);
-                
+
                 setRubrics(rubricsList);
-                console.log("✅ Rubrics loaded from major:", rubricsList.length, "rubrics:", rubricsList);
+                console.log(
+                  "✅ Rubrics loaded from major:",
+                  rubricsList.length,
+                  "rubrics:",
+                  rubricsList
+                );
               } else {
-                console.warn("⚠️ No valid rubricIds found in major-rubrics response");
+                console.warn(
+                  "⚠️ No valid rubricIds found in major-rubrics response"
+                );
               }
             } else {
-              console.warn("⚠️ Major rubrics response is not an array or empty");
+              console.warn(
+                "⚠️ Major rubrics response is not an array or empty"
+              );
             }
           } catch (error) {
             console.error("❌ Error fetching rubrics by major:", error);
@@ -296,13 +362,15 @@ export default function ViewScorePage() {
         } else if (rubricsList.length === 0) {
           console.warn("⚠️ Cannot load rubrics from major - no majorId:", {
             hasGroup: !!group,
-            majorId: group?.majorId
+            majorId: group?.majorId,
           });
         }
 
         // Nếu vẫn không có rubrics, để trống (sẽ dùng default criteria)
         if (rubricsList.length === 0) {
-          console.warn("⚠️ No rubrics found for group/session, will use default criteria");
+          console.warn(
+            "⚠️ No rubrics found for group/session, will use default criteria"
+          );
           setRubrics([]);
         } else {
           console.log("✅ Final rubrics list:", rubricsList.length, "items");
@@ -337,7 +405,8 @@ export default function ViewScorePage() {
                 : [];
 
               // Create scores array based on rubrics (fallback to 5 if no rubrics)
-              const rubricCount = rubricsList.length > 0 ? rubricsList.length : 5;
+              const rubricCount =
+                rubricsList.length > 0 ? rubricsList.length : 5;
               const scoresArray = new Array(rubricCount).fill(0);
               const scoreIds = new Array(rubricCount).fill(0);
               const commentsArray = new Array(rubricCount).fill("");
@@ -674,7 +743,9 @@ export default function ViewScorePage() {
                                       max="10"
                                       placeholder="0"
                                       className="w-20 rounded-md border px-2 py-1 text-sm text-center focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors"
-                                      value={score === 0 ? "" : score.toString()}
+                                      value={
+                                        score === 0 ? "" : score.toString()
+                                      }
                                       onChange={(e) =>
                                         handleScoreChange(
                                           studentIndex,
@@ -717,12 +788,15 @@ export default function ViewScorePage() {
                                         }
                                         // Allow Enter to move to next input
                                         if (e.key === "Enter") {
-                                          const inputs = document.querySelectorAll(
-                                            'input[type="number"]'
-                                          );
+                                          const inputs =
+                                            document.querySelectorAll(
+                                              'input[type="number"]'
+                                            );
                                           const currentIndex = Array.from(
                                             inputs
-                                          ).indexOf(e.target as HTMLInputElement);
+                                          ).indexOf(
+                                            e.target as HTMLInputElement
+                                          );
                                           const nextInput = inputs[
                                             currentIndex + 1
                                           ] as HTMLInputElement;
@@ -738,8 +812,9 @@ export default function ViewScorePage() {
                                       rows={2}
                                       placeholder="Nhận xét mục này..."
                                       value={
-                                        student.criterionComments[criterionIndex] ||
-                                        ""
+                                        student.criterionComments[
+                                          criterionIndex
+                                        ] || ""
                                       }
                                       onChange={(e) =>
                                         handleCriterionCommentChange(
@@ -787,7 +862,9 @@ export default function ViewScorePage() {
                                 </div>
                                 <button
                                   className="text-sm text-violet-600 border px-3 py-1 rounded-md hover:bg-violet-50 mt-2"
-                                  onClick={() => toggleNoteVisibility(student.id)}
+                                  onClick={() =>
+                                    toggleNoteVisibility(student.id)
+                                  }
                                 >
                                   Notes
                                 </button>
@@ -797,7 +874,14 @@ export default function ViewScorePage() {
 
                           {notesVisibility[student.id] && (
                             <tr>
-                              <td colSpan={(rubrics.length > 0 ? rubrics.length : criteria.length) + 3} className="py-3">
+                              <td
+                                colSpan={
+                                  (rubrics.length > 0
+                                    ? rubrics.length
+                                    : criteria.length) + 3
+                                }
+                                className="py-3"
+                              >
                                 <div className="bg-gray-50 border rounded-md p-3">
                                   <textarea
                                     className="w-full p-3 rounded-md bg-white border text-sm"

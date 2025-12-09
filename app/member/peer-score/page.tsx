@@ -33,133 +33,6 @@ interface ScoreData {
   }>;
 }
 
-// Dữ liệu mẫu (fallback)
-const defaultScoreData: ScoreData[] = [
-  {
-    groupName: "Group 1",
-    projectTitle: "Smart Learning Management System",
-    avgScore: "8.60",
-    members: [
-      {
-        name: "Assoc. Prof. Dr. Nguyen Van X",
-        score: "8.8",
-        status: "Submitted",
-        criteria: [
-          {
-            rubricName: "Thesis Quality",
-            score: "9.0",
-            comment: "Excellent methodology description.",
-          },
-          {
-            rubricName: "Presentation",
-            score: "8.5",
-            comment: "Slides could be more concise.",
-          },
-        ],
-      },
-      {
-        name: "Dr. Tran Thi Y",
-        score: "9.0",
-        status: "Submitted",
-        criteria: [
-          {
-            rubricName: "Thesis Quality",
-            score: "9.2",
-            comment: "Great problem statement.",
-          },
-        ],
-      },
-      {
-        name: "Dr. Le Van Z",
-        score: "8.0",
-        status: "Submitted",
-        criteria: [
-          {
-            rubricName: "Presentation",
-            score: "8.0",
-          },
-        ],
-      },
-    ],
-  },
-  {
-    groupName: "Group 2",
-    projectTitle: "Intelligent Ride-hailing Application",
-    avgScore: "7.75",
-    members: [
-      {
-        name: "Assoc. Prof. Dr. Nguyen Van X",
-        score: "7.5",
-        status: "Submitted",
-      },
-      { name: "Dr. Tran Thi Y", score: "-", status: "Pending" },
-      { name: "Dr. Le Van Z", score: "8.0", status: "Submitted" },
-    ],
-  },
-  {
-    groupName: "Group 3",
-    projectTitle: "E-commerce Website",
-    avgScore: "8.65",
-    members: [
-      {
-        name: "Assoc. Prof. Dr. Nguyen Van X",
-        score: "8.5",
-        status: "Submitted",
-      },
-      { name: "Dr. Tran Thi Y", score: "8.8", status: "Submitted" },
-      { name: "Dr. Le Van Z", score: "-", status: "Pending" },
-    ],
-  },
-  {
-    groupName: "Group 4",
-    projectTitle: "AI Health Consultation Chatbot",
-    avgScore: null,
-    members: [
-      { name: "Assoc. Prof. Dr. Nguyen Van X", score: "-", status: "Pending" },
-      { name: "Dr. Tran Thi Y", score: "-", status: "Pending" },
-      { name: "Dr. Le Van Z", score: "-", status: "Pending" },
-    ],
-  },
-  {
-    groupName: "Group 5",
-    projectTitle: "Face Recognition System",
-    avgScore: "8.77",
-    members: [
-      {
-        name: "Assoc. Prof. Dr. Nguyen Van X",
-        score: "9.0",
-        status: "Submitted",
-      },
-      { name: "Dr. Tran Thi Y", score: "8.5", status: "Submitted" },
-      { name: "Dr. Le Van Z", score: "8.8", status: "Submitted" },
-    ],
-  },
-  {
-    groupName: "Group 6",
-    projectTitle: "Personal Finance Management App",
-    avgScore: null,
-    members: [
-      { name: "Assoc. Prof. Dr. Nguyen Van X", score: "-", status: "Pending" },
-      { name: "Dr. Tran Thi Y", score: "-", status: "Pending" },
-      { name: "Dr. Le Van Z", score: "-", status: "Pending" },
-    ],
-  },
-  {
-    groupName: "Group 7",
-    projectTitle: "Hotel Booking System",
-    avgScore: "9.00",
-    members: [
-      {
-        name: "Assoc. Prof. Dr. Nguyen Van X",
-        score: "9.0",
-        status: "Submitted",
-      },
-      { name: "Dr. Tran Thi Y", score: "9.2", status: "Submitted" },
-      { name: "Dr. Le Van Z", score: "8.8", status: "Submitted" },
-    ],
-  },
-];
-
 const getGroupDisplayName = (group: GroupDto) =>
   group.groupName ||
   group.projectCode ||
@@ -463,7 +336,7 @@ export default function PeerScoresPage() {
       );
       setSessionIds(uniqueSessionIds);
 
-      setScoreData(scores.length > 0 ? scores : defaultScoreData); // Fallback to default if empty
+      setScoreData(scores); // Don't use fallback mock data
     } catch (error: any) {
       console.error("Error fetching peer scores:", error);
 
@@ -482,7 +355,7 @@ export default function PeerScoresPage() {
         // For now, we'll use default data as fallback
       }
 
-      setScoreData(defaultScoreData); // Use default data on error
+      setScoreData([]); // Don't use mock data on error
     } finally {
       setLoading(false);
     }
@@ -578,8 +451,8 @@ export default function PeerScoresPage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {(scoreData.length > 0 ? scoreData : defaultScoreData).map(
-            (group, groupIndex) => (
+          {scoreData.length > 0 ? (
+            scoreData.map((group, groupIndex) => (
               <div
                 key={`${group.groupName}-${groupIndex}`}
                 className="score-card bg-white rounded-xl shadow p-5"
@@ -712,7 +585,24 @@ export default function PeerScoresPage() {
                   })}
                 </div>
               </div>
-            )
+            ))
+          ) : (
+            // Empty state when no scores available
+            <div className="col-span-2 text-center py-12">
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8">
+                <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Users className="w-8 h-8 text-gray-400" />
+                </div>
+                <h3 className="text-lg font-medium text-gray-800 mb-2">
+                  Chưa có điểm số
+                </h3>
+                <p className="text-gray-500 text-sm">
+                  Hiện tại chưa có điểm số nào từ các thành viên hội đồng.
+                  <br />
+                  Vui lòng quay lại sau khi quá trình chấm điểm hoàn tất.
+                </p>
+              </div>
+            </div>
           )}
         </div>
 
