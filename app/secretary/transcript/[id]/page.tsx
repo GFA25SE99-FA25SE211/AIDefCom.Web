@@ -21,6 +21,14 @@ interface STTEvent {
   message?: string;
   id?: string; // unique id for editing
   isNew?: boolean; // flag to mark new entries from STT
+  // VTT timestamps from backend
+  start_time_vtt?: string;
+  end_time_vtt?: string;
+  timestamp?: string;
+  user_id?: string;
+  // Edited values (for inline editing sync)
+  edited_speaker?: string | null;
+  edited_text?: string | null;
 }
 
 export default function TranscriptPage({
@@ -51,9 +59,12 @@ export default function TranscriptPage({
   >(null);
   const [saving, setSaving] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [waitingForSessionSave, setWaitingForSessionSave] = useState(false);
 
   // Use a ref to keep track of the latest transcript for efficient updates
   const transcriptRef = useRef<STTEvent[]>([]);
+  const sessionStartTimeRef = useRef<number>(Date.now()); // Track session start for VTT timestamps
+  const sessionSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const transcriptContainerRef = useRef<HTMLDivElement | null>(null);
   const questionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const waitingForQuestionResult = useRef<boolean>(false);
@@ -111,6 +122,11 @@ export default function TranscriptPage({
   // Xóa session role khi rời khỏi trang (nếu cần)
   useEffect(() => {
     return () => {
+      // Cleanup: clear timeout when component unmounts
+      if (sessionSaveTimeoutRef.current) {
+        clearTimeout(sessionSaveTimeoutRef.current);
+        sessionSaveTimeoutRef.current = null;
+      }
       // Không xóa session role ở đây vì user có thể quay lại session
       // Chỉ xóa khi logout hoặc rời khỏi hoàn toàn
     };
@@ -171,8 +187,17 @@ export default function TranscriptPage({
                 const loadedTranscript: STTEvent[] = parsed.map(
                   (item: any, index: number) => ({
                     event: "recognized",
+                    // Use raw speaker/text from data, edited_speaker/edited_text are user edits
                     text: item.text || item.content || "",
                     speaker: item.speaker || item.speaker_name || "Unknown",
+                    speaker_name: item.speaker_name,
+                    user_id: item.user_id,
+                    timestamp: item.timestamp,
+                    start_time_vtt: item.start_time_vtt,
+                    end_time_vtt: item.end_time_vtt,
+                    // Keep edited values - these are the user's corrections
+                    edited_speaker: item.edited_speaker,
+                    edited_text: item.edited_text,
                     id: item.id || `loaded_${index}_${Date.now()}`,
                     isNew: false,
                   })
@@ -268,6 +293,13 @@ export default function TranscriptPage({
             user_id: line.user_id,
             id: line.id || `cached_${index}_${Date.now()}`,
             isNew: false,
+            // VTT timestamps
+            start_time_vtt: line.start_time_vtt,
+            end_time_vtt: line.end_time_vtt,
+            timestamp: line.timestamp,
+            // Edited values
+            edited_speaker: line.edited_speaker,
+            edited_text: line.edited_text,
           })
         );
 
@@ -324,12 +356,26 @@ export default function TranscriptPage({
         return;
       }
 
+      // Calculate VTT timestamp based on elapsed time
+      const elapsedMs = Date.now() - sessionStartTimeRef.current;
+      const elapsedSec = elapsedMs / 1000;
+      const formatVtt = (seconds: number): string => {
+        const h = Math.floor(seconds / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        const s = Math.floor(seconds % 60);
+        const ms = Math.floor((seconds % 1) * 1000);
+        return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}.${String(ms).padStart(3, "0")}`;
+      };
+
       // Normalize event structure for state with unique ID
       const newEntry: STTEvent = {
         ...msg,
         event: "recognized",
         id: `stt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         isNew: true,
+        timestamp: new Date().toISOString(),
+        start_time_vtt: formatVtt(elapsedSec),
+        end_time_vtt: formatVtt(elapsedSec + 3.0),
       };
       setTranscript((prev) => [...prev, newEntry]);
       setHasUnsavedChanges(true);
@@ -404,14 +450,30 @@ export default function TranscriptPage({
       setBroadcastInterimText("");
 
       if (msg.text) {
+        // Calculate VTT timestamp if not provided by backend
+        const elapsedMs = Date.now() - sessionStartTimeRef.current;
+        const elapsedSec = elapsedMs / 1000;
+        const formatVtt = (seconds: number): string => {
+          const h = Math.floor(seconds / 3600);
+          const m = Math.floor((seconds % 3600) / 60);
+          const s = Math.floor(seconds % 60);
+          const ms = Math.floor((seconds % 1) * 1000);
+          return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}.${String(ms).padStart(3, "0")}`;
+        };
+
         const newEntry: STTEvent = {
           event: "recognized",
           text: msg.text,
           speaker: msg.speaker_name || msg.speaker || "Identifying",
-          id: `broadcast_${Date.now()}_${Math.random()
+          id: msg.id || `broadcast_${Date.now()}_${Math.random()
             .toString(36)
             .substr(2, 9)}`,
           isNew: true,
+          // VTT timestamps from backend or calculated
+          start_time_vtt: msg.start_time_vtt || formatVtt(elapsedSec),
+          end_time_vtt: msg.end_time_vtt || formatVtt(elapsedSec + 3.0),
+          timestamp: msg.timestamp || new Date().toISOString(),
+          user_id: msg.user_id,
         };
         setTranscript((prev) => [...prev, newEntry]);
         setHasUnsavedChanges(true);
@@ -498,6 +560,51 @@ export default function TranscriptPage({
           `Question from ${speakerName} has been recorded.`
         );
       }
+    } else if (eventType === "transcript_edited") {
+      // Another client edited a transcript line - sync the change
+      if (msg.source_session_id === mySessionIdRef.current) {
+        return; // Skip our own edits
+      }
+      const lineId = msg.id;
+      setTranscript((prev) =>
+        prev.map((item) =>
+          item.id === lineId
+            ? {
+                ...item,
+                edited_speaker: msg.edited_speaker || item.edited_speaker,
+                edited_text: msg.edited_text || item.edited_text,
+              }
+            : item
+        )
+      );
+      console.log("📝 Synced edit from another client:", lineId);
+    } else if (eventType === "save_blocked") {
+      // Backend blocked save due to guest speakers
+      console.warn("⚠️ Save blocked:", msg.reason, msg.message);
+      const guestCount = msg.total_guest_lines || 0;
+      swalConfig.warning(
+        "Cannot Save",
+        `${msg.message || `There are ${guestCount} lines with unidentified speakers. Please edit them before saving.`}`
+      );
+    } else if (eventType === "session_saved") {
+      // Backend confirmed transcript saved to DB
+      console.log("✅ Backend confirmed - transcript saved:", msg.lines_saved, "lines", "duration:", msg.duration);
+      
+      // Clear timeout
+      if (sessionSaveTimeoutRef.current) {
+        clearTimeout(sessionSaveTimeoutRef.current);
+        sessionSaveTimeoutRef.current = null;
+      }
+      
+      setWaitingForSessionSave(false);
+      setSaving(false);
+      setHasUnsavedChanges(false);
+      
+      // Show success and finalize
+      swalConfig.success("Success", "Session completed and transcript saved!");
+      
+      // Stop session
+      stopSession();
     } else if (eventType === "connected") {
       console.log(
         "✅ WebSocket connected:",
@@ -539,6 +646,7 @@ export default function TranscriptPage({
     stopSession,
     broadcastSessionStart,
     broadcastSessionEnd,
+    sendCommand,
   } = useAudioRecorder({
     wsUrl: WS_URL,
     onWsEvent: handleSTTEvent,
@@ -861,15 +969,33 @@ export default function TranscriptPage({
   const handleSaveEdit = () => {
     if (editingIndex === null) return;
 
+    const editedItem = transcript[editingIndex];
+    const lineId = editedItem.id;
+
+    // Update local state with edited values
     setTranscript((prev) => {
       const newTranscript = [...prev];
       newTranscript[editingIndex] = {
         ...newTranscript[editingIndex],
-        text: editText,
-        speaker: editSpeaker,
+        // Keep original text/speaker, store edits separately
+        // ONLY update edited_speaker/edited_text, preserve original speaker/text
+        edited_speaker: editSpeaker,
+        edited_text: editText,
+        // DON'T overwrite original speaker/text - keep them for reference
       };
       return newTranscript;
     });
+
+    // Send edit to backend via WebSocket (so it syncs to Redis and other clients)
+    if (wsConnected && lineId) {
+      const editCommand = `transcript:edit:${JSON.stringify({
+        id: lineId,
+        edited_speaker: editSpeaker,
+        edited_text: editText,
+      })}`;
+      sendCommand(editCommand);
+    }
+
     setHasUnsavedChanges(true);
     setEditingIndex(null);
     setEditText("");
@@ -908,98 +1034,59 @@ export default function TranscriptPage({
       return;
     }
 
+    // Check for guest speakers first - use edited_speaker if available, else speaker
+    const guestCount = transcript.filter((item) => {
+      const effectiveSpeaker = item.edited_speaker || item.speaker || "";
+      return ["khách", "guest", "unknown", "đang xác định"].includes(
+        effectiveSpeaker.toLowerCase().trim()
+      );
+    }).length;
+
+    if (guestCount > 0) {
+      swalConfig.error(
+        "Cannot Save",
+        `There are ${guestCount} lines with unidentified speakers. Please edit them before saving.`
+      );
+      return;
+    }
+
     try {
       setSaving(true);
-      console.log("📤 Starting save transcript to DB...");
-      console.log("   existingTranscriptId:", existingTranscriptId);
-      console.log("   session.id:", session.id);
+      setWaitingForSessionSave(true);
+      
+      console.log("📤 Sending session:end to backend...");
+      console.log("   defense_session_id:", id);
       console.log("   transcript.length:", transcript.length);
 
-      // Prepare transcript data as JSON
-      const transcriptData = transcript.map((item) => ({
-        id: item.id,
-        text: item.text,
-        speaker: item.speaker,
-        speaker_name: item.speaker_name,
-      }));
+      // Show loading dialog while waiting for backend
+      swalConfig.loading(
+        "Saving Session...",
+        "Processing transcript and saving to database. Please wait..."
+      );
 
-      const transcriptText = JSON.stringify(transcriptData);
-      console.log("   transcriptText length:", transcriptText.length);
+      // Send session:end command to backend (backend will save transcript)
+      sendCommand("session:end");
 
-      if (existingTranscriptId) {
-        // Update existing transcript
-        console.log(
-          "📝 Updating existing transcript ID:",
-          existingTranscriptId
-        );
-        const updateResult = await transcriptsApi.update(existingTranscriptId, {
-          transcriptText: transcriptText,
-          status: "Completed",
-        });
-        console.log("✅ Update result:", updateResult);
-      } else {
-        // Create new transcript
-        console.log("📝 Creating new transcript for session:", session.id);
-        const result = await transcriptsApi.create({
-          sessionId: session.id,
-          transcriptText: transcriptText,
-          status: "Completed",
-        });
-        console.log("✅ Create result:", result);
-        if (result.data) {
-          setExistingTranscriptId(result.data.id);
-          console.log("   New transcript ID:", result.data.id);
-        }
-      }
-
-      // Gọi API complete để chuyển status sang Completed (chỉ khi chưa Completed)
-      if (session.status !== "Completed") {
-        try {
-          const completeResult = await defenseSessionsApi.complete(Number(id));
-          console.log("✅ Defense session completed:", completeResult);
-          if (completeResult.data) {
-            setSession(completeResult.data);
-          }
-        } catch (completeError: any) {
-          console.error(
-            "❌ Failed to complete defense session:",
-            completeError
+      // Set timeout to handle backend not responding (fallback after 30s)
+      sessionSaveTimeoutRef.current = setTimeout(() => {
+        if (waitingForSessionSave) {
+          console.warn("⚠️ Backend save timeout - proceeding with local save");
+          setWaitingForSessionSave(false);
+          setSaving(false);
+          swalConfig.warning(
+            "Timeout",
+            "Backend is taking too long. Your transcript may not be saved to database. Check console for details."
           );
-          // Không throw error ở đây vì transcript đã được lưu
         }
-      } else {
-        console.log("⏭️ Skip API complete - session already Completed");
-      }
-
-      setHasUnsavedChanges(false);
-      swalConfig.success("Success", "Session completed and transcript saved!");
-
-      // Upload recording to Azure (if recording was active)
-      if (isSessionRecording) {
-        swalConfig.loading("Uploading recording...", "Please wait");
-        await stopAndUploadRecording();
-        closeSwal();
-      }
-
-      // Broadcast session:end để member biết phiên đã kết thúc
-      if (hasStartedSession) {
-        broadcastSessionEnd();
-        setHasStartedSession(false);
-      }
-
-      // Kết thúc phiên và đóng WebSocket
-      stopSession();
+      }, 30000);
     } catch (error: any) {
-      console.error("❌ Failed to save transcript:", error);
-      console.error("   Error details:", JSON.stringify(error, null, 2));
+      console.error("❌ Failed to send save command:", error);
+      setWaitingForSessionSave(false);
+      setSaving(false);
       swalConfig.error(
         "Save Error",
-        error.message ||
-          error.response?.data?.message ||
-          "Unable to save to Database. Check Console for details."
+        error.message || "Unable to save transcript."
       );
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -1010,11 +1097,18 @@ export default function TranscriptPage({
     try {
       setSaving(true);
 
+      // Save full transcript format with all fields (VTT timestamps, edited values, etc)
       const transcriptData = transcript.map((item) => ({
         id: item.id,
         text: item.text,
         speaker: item.speaker,
         speaker_name: item.speaker_name,
+        user_id: item.user_id,
+        timestamp: item.timestamp,
+        start_time_vtt: item.start_time_vtt,
+        end_time_vtt: item.end_time_vtt,
+        edited_speaker: item.edited_speaker,
+        edited_text: item.edited_text,
       }));
 
       const transcriptText = JSON.stringify(transcriptData);
@@ -1119,7 +1213,7 @@ export default function TranscriptPage({
         {/* Transcript Section */}
         <div className="bg-white rounded-lg shadow-sm border p-4 flex flex-col h-[500px]">
           <div className="flex justify-between items-center mb-4">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-lg font-semibold text-gray-800">
                 Transcript
               </h2>
@@ -1128,6 +1222,20 @@ export default function TranscriptPage({
                   {transcript.length} lines
                 </span>
               )}
+              {/* Guest speaker warning */}
+              {(() => {
+                const guestCount = transcript.filter((item) => {
+                  const effectiveSpeaker = item.edited_speaker || item.speaker || "";
+                  return ["khách", "guest", "unknown", "đang xác định"].includes(
+                    effectiveSpeaker.toLowerCase().trim()
+                  );
+                }).length;
+                return guestCount > 0 ? (
+                  <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded" title="Edit these before saving">
+                    ⚠️ {guestCount} unidentified
+                  </span>
+                ) : null;
+              })()}
               {/* Auto-save status */}
               {saving ? (
                 <span className="text-xs text-gray-400 italic">Saving...</span>
@@ -1243,13 +1351,45 @@ export default function TranscriptPage({
                         </div>
                       </div>
                     ) : (
-                      // View mode - compact
-                      <div className="relative bg-white rounded-lg px-3 py-2 border border-gray-100 hover:border-gray-200 transition-colors">
-                        <span className="text-xs font-medium text-purple-600">
-                          {item.speaker || "Unknown"}
-                        </span>
-                        <p className="text-gray-800 text-sm mt-0.5 pr-12">
-                          {item.text}
+                      // View mode - compact with VTT timestamp
+                      <div className={`relative bg-white rounded-lg px-3 py-2 border transition-colors ${(() => {
+                        // Use edited_speaker if available, else speaker
+                        const effectiveSpeaker = item.edited_speaker || item.speaker || "";
+                        return ["khách", "guest", "unknown", "đang xác định"].includes(
+                          effectiveSpeaker.toLowerCase().trim()
+                        )
+                          ? "border-yellow-300 bg-yellow-50"
+                          : "border-gray-100 hover:border-gray-200";
+                      })()}`}>
+                        {/* VTT Timestamp line */}
+                        {item.start_time_vtt && item.end_time_vtt && (
+                          <div className="text-[11px] text-gray-500 font-mono mb-1">
+                            {item.start_time_vtt} --&gt; {item.end_time_vtt}
+                          </div>
+                        )}
+                        {/* Speaker name on separate line */}
+                        {(() => {
+                          const effectiveSpeaker = item.edited_speaker || item.speaker || "Unknown";
+                          const isGuest = ["khách", "guest", "unknown", "đang xác định"].includes(
+                            effectiveSpeaker.toLowerCase().trim()
+                          );
+                          const wasEdited = item.edited_speaker && item.edited_speaker !== item.speaker;
+                          return (
+                            <div className={`text-xs font-medium mb-1 ${isGuest ? "text-yellow-600" : "text-purple-600"}`}>
+                              {effectiveSpeaker}
+                              {wasEdited && (
+                                <span className="text-[10px] text-blue-500 ml-1">(edited)</span>
+                              )}
+                            </div>
+                          );
+                        })()}
+                        {/* Text content - show edited_text if available */}
+                        <p className="text-gray-800 text-sm">
+                          {item.edited_text || item.text}
+                          {/* Edited text indicator */}
+                          {item.edited_text && item.edited_text !== item.text && (
+                            <span className="text-[10px] text-blue-500 ml-1">(edited)</span>
+                          )}
                         </p>
                         {/* Edit/Delete - show on hover */}
                         <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-0.5">

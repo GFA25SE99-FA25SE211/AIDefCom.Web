@@ -331,6 +331,16 @@ export const useAudioRecorder = ({
     }
   }, []);
 
+  // Send custom command to backend (e.g., transcript:edit)
+  const sendCommand = useCallback((command: string) => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(command);
+      console.log("Sent command:", command.substring(0, 50));
+    } else {
+      console.warn("Cannot send command - WebSocket not connected");
+    }
+  }, []);
+
   return {
     isRecording,
     isAsking,
@@ -344,5 +354,6 @@ export const useAudioRecorder = ({
     broadcastQuestionStarted,
     broadcastQuestionProcessing,
     broadcastMicDisabled,
+    sendCommand,
   };
 };
