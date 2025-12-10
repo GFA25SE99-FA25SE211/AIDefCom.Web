@@ -996,7 +996,7 @@ export default function ViewScorePage() {
             </div>
           ) : rubrics.length === 0 ? (
             <div className="py-8">
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-6">
                 <h3 className="text-base font-semibold text-gray-800 mb-2 text-left">
                   No Grading Criteria Available
                 </h3>

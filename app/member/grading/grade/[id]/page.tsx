@@ -104,6 +104,11 @@ export default function GradeGroupPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [rubrics, setRubrics] = useState<any[]>([]);
+
+  // Helper: xác định có rubrics hợp lệ không
+  const hasRubrics = Array.isArray(rubrics)
+    && rubrics.length > 0
+    && rubrics.every((r) => r && (r.id || r.rubricName));
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string>("");
 
@@ -311,6 +316,8 @@ export default function GradeGroupPage() {
       let rubricsList: any[] = [];
 
       try {
+        // Reset rubrics before loading to avoid stale data from previous group
+        setRubrics([]);
         setLoading(true);
         const [groupRes, studentsRes, sessionsRes] = await Promise.all([
           groupsApi.getById(groupId).catch(() => ({ data: null })),
@@ -478,6 +485,11 @@ export default function GradeGroupPage() {
                   return rubric;
                 })
                 .filter((r: any): r is any => r !== null && r !== undefined);
+
+              // Chỉ giữ rubric hợp lệ (có id hoặc rubricName)
+              rubricsList = rubricsList.filter(
+                (r: any) => r && (r.id || r.rubricName)
+              );
 
               setRubrics(rubricsList);
               console.log(
@@ -802,7 +814,7 @@ export default function GradeGroupPage() {
 
   const handleSave = async () => {
     // Triple check - prevent save if no rubrics (check for undefined, null, or empty)
-    if (!rubrics || !Array.isArray(rubrics) || rubrics.length === 0) {
+    if (!hasRubrics) {
       await swalConfig.error("Error", "No grading criteria available. Please contact the administrator to add grading criteria.");
       return;
     }
@@ -813,14 +825,14 @@ export default function GradeGroupPage() {
     }
 
     // Additional safety check - verify rubrics before proceeding
-    if (rubrics.length === 0) {
+    if (!hasRubrics) {
       await swalConfig.error("Error", "Cannot save scores without grading criteria.");
       return;
     }
 
     try {
-      // Final safety check before saving - prevent any save if no rubrics
-      if (!rubrics || !Array.isArray(rubrics) || rubrics.length === 0) {
+      // Final safety check trước khi lưu - không cho lưu nếu không có rubrics
+      if (!hasRubrics) {
         await swalConfig.error("Error", "Cannot save scores without grading criteria.");
         return;
       }
@@ -839,7 +851,10 @@ export default function GradeGroupPage() {
           const rubric = rubrics[i];
           const criterionComment = student.criterionComments[i]?.trim();
 
-          if (!rubric) continue;
+          if (!rubric) {
+            // Nếu không có rubric tương ứng, bỏ qua
+            continue;
+          }
 
           if (existingScoreId && existingScoreId > 0) {
             // Update existing score
@@ -1033,7 +1048,7 @@ export default function GradeGroupPage() {
               <button
                 onClick={(e) => {
                   // Strict check for rubrics
-                  const hasNoRubrics = !rubrics || !Array.isArray(rubrics) || rubrics.length === 0;
+                  const hasNoRubrics = !hasRubrics;
                   if (saving || hasNoRubrics) {
                     e.preventDefault();
                     e.stopPropagation();
@@ -1044,13 +1059,13 @@ export default function GradeGroupPage() {
                   }
                   handleSave();
                 }}
-                disabled={saving || !rubrics || !Array.isArray(rubrics) || rubrics.length === 0}
+                disabled={saving || !hasRubrics}
                 className={`flex items-center gap-2 px-3 py-2 rounded-lg text-white text-sm font-medium shadow-sm ${
-                  saving || !rubrics || !Array.isArray(rubrics) || rubrics.length === 0
+                  saving || !hasRubrics
                     ? "bg-gray-400 cursor-not-allowed opacity-60 pointer-events-none"
                     : "bg-gradient-to-r from-purple-600 to-blue-500 hover:opacity-90 transition cursor-pointer"
                 }`}
-                title={!rubrics || !Array.isArray(rubrics) || rubrics.length === 0 ? "Please add grading criteria before saving scores" : ""}
+                title={!hasRubrics ? "Please add grading criteria before saving scores" : ""}
               >
                 <Save className="w-4 h-4" />
                 <span>{saving ? "Saving..." : "Save All Scores"}</span>
@@ -1062,9 +1077,9 @@ export default function GradeGroupPage() {
             <div className="text-center py-8 text-gray-500">
               Loading group data...
             </div>
-          ) : rubrics.length === 0 ? (
+          ) : !hasRubrics ? (
             <div className="py-8">
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-6">
                 <h3 className="text-base font-semibold text-gray-800 mb-2 text-left">
                   No Grading Criteria Available
                 </h3>
@@ -1103,7 +1118,7 @@ export default function GradeGroupPage() {
                   <thead>
                     <tr className="text-left text-gray-600">
                       <th className="py-2 pr-4">Student</th>
-                      {rubrics.length > 0 &&
+                      {hasRubrics &&
                         rubrics.map((r: any) => (
                           <th key={r.id || r.rubricName} className="py-2 px-3">
                             <div className="flex flex-col">
