@@ -140,42 +140,41 @@ export default function TranscriptPage({
 
     const fetchSessionAndTranscript = async () => {
       try {
-        // Fetch session info
-        const response = await defenseSessionsApi.getById(Number(id));
-        if (response.data) {
-          setSession(response.data);
+        // Fetch session info and transcript IN PARALLEL for faster loading
+        const [sessionResponse, transcriptRes] = await Promise.all([
+          defenseSessionsApi.getById(Number(id)),
+          transcriptsApi.getBySessionId(Number(id)),
+        ]);
 
-          // Lấy session role của user hiện tại
-          try {
-            const storedUser = localStorage.getItem("user");
-            if (storedUser) {
-              const parsedUser = JSON.parse(storedUser);
-              const currentUserId = parsedUser.id;
+        // Process session data
+        if (sessionResponse.data) {
+          setSession(sessionResponse.data);
 
-              const lecturersRes = await defenseSessionsApi.getUsersBySessionId(
-                Number(id)
-              );
-              if (lecturersRes.data) {
-                const currentUserInSession = lecturersRes.data.find(
-                  (user: any) =>
-                    String(user.id).toLowerCase() ===
-                    String(currentUserId).toLowerCase()
-                );
+          // Fetch user role in background (non-blocking)
+          const storedUser = localStorage.getItem("user");
+          if (storedUser) {
+            const parsedUser = JSON.parse(storedUser);
+            const currentUserId = parsedUser.id;
 
-                if (currentUserInSession && currentUserInSession.role) {
-                  const sessionRoleValue =
-                    currentUserInSession.role.toLowerCase();
-                  localStorage.setItem("sessionRole", sessionRoleValue);
+            // Fire and forget - don't await
+            defenseSessionsApi.getUsersBySessionId(Number(id))
+              .then((lecturersRes) => {
+                if (lecturersRes.data) {
+                  const currentUserInSession = lecturersRes.data.find(
+                    (user: any) =>
+                      String(user.id).toLowerCase() ===
+                      String(currentUserId).toLowerCase()
+                  );
+                  if (currentUserInSession?.role) {
+                    localStorage.setItem("sessionRole", currentUserInSession.role.toLowerCase());
+                  }
                 }
-              }
-            }
-          } catch (err) {
-            console.error("Failed to get session role:", err);
+              })
+              .catch(() => {/* Ignore role fetch errors */});
           }
         }
 
-        // Fetch existing transcript
-        const transcriptRes = await transcriptsApi.getBySessionId(Number(id));
+        // Process transcript data
         if (transcriptRes.data && transcriptRes.data.length > 0) {
           const existingTranscript = transcriptRes.data[0];
           setExistingTranscriptId(existingTranscript.id);
@@ -208,11 +207,6 @@ export default function TranscriptPage({
                 // Load from DB - this is saved/finalized data
                 setTranscript(loadedTranscript);
                 transcriptLoadedRef.current = true; // Mark as loaded to prevent Redis overwrite
-                console.log(
-                  "📦 Loaded transcript from DB:",
-                  loadedTranscript.length,
-                  "entries"
-                );
               }
             } catch (parseError) {
               // If not JSON, treat as plain text with "Speaker: Text" format
@@ -244,16 +238,11 @@ export default function TranscriptPage({
               // Load from DB - this is saved/finalized data
               setTranscript(loadedTranscript);
               transcriptLoadedRef.current = true; // Mark as loaded to prevent Redis overwrite
-              console.log(
-                "📦 Loaded transcript (plain text) from DB:",
-                loadedTranscript.length,
-                "entries"
-              );
             }
           }
         }
       } catch (error) {
-        console.error("Failed to fetch session/transcript:", error);
+        // Failed to fetch session/transcript
       } finally {
         setLoading(false);
       }
@@ -266,11 +255,12 @@ export default function TranscriptPage({
 
   const handleSTTEvent = (msg: any) => {
     const eventType = msg.type || msg.event;
-    console.log("📨 [Secretary] STT Event:", eventType, msg);
+    
+    // DEBUG: Log all events from WebSocket
+    console.log("📨 [STT Event]", eventType, msg);
 
     // Handle WebSocket connected event
     if (eventType === "connected") {
-      console.log("✅ WebSocket connected:", msg);
       if (msg.session_id) {
         setMySessionId(msg.session_id);
         mySessionIdRef.current = msg.session_id;
@@ -280,7 +270,6 @@ export default function TranscriptPage({
 
     // Handle cached transcript from Redis (sent on reconnect)
     if (eventType === "cached_transcript") {
-      console.log("📂 Received cached transcript from Redis:", msg);
       const cachedLines = msg.lines || [];
 
       // Only use Redis cache if we don't already have data loaded from DB
@@ -306,22 +295,9 @@ export default function TranscriptPage({
 
         setTranscript(loadedTranscript);
         transcriptLoadedRef.current = true;
-        console.log(
-          "✅ Loaded",
-          loadedTranscript.length,
-          "lines from Redis cache (no DB data)"
-        );
         swalConfig.toast.success(
           `Restored ${loadedTranscript.length} transcript lines from cache`
         );
-      } else if (cachedLines.length > 0) {
-        console.log(
-          "⏭️ Skipped Redis cache - already have DB data:",
-          transcript.length,
-          "entries"
-        );
-      } else {
-        console.log("📂 Redis cache is empty");
       }
       return;
     }
@@ -401,13 +377,11 @@ export default function TranscriptPage({
         setHasQuestionFinalText(true);
       }
     } else if (eventType === "question_mode_started") {
-      console.log("Question mode started", msg.session_id);
       swalConfig.info("Recording question");
       // Reset flag when starting new question
       setHasQuestionFinalText(false);
     } else if (eventType === "question_mode_result") {
       // Kết quả câu hỏi của CHÍNH MÌNH (thư ký tự đặt)
-      console.log("Question mode result (self)", msg);
 
       // Clear timeout and reset waiting flag
       if (questionTimeoutRef.current) {
@@ -437,15 +411,13 @@ export default function TranscriptPage({
         swalConfig.success("Valid Question", "New question has been recorded.");
       }
     } else if (eventType === "session_started") {
-      console.log("Session started:", msg.session_id);
+      // Session started
     } else if (eventType === "error") {
-      console.error("STT Error:", msg.message || msg.error);
       swalConfig.error(
         "STT Error",
         msg.message || msg.error || "An unknown error occurred"
       );
     } else if (eventType === "speaker_identified") {
-      console.log("Speaker identified:", msg.speaker);
       // Optional: update UI with speaker info if needed
     } else if (eventType === "broadcast_transcript") {
       // Transcript từ client khác trong cùng session (member nói)
@@ -554,7 +526,6 @@ export default function TranscriptPage({
         msg.question_text || ""
       }`.trim();
       if (processedQuestionIdsRef.current.has(questionId)) {
-        console.log("🚫 Duplicate question broadcast ignored:", questionId);
         return;
       }
       processedQuestionIdsRef.current.add(questionId);
@@ -589,12 +560,6 @@ export default function TranscriptPage({
         );
       }
     } else if (eventType === "connected") {
-      console.log(
-        "✅ WebSocket connected:",
-        msg.session_id,
-        "room_size:",
-        msg.room_size
-      );
       // Lưu session_id của mình để filter broadcast
       if (msg.session_id) {
         setMySessionId(msg.session_id);
@@ -640,7 +605,6 @@ export default function TranscriptPage({
         mediaRecorderRef.current.state === "recording"
       ) {
         mediaRecorderRef.current.pause();
-        console.log("🎙️ Session recording paused");
       }
     } else {
       setPacketsSent(0);
@@ -649,7 +613,6 @@ export default function TranscriptPage({
       // Initialize session start time for VTT timestamp calculation (only on first start)
       if (!sessionStartTimeRef.current) {
         sessionStartTimeRef.current = Date.now();
-        console.log("⏱️ Session start time initialized for VTT timestamps");
       }
       
       // Broadcast session:start cho member biết thư ký đã bắt đầu
@@ -660,33 +623,24 @@ export default function TranscriptPage({
           session.status !== "InProgress" &&
           session.status !== "Completed"
         ) {
-          try {
-            const startResult = await defenseSessionsApi.start(Number(id));
-            console.log("✅ Defense session started:", startResult);
+          // Fire and forget - don't block UI
+          defenseSessionsApi.start(Number(id)).then((startResult) => {
             if (startResult.data) {
               setSession(startResult.data);
               swalConfig.toast.success("Defense session started");
             }
-          } catch (error: any) {
-            console.error("❌ Failed to start defense session:", error);
-            // Không hiện toast error nếu là lỗi 409 (status đã đúng rồi)
+          }).catch((error: any) => {
             if (
               !error.message?.includes("409") &&
               !error.message?.includes("Conflict")
             ) {
               swalConfig.toast.error("Failed to update session status");
             }
-          }
-        } else {
-          console.log(
-            "⏭️ Skip API start - session already InProgress or Completed"
-          );
+          });
         }
-        // Chờ một chút để WS kết nối xong
-        setTimeout(() => {
-          broadcastSessionStart();
-          setHasStartedSession(true);
-        }, 500);
+        // Broadcast immediately
+        broadcastSessionStart();
+        setHasStartedSession(true);
       }
       // Bắt đầu hoặc resume session recording
       if (!isSessionRecording) {
@@ -698,7 +652,6 @@ export default function TranscriptPage({
       ) {
         // Đã có recording đang pause → resume
         mediaRecorderRef.current.resume();
-        console.log("🎙️ Session recording resumed");
       }
     }
   };
@@ -735,23 +688,14 @@ export default function TranscriptPage({
 
       // Handle recording stopped
       mediaRecorder.onstop = () => {
-        console.log(
-          "🎙️ Session recording stopped, chunks:",
-          recordingChunksRef.current.length
-        );
+        // Recording stopped
       };
 
       // Start recording (gather every 1 second)
       recordingStartTimeRef.current = performance.now();
       mediaRecorder.start(1000);
       setIsSessionRecording(true);
-      console.log(
-        "🎙️ Session recording started (mime:",
-        mediaRecorder.mimeType || mimeType || "default",
-        ")"
-      );
     } catch (error: any) {
-      console.error("Failed to start session recording:", error);
       swalConfig.toast.error("Unable to start session recording");
     }
   };
@@ -760,7 +704,6 @@ export default function TranscriptPage({
   const stopAndUploadRecording = async (): Promise<void> => {
     return new Promise(async (resolve) => {
       if (!mediaRecorderRef.current || !isSessionRecording) {
-        console.log("⏭️ No active recording to upload");
         resolve();
         return;
       }
@@ -791,16 +734,7 @@ export default function TranscriptPage({
         });
         const sizeBytes = recordedBlob.size;
 
-        console.log(
-          "🎙️ Recording completed:",
-          (sizeBytes / 1024).toFixed(1),
-          "KB, duration:",
-          durationSec,
-          "s"
-        );
-
         if (sizeBytes === 0) {
-          console.warn("⚠️ Recording is empty, skipping upload");
           setIsSessionRecording(false);
           setIsUploadingRecording(false);
           resolve();
@@ -818,7 +752,6 @@ export default function TranscriptPage({
         } catch {}
 
         // Step 1: Begin upload to get SAS URL
-        console.log("📤 Begin upload (mime:", mimeType, ")");
         const beginRes = await fetch(
           `${RECORDING_API_BASE}/api/recordings/begin-upload`,
           {
@@ -836,10 +769,8 @@ export default function TranscriptPage({
         const uploadRecordingId = beginData.data?.recordingId;
         const uploadUrl = beginData.data?.uploadUrl;
         setRecordingId(uploadRecordingId);
-        console.log("✅ SAS obtained. RecordingId:", uploadRecordingId);
 
         // Step 2: PUT blob to Azure SAS URL
-        console.log("📤 Uploading to Azure...");
         const putRes = await fetch(uploadUrl, {
           method: "PUT",
           headers: {
@@ -853,18 +784,8 @@ export default function TranscriptPage({
         if (!putRes.ok) {
           throw new Error(`Blob PUT failed: ${putRes.status}`);
         }
-        console.log("✅ Upload completed");
 
         // Step 3: Finalize recording
-        console.log(
-          "📤 Finalizing... (durationSec:",
-          durationSec,
-          ", sizeBytes:",
-          sizeBytes,
-          ", transcriptId:",
-          existingTranscriptId,
-          ")"
-        );
         const finRes = await fetch(
           `${RECORDING_API_BASE}/api/recordings/${uploadRecordingId}/finalize`,
           {
@@ -882,7 +803,6 @@ export default function TranscriptPage({
         if (!finRes.ok && finRes.status !== 204) {
           throw new Error(`finalize failed: ${finRes.status}`);
         }
-        console.log("✅ Recording finalized successfully");
         swalConfig.toast.success("Session recording saved");
 
         // Cleanup
@@ -891,7 +811,6 @@ export default function TranscriptPage({
         recordingChunksRef.current = [];
         resolve();
       } catch (error: any) {
-        console.error("❌ Recording upload error:", error);
         swalConfig.toast.error("Unable to upload recording: " + error.message);
         setIsSessionRecording(false);
         resolve();
@@ -1019,10 +938,6 @@ export default function TranscriptPage({
 
     try {
       setSaving(true);
-      console.log("📤 Starting save transcript to DB...");
-      console.log("   existingTranscriptId:", existingTranscriptId);
-      console.log("   session.id:", session.id);
-      console.log("   transcript.length:", transcript.length);
 
       // Filter out entries with unknown speakers ("Khách", "Unknown", "Identifying")
       const unknownSpeakers = ["khách", "unknown", "identifying", "guest"];
@@ -1069,31 +984,22 @@ export default function TranscriptPage({
       }));
 
       const transcriptText = JSON.stringify(transcriptData);
-      console.log("   transcriptText length:", transcriptText.length);
 
       if (existingTranscriptId) {
         // Update existing transcript
-        console.log(
-          "📝 Updating existing transcript ID:",
-          existingTranscriptId
-        );
-        const updateResult = await transcriptsApi.update(existingTranscriptId, {
+        await transcriptsApi.update(existingTranscriptId, {
           transcriptText: transcriptText,
           status: "Completed",
         });
-        console.log("✅ Update result:", updateResult);
       } else {
         // Create new transcript
-        console.log("📝 Creating new transcript for session:", session.id);
         const result = await transcriptsApi.create({
           sessionId: session.id,
           transcriptText: transcriptText,
           status: "Completed",
         });
-        console.log("✅ Create result:", result);
         if (result.data) {
           setExistingTranscriptId(result.data.id);
-          console.log("   New transcript ID:", result.data.id);
         }
       }
 
@@ -1101,19 +1007,12 @@ export default function TranscriptPage({
       if (session.status !== "Completed") {
         try {
           const completeResult = await defenseSessionsApi.complete(Number(id));
-          console.log("✅ Defense session completed:", completeResult);
           if (completeResult.data) {
             setSession(completeResult.data);
           }
         } catch (completeError: any) {
-          console.error(
-            "❌ Failed to complete defense session:",
-            completeError
-          );
           // Không throw error ở đây vì transcript đã được lưu
         }
-      } else {
-        console.log("⏭️ Skip API complete - session already Completed");
       }
 
       setHasUnsavedChanges(false);
@@ -1137,8 +1036,6 @@ export default function TranscriptPage({
       // Show success popup AFTER all operations complete
       swalConfig.success("Success", "Session completed and transcript saved!");
     } catch (error: any) {
-      console.error("❌ Failed to save transcript:", error);
-      console.error("   Error details:", JSON.stringify(error, null, 2));
       swalConfig.error(
         "Save Error",
         error.message ||
@@ -1198,9 +1095,7 @@ export default function TranscriptPage({
       if (showToast) {
         swalConfig.toast.success("Saved");
       }
-      console.log("✅ Auto-saved transcript");
     } catch (error: any) {
-      console.error("Failed to auto save:", error);
       if (showToast) {
         swalConfig.toast.error("Unable to save");
       }
