@@ -157,13 +157,30 @@ export const useAudioRecorder = ({
   }, []);
 
   const startRecording = useCallback(async () => {
+    // Connect WebSocket with 5-second timeout to prevent infinite blocking
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
       connectWs();
-      await new Promise((resolve) => {
+      await new Promise<void>((resolve) => {
+        const startTime = Date.now();
+        const TIMEOUT_MS = 5000; // 5 second timeout
         const check = () => {
-          if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN)
-            resolve(null);
-          else setTimeout(check, 50);
+          // Success - WebSocket connected
+          if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+            resolve();
+            return;
+          }
+          // Timeout - proceed anyway (mic will work, WS may connect later)
+          if (Date.now() - startTime > TIMEOUT_MS) {
+            resolve();
+            return;
+          }
+          // Failed - WebSocket closed or errored
+          if (wsRef.current && wsRef.current.readyState === WebSocket.CLOSED) {
+            resolve();
+            return;
+          }
+          // Keep checking every 100ms (instead of 50ms)
+          setTimeout(check, 100);
         };
         check();
       });
