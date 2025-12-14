@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Modal from "../../../moderator/create-sessions/components/Modal";
 import { Plus, Eye, EyeOff } from "lucide-react"; // Icon thống nhất UI
 import { swalConfig } from "@/lib/utils/sweetAlert";
@@ -18,12 +18,14 @@ interface CreateAccountModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (data: AccountFormData) => void;
+  existingEmails?: string[];
 }
 
 const CreateAccountModal: React.FC<CreateAccountModalProps> = ({
   isOpen,
   onClose,
   onSubmit,
+  existingEmails = [],
 }) => {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -33,8 +35,93 @@ const CreateAccountModal: React.FC<CreateAccountModalProps> = ({
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [emailError, setEmailError] = useState("");
+  const [isCheckingEmail, setIsCheckingEmail] = useState(false);
+  const debounceTimer = useRef<NodeJS.Timeout | null>(null);
+
+  // Reset all states when modal opens/closes
+  useEffect(() => {
+    if (isOpen) {
+      // Reset all form data when modal opens
+      setFullName("");
+      setEmail("");
+      setRole("");
+      setPassword("");
+      setPhoneNumber("");
+      setConfirmPassword("");
+      setShowPassword(false);
+      setShowConfirmPassword(false);
+      setEmailError("");
+      setIsCheckingEmail(false);
+    }
+  }, [isOpen]);
+
+  // Cleanup debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current);
+      }
+    };
+  }, []);
+
+  // Check for duplicate email with optimized frontend validation
+  const checkEmailDuplicate = async (emailValue: string) => {
+    if (!emailValue || !emailValue.includes("@")) {
+      setEmailError("");
+      setIsCheckingEmail(false);
+      return;
+    }
+
+    setIsCheckingEmail(true);
+    setEmailError("");
+
+    // Simulate network delay for better UX
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    try {
+      const emailExists = existingEmails.some(
+        (existingEmail) =>
+          existingEmail.toLowerCase() === emailValue.toLowerCase()
+      );
+
+      if (emailExists) {
+        setEmailError("Email này đã tồn tại trong hệ thống");
+      } else {
+        setEmailError("");
+      }
+    } catch (error) {
+      console.error("Error checking email:", error);
+      setEmailError("");
+    } finally {
+      setIsCheckingEmail(false);
+    }
+  };
+
+  const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const emailValue = e.target.value;
+    setEmail(emailValue);
+
+    // Clear previous debounce timer
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current);
+    }
+
+    // Set new debounce timer
+    debounceTimer.current = setTimeout(() => {
+      checkEmailDuplicate(emailValue);
+    }, 500); // 500ms debounce
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Check email duplicate before submitting
+    if (emailError) {
+      swalConfig.error("Email không hợp lệ", "Vui lòng sử dụng email khác.");
+      return;
+    }
+
     if (password !== confirmPassword) {
       swalConfig.error(
         "Password mismatch",
@@ -51,6 +138,7 @@ const CreateAccountModal: React.FC<CreateAccountModalProps> = ({
     setConfirmPassword("");
     setShowPassword(false);
     setShowConfirmPassword(false);
+    setEmailError("");
   };
 
   const footer = (
@@ -58,7 +146,12 @@ const CreateAccountModal: React.FC<CreateAccountModalProps> = ({
       <button type="button" className="btn-secondary" onClick={onClose}>
         Cancel
       </button>
-      <button type="submit" form="create-account-form" className="btn-primary">
+      <button
+        type="submit"
+        form="create-account-form"
+        className="btn-primary"
+        disabled={!!emailError || isCheckingEmail}
+      >
         <Plus className="w-4 h-4 mr-2" />
         Create Account
       </button>
@@ -92,14 +185,32 @@ const CreateAccountModal: React.FC<CreateAccountModalProps> = ({
 
         <div className="form-group">
           <label htmlFor="createEmail">Email</label>
-          <input
-            id="createEmail"
-            type="email"
-            placeholder="example@university.edu"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
+          <div className="relative">
+            <input
+              id="createEmail"
+              type="email"
+              placeholder="example@university.edu"
+              value={email}
+              onChange={handleEmailChange}
+              required
+              className={`${emailError ? "border-red-500" : ""} ${
+                isCheckingEmail ? "pr-8" : ""
+              }`}
+            />
+            {isCheckingEmail && (
+              <div className="absolute inset-y-0 right-2 flex items-center">
+                <div className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full"></div>
+              </div>
+            )}
+          </div>
+          {emailError && (
+            <span className="text-red-500 text-sm mt-1">{emailError}</span>
+          )}
+          {isCheckingEmail && (
+            <span className="text-blue-500 text-sm mt-1">
+              Đang kiểm tra email...
+            </span>
+          )}
         </div>
 
         <div className="form-group">
@@ -115,11 +226,8 @@ const CreateAccountModal: React.FC<CreateAccountModalProps> = ({
             </option>
             <option value="Administrator">Administrator</option>
             <option value="Lecturer">Lecturer</option>
-            <option value="Moderator">Moderator</option>
-            <option value="Chair">Chair</option>
-            <option value="Member">Member</option>
-            <option value="Secretary">Secretary</option>
             <option value="Student">Student</option>
+            <option value="Moderator">Moderator</option>
           </select>
         </div>
 
@@ -142,7 +250,11 @@ const CreateAccountModal: React.FC<CreateAccountModalProps> = ({
               onClick={() => setShowPassword((prev) => !prev)}
               aria-label={showPassword ? "Hide password" : "Show password"}
             >
-              {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              {showPassword ? (
+                <EyeOff className="w-4 h-4" />
+              ) : (
+                <Eye className="w-4 h-4" />
+              )}
             </button>
           </div>
         </div>
@@ -164,7 +276,11 @@ const CreateAccountModal: React.FC<CreateAccountModalProps> = ({
               type="button"
               className="absolute inset-y-0 right-2 flex items-center text-gray-500"
               onClick={() => setShowConfirmPassword((prev) => !prev)}
-              aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
+              aria-label={
+                showConfirmPassword
+                  ? "Hide confirm password"
+                  : "Show confirm password"
+              }
             >
               {showConfirmPassword ? (
                 <EyeOff className="w-4 h-4" />

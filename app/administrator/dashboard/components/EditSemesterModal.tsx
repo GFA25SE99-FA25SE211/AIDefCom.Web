@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Modal from "../../../moderator/create-sessions/components/Modal";
+import { swalConfig } from "@/lib/utils/sweetAlert";
 
 interface Semester {
   id: string;
@@ -51,8 +52,9 @@ const EditSemesterModal: React.FC<EditSemesterModalProps> = ({
           (majorOptions.length > 0 ? majorOptions[0].id : "")
       );
     } else {
+      const currentYear = new Date().getFullYear();
       setName("");
-      setYear(String(new Date().getFullYear()));
+      setYear(String(currentYear));
       setStartDate("");
       setEndDate("");
       setMajorID("");
@@ -115,7 +117,27 @@ const EditSemesterModal: React.FC<EditSemesterModalProps> = ({
             id="semester-year"
             type="number"
             value={year}
-            onChange={(e) => setYear(e.target.value)}
+            onChange={(e) => {
+              const newYear = e.target.value;
+              const yearNum = parseInt(newYear, 10);
+              setYear(newYear);
+              
+              // Auto-update dates when year changes (only if dates are empty or don't match the new year)
+              if (newYear && yearNum >= 2000 && yearNum <= 2100) {
+                const currentStartYear = startDate ? new Date(startDate).getFullYear() : null;
+                const currentEndYear = endDate ? new Date(endDate).getFullYear() : null;
+                
+                // If start date is empty or doesn't match new year, suggest default
+                if (!startDate || (currentStartYear !== null && currentStartYear !== yearNum)) {
+                  setStartDate(`${yearNum}-01-01`);
+                }
+                
+                // If end date is empty or doesn't match new year, suggest default
+                if (!endDate || (currentEndYear !== null && currentEndYear !== yearNum)) {
+                  setEndDate(`${yearNum}-05-31`);
+                }
+              }
+            }}
             min={2000}
             max={2100}
             required
@@ -127,16 +149,25 @@ const EditSemesterModal: React.FC<EditSemesterModalProps> = ({
             <label htmlFor="start-date">Start Date</label>
             <input
               id="start-date"
-              type="text"
-              placeholder="dd/mm/yyyy"
+              type="date"
               value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              onFocus={(e) => (e.target.type = "date")}
-              onBlur={(e) => {
-                if (!e.target.value) {
-                  e.target.type = "text";
+              onChange={(e) => {
+                const selectedDate = e.target.value;
+                const selectedYear = selectedDate ? new Date(selectedDate).getFullYear() : null;
+                const yearNum = parseInt(year, 10);
+                
+                // Validate that date is in the selected year
+                if (selectedDate && selectedYear && selectedYear !== yearNum) {
+                  swalConfig.warning(
+                    "Invalid Date",
+                    `Start date must be in year ${yearNum}. Please select a date in ${yearNum}.`
+                  );
+                  return;
                 }
+                setStartDate(selectedDate);
               }}
+              min={`${year}-01-01`}
+              max={`${year}-12-31`}
               required
             />
           </div>
@@ -145,23 +176,41 @@ const EditSemesterModal: React.FC<EditSemesterModalProps> = ({
             <label htmlFor="end-date">End Date</label>
             <input
               id="end-date"
-              type="text"
-              placeholder="dd/mm/yyyy"
+              type="date"
               value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              onFocus={(e) => (e.target.type = "date")}
-              onBlur={(e) => {
-                if (!e.target.value) {
-                  e.target.type = "text";
+              onChange={(e) => {
+                const selectedDate = e.target.value;
+                const selectedYear = selectedDate ? new Date(selectedDate).getFullYear() : null;
+                const yearNum = parseInt(year, 10);
+                
+                // Validate that date is in the selected year
+                if (selectedDate && selectedYear && selectedYear !== yearNum) {
+                  swalConfig.warning(
+                    "Invalid Date",
+                    `End date must be in year ${yearNum}. Please select a date in ${yearNum}.`
+                  );
+                  return;
                 }
+                
+                // Validate that end date is after start date
+                if (selectedDate && startDate && selectedDate < startDate) {
+                  swalConfig.warning(
+                    "Invalid Date",
+                    "End date must be after start date."
+                  );
+                  return;
+                }
+                setEndDate(selectedDate);
               }}
+              min={startDate || `${year}-01-01`}
+              max={`${year}-12-31`}
               required
             />
           </div>
         </div>
 
         <div className="form-group">
-          <label htmlFor="major-id">Major ID</label>
+          <label htmlFor="major-id">Major Name</label>
           <select
             id="major-id"
             value={majorID}

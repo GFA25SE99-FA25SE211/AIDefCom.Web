@@ -29,7 +29,7 @@ function DefenseSessionsContent() {
     const fetchSessions = async () => {
       try {
         setLoading(true);
-        
+
         // Get current user's lecturerId from localStorage
         let lecturerId: string | null = null;
         try {
@@ -63,24 +63,35 @@ function DefenseSessionsContent() {
 
         const sessionsWithStatus: SessionCard[] = await Promise.all(
           sessions.map(async (session: DefenseSessionDto) => {
-            const sessionDate = new Date(session.defenseDate);
-            const now = new Date();
+            // Use status directly from API instead of calculating
+            let displayStatus: "Upcoming" | "Completed" | "In Progress" =
+              "Upcoming";
 
-            let status: "Upcoming" | "Completed" | "In Progress" = "Upcoming";
-
-            if (sessionDate < now) {
-              status = "Completed";
-            } else if (sessionDate.toDateString() === now.toDateString()) {
-              status = "In Progress";
+            // Map API status to display status
+            switch (session.status?.toLowerCase()) {
+              case "completed":
+                displayStatus = "Completed";
+                break;
+              case "inprogress":
+              case "in progress":
+                displayStatus = "In Progress";
+                break;
+              case "scheduled":
+              case "upcoming":
+              default:
+                displayStatus = "Upcoming";
+                break;
             }
 
             // Find group for this session
             let groupName: string | undefined;
             let projectCode: string | undefined;
             let projectTitle: string | undefined;
-            
+
             if (session.groupId) {
-              const group = groups.find((g: GroupDto) => g.id === session.groupId);
+              const group = groups.find(
+                (g: GroupDto) => g.id === session.groupId
+              );
               if (group) {
                 groupName = getGroupDisplayName(group);
                 projectCode = group.projectCode;
@@ -91,7 +102,7 @@ function DefenseSessionsContent() {
             return {
               ...session,
               sessionName: `Defense Session ${session.id}`,
-              status,
+              status: displayStatus,
               groupName,
               projectCode,
               projectTitle,
@@ -132,21 +143,35 @@ function DefenseSessionsContent() {
       const parsedUser = JSON.parse(storedUser);
       const currentUserId = parsedUser.id;
 
-      // Check role in session (similar to SessionCard in home)
+      // Check role in session (exactly like home page SessionCard)
       try {
-        const lecturersRes = await defenseSessionsApi.getUsersBySessionId(sessionId);
+        const lecturersRes = await defenseSessionsApi.getUsersBySessionId(
+          sessionId
+        );
         if (lecturersRes.data) {
           const currentUserInSession = lecturersRes.data.find(
-            (user: any) => 
-              String(user.id).toLowerCase() === String(currentUserId).toLowerCase()
+            (user: any) =>
+              String(user.id).toLowerCase() ===
+              String(currentUserId).toLowerCase()
           );
 
           if (currentUserInSession && currentUserInSession.role) {
             const roleInSession = currentUserInSession.role.toLowerCase();
-            
-            // If teacher is member in session, route to grading view (like grade section in home)
-            if (roleInSession === "member") {
-              router.push(`/member/grading/view/${session.groupId}?sessionId=${sessionId}`);
+
+            // Redirect based on user's role in this session (same logic as home)
+            if (roleInSession === "chair") {
+              // Chair in session -> chair detail page
+              router.push(`/chair/groups/${session.groupId}`);
+              return;
+            } else if (roleInSession === "member") {
+              // Member in session -> grading view page
+              router.push(
+                `/member/grading/view/${session.groupId}?sessionId=${sessionId}`
+              );
+              return;
+            } else if (roleInSession === "secretary") {
+              // Secretary in session -> transcript page
+              router.push(`/secretary/transcript/${sessionId}`);
               return;
             }
           }
@@ -155,10 +180,8 @@ function DefenseSessionsContent() {
         console.error("Failed to check session role:", err);
       }
 
-      // Fallback: If not member or role check failed, use default routing
-      router.push(
-        `/member/grading/grade/${session.groupId}?sessionId=${sessionId}`
-      );
+      // Fallback: If not in session or role check failed -> home view
+      router.push(`/home/view/${session.groupId}`);
     } catch (error) {
       console.error("Error getting session details:", error);
       router.push(`/member/groups-to-grade?sessionId=${sessionId}`);
@@ -196,7 +219,8 @@ function DefenseSessionsContent() {
       <div className="bg-white rounded-xl shadow px-6 py-4">
         <h1 className="text-2xl font-bold text-gray-800">Defense Sessions</h1>
         <p className="text-gray-600 mt-1">
-          Select a defense session to view groups
+          Select a defense session - you will be redirected based on your role
+          in that session
         </p>
       </div>
 
@@ -246,7 +270,9 @@ function DefenseSessionsContent() {
                       {session.projectTitle}
                     </p>
                   ) : (
-                    <p className="text-sm text-gray-400 italic">No project title</p>
+                    <p className="text-sm text-gray-400 italic">
+                      No project title
+                    </p>
                   )}
                 </div>
 
@@ -266,7 +292,8 @@ function DefenseSessionsContent() {
                       <Clock className="w-4 h-4" />
                       <span>
                         {session.startTime.substring(0, 5)}
-                        {session.endTime && ` - ${session.endTime.substring(0, 5)}`}
+                        {session.endTime &&
+                          ` - ${session.endTime.substring(0, 5)}`}
                       </span>
                     </div>
                   )}
@@ -308,16 +335,18 @@ function DefenseSessionsContent() {
 
 export default function DefenseSessionsPage() {
   return (
-    <Suspense fallback={
-      <div className="space-y-6">
-        <div className="bg-white rounded-xl shadow px-6 py-4">
-          <h1 className="text-2xl font-bold text-gray-800">Defense Sessions</h1>
+    <Suspense
+      fallback={
+        <div className="space-y-6">
+          <div className="bg-white rounded-xl shadow px-6 py-4">
+            <h1 className="text-2xl font-bold text-gray-800">
+              Defense Sessions
+            </h1>
+          </div>
+          <div className="text-center py-8 text-gray-500">Loading...</div>
         </div>
-        <div className="text-center py-8 text-gray-500">
-          Loading...
-        </div>
-      </div>
-    }>
+      }
+    >
       <DefenseSessionsContent />
     </Suspense>
   );

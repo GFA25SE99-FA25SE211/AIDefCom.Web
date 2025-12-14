@@ -19,6 +19,7 @@ import { majorRubricsApi } from "@/lib/api/major-rubrics";
 import { scoresApi, type ScoreReadDto } from "@/lib/api/scores";
 import { defenseSessionsApi } from "@/lib/api/defense-sessions";
 import { projectTasksApi } from "@/lib/api/project-tasks";
+import { committeeAssignmentsApi } from "@/lib/api/committee-assignments";
 import { swalConfig, closeSwal } from "@/lib/utils/sweetAlert";
 import { useAudioRecorder } from "@/lib/hooks/useAudioRecorder";
 import { authUtils } from "@/lib/utils/auth";
@@ -103,6 +104,11 @@ export default function GradeGroupPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [rubrics, setRubrics] = useState<any[]>([]);
+
+  // Helper: xác định có rubrics hợp lệ không
+  const hasRubrics = Array.isArray(rubrics)
+    && rubrics.length > 0
+    && rubrics.every((r) => r && (r.id || r.rubricName));
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string>("");
 
@@ -310,6 +316,8 @@ export default function GradeGroupPage() {
       let rubricsList: any[] = [];
 
       try {
+        // Reset rubrics before loading to avoid stale data from previous group
+        setRubrics([]);
         setLoading(true);
         const [groupRes, studentsRes, sessionsRes] = await Promise.all([
           groupsApi.getById(groupId).catch(() => ({ data: null })),
@@ -340,21 +348,92 @@ export default function GradeGroupPage() {
           }
         }
 
-        // Get current user ID from auth token
+        // Get current user ID - ưu tiên từ auth token, fallback về localStorage
         const userInfo = authUtils.getCurrentUserInfo();
-        let userId = userInfo.userId;
+        let userId = userInfo.userId || "";
 
-        // Fallback for testing - use a valid lecturer ID if no auth
+        // Fallback: nếu không có từ token, lấy từ localStorage
         if (!userId) {
-          console.warn(
-            "No authenticated user found, using fallback lecturer ID for testing"
-          );
-          userId = "0EB5D9FB-4389-45B7-A7AE-23AFBAF461CE"; // PGS.TS Lê Văn Chiến
+          const storedUser = localStorage.getItem("user");
+          if (storedUser) {
+            try {
+              const parsedUser = JSON.parse(storedUser);
+              userId = parsedUser.id || "";
+            } catch (err) {
+              console.error("Error parsing user:", err);
+            }
+          }
         }
 
-        setCurrentUserId(userId);
+        // Set currentUserId state
+        if (userId) {
+          setCurrentUserId(userId);
+        }
+
+        // Kiểm tra committee-assignments/lecturer trước để xem có rubrics không
+        let shouldShowRubrics = true;
+        if (userId) {
+          try {
+            const assignmentRes = await committeeAssignmentsApi.getByLecturerId(
+              userId
+            );
+            const assignments = Array.isArray(assignmentRes.data)
+              ? assignmentRes.data
+              : [];
+
+            console.log("🔍 Checking committee assignments for rubrics:", {
+              lecturerId: userId,
+              assignmentsCount: assignments.length,
+              assignments: assignments,
+            });
+
+            // Kiểm tra nếu assignment có rubrics null hoặc không có rubrics
+            if (assignments.length > 0) {
+              // Kiểm tra từng assignment xem có rubrics null không
+              const hasRubrics = assignments.some((assignment: any) => {
+                // Kiểm tra nếu có rubrics trong assignment (có thể là field rubrics hoặc rubricIds)
+                const hasRubricsField =
+                  assignment.rubrics !== null &&
+                  assignment.rubrics !== undefined;
+                const hasRubricIds =
+                  assignment.rubricIds &&
+                  Array.isArray(assignment.rubricIds) &&
+                  assignment.rubricIds.length > 0;
+                return hasRubricsField || hasRubricIds;
+              });
+
+              // Nếu tất cả assignments đều có rubrics null hoặc không có rubrics, không hiển thị
+              if (!hasRubrics) {
+                console.log(
+                  "⚠️ No rubrics found in committee assignments (all null or empty), hiding rubrics"
+                );
+                shouldShowRubrics = false;
+                setRubrics([]);
+              }
+            } else {
+              // Nếu không có assignment nào, vẫn hiển thị rubrics (fallback behavior)
+              console.log(
+                "⚠️ No committee assignments found, will load rubrics as fallback"
+              );
+            }
+          } catch (error: any) {
+            console.warn("⚠️ Error checking committee assignments:", error);
+            // Nếu lỗi, vẫn tiếp tục load rubrics như bình thường
+          }
+        }
+
+        // Nếu không nên hiển thị rubrics, dừng lại và không load rubrics
+        if (!shouldShowRubrics) {
+          console.log(
+            "✅ Skipping rubrics loading - no rubrics in committee assignments"
+          );
+          // Set empty rubrics và return early
+          setRubrics([]);
+          return;
+        }
 
         // Fetch rubrics: ưu tiên từ project tasks (theo session và user), sau đó theo majorId
+        let shouldSkipFallback = false; // Flag để skip fallback nếu API trả về data: []
 
         // Ưu tiên 1: Lấy rubrics từ API theo lecturer và session
         if (groupSession && userId) {
@@ -401,13 +480,16 @@ export default function GradeGroupPage() {
                   // Tìm rubric theo tên (case-insensitive)
                   const rubric = allRubrics.find(
                     (r: any) =>
-                      r.rubricName?.toLowerCase() ===
-                        rubricName.toLowerCase() ||
-                      r.name?.toLowerCase() === rubricName.toLowerCase()
+                      r.rubricName?.toLowerCase() === rubricName.toLowerCase()
                   );
                   return rubric;
                 })
                 .filter((r: any): r is any => r !== null && r !== undefined);
+
+              // Chỉ giữ rubric hợp lệ (có id hoặc rubricName)
+              rubricsList = rubricsList.filter(
+                (r: any) => r && (r.id || r.rubricName)
+              );
 
               setRubrics(rubricsList);
               console.log(
@@ -417,7 +499,11 @@ export default function GradeGroupPage() {
                 rubricsList
               );
             } else {
-              console.warn("⚠️ No rubrics found from lecturer/session API");
+              // API trả về data: [] - không có rubrics
+              console.warn("⚠️ No rubrics found from lecturer/session API (empty array)");
+              setRubrics([]); // Set empty để hiển thị message yêu cầu thêm tiêu chí
+              rubricsList = []; // Đảm bảo rubricsList rỗng
+              shouldSkipFallback = true; // Đánh dấu không fallback sang major rubrics
             }
           } catch (error: any) {
             // Nếu là 404 hoặc endpoint chưa có, fallback về logic cũ
@@ -447,7 +533,9 @@ export default function GradeGroupPage() {
         }
 
         // Fallback: Lấy rubrics theo majorId nếu chưa có từ project tasks
-        if (rubricsList.length === 0 && group?.majorId) {
+        // CHỈ fallback nếu API lỗi hoặc không có session/userId
+        // KHÔNG fallback nếu API trả về data: [] (shouldSkipFallback = true)
+        if (rubricsList.length === 0 && group?.majorId && !shouldSkipFallback) {
           try {
             console.log(
               "🔍 Fallback: Loading rubrics from majorId:",
@@ -523,10 +611,10 @@ export default function GradeGroupPage() {
           });
         }
 
-        // Nếu vẫn không có rubrics, để trống (sẽ dùng default criteria)
+        // Nếu vẫn không có rubrics, để trống (không dùng default criteria)
         if (rubricsList.length === 0) {
           console.warn(
-            "⚠️ No rubrics found for group/session, will use default criteria"
+            "⚠️ No rubrics found for group/session, will leave empty (no default criteria)"
           );
           setRubrics([]);
         } else {
@@ -561,9 +649,8 @@ export default function GradeGroupPage() {
                   )
                 : [];
 
-              // Create scores array based on rubrics (fallback to 5 if no rubrics)
-              const rubricCount =
-                rubricsList.length > 0 ? rubricsList.length : 5;
+              // Create scores array based on rubrics (empty array if no rubrics)
+              const rubricCount = rubricsList.length;
               const scoresArray = new Array(rubricCount).fill(0);
               const scoreIds = new Array(rubricCount).fill(0);
               const commentsArray = new Array(rubricCount).fill("");
@@ -610,9 +697,8 @@ export default function GradeGroupPage() {
           setGroupData(groupData);
           setStudentScores(groupData.students);
         } else {
-          // Fallback: tạo empty groupData hoặc từ students đã fetch
-          const rubricCountFallback =
-            rubricsList.length > 0 ? rubricsList.length : criteria.length;
+          // Tạo empty groupData hoặc từ students đã fetch (không fallback criteria)
+          const rubricCountFallback = rubricsList.length;
           const normalizedStudents =
             students.length > 0
               ? await Promise.all(
@@ -669,8 +755,10 @@ export default function GradeGroupPage() {
     fetchGroupData();
   }, [groupId, router]);
 
-  const calculateAverage = (scores: number[]) =>
-    (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(2);
+  const calculateAverage = (scores: number[]) => {
+    if (scores.length === 0) return "0.00";
+    return (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(2);
+  };
 
   const handleScoreChange = (
     studentIndex: number,
@@ -725,12 +813,30 @@ export default function GradeGroupPage() {
     setNotesVisibility((prev) => ({ ...prev, [studentId]: !prev[studentId] }));
 
   const handleSave = async () => {
+    // Triple check - prevent save if no rubrics (check for undefined, null, or empty)
+    if (!hasRubrics) {
+      await swalConfig.error("Error", "No grading criteria available. Please contact the administrator to add grading criteria.");
+      return;
+    }
+
     if (!sessionId) {
-      swalConfig.error("Error", "No defense session found for this group");
+      await swalConfig.error("Error", "No defense session found for this group");
+      return;
+    }
+
+    // Additional safety check - verify rubrics before proceeding
+    if (!hasRubrics) {
+      await swalConfig.error("Error", "Cannot save scores without grading criteria.");
       return;
     }
 
     try {
+      // Final safety check trước khi lưu - không cho lưu nếu không có rubrics
+      if (!hasRubrics) {
+        await swalConfig.error("Error", "Cannot save scores without grading criteria.");
+        return;
+      }
+
       setSaving(true);
       const loadingSwal = swalConfig.loading(
         "Saving scores...",
@@ -745,7 +851,10 @@ export default function GradeGroupPage() {
           const rubric = rubrics[i];
           const criterionComment = student.criterionComments[i]?.trim();
 
-          if (!rubric) continue;
+          if (!rubric) {
+            // Nếu không có rubric tương ứng, bỏ qua
+            continue;
+          }
 
           if (existingScoreId && existingScoreId > 0) {
             // Update existing score
@@ -937,9 +1046,26 @@ export default function GradeGroupPage() {
               </button>
 
               <button
-                onClick={handleSave}
-                disabled={saving}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-blue-500 text-white text-sm font-medium shadow-sm hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={(e) => {
+                  // Strict check for rubrics
+                  const hasNoRubrics = !hasRubrics;
+                  if (saving || hasNoRubrics) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (hasNoRubrics) {
+                      swalConfig.error("Error", "No grading criteria available. Please contact the administrator to add grading criteria.");
+                    }
+                    return;
+                  }
+                  handleSave();
+                }}
+                disabled={saving || !hasRubrics}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-white text-sm font-medium shadow-sm ${
+                  saving || !hasRubrics
+                    ? "bg-gray-400 cursor-not-allowed opacity-60 pointer-events-none"
+                    : "bg-gradient-to-r from-purple-600 to-blue-500 hover:opacity-90 transition cursor-pointer"
+                }`}
+                title={!hasRubrics ? "Please add grading criteria before saving scores" : ""}
               >
                 <Save className="w-4 h-4" />
                 <span>{saving ? "Saving..." : "Save All Scores"}</span>
@@ -951,6 +1077,39 @@ export default function GradeGroupPage() {
             <div className="text-center py-8 text-gray-500">
               Loading group data...
             </div>
+          ) : !hasRubrics ? (
+            <div className="py-8">
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-6">
+                <h3 className="text-base font-semibold text-gray-800 mb-2 text-left">
+                  No Grading Criteria Available
+                </h3>
+                <p className="text-sm text-gray-600 mb-4 text-left">
+                  No grading criteria have been assigned to you for this session. Please contact the administrator to add grading criteria.
+                </p>
+                <div className="mt-4">
+                  <p className="text-sm font-medium text-gray-700 mb-2 text-left">
+                    Students in group:
+                  </p>
+                  <div className="bg-white rounded border border-gray-200 p-3">
+                    <div className="space-y-1">
+                      {studentScores.map((student) => (
+                        <div
+                          key={student.id}
+                          className="py-1.5 border-b border-gray-100 last:border-0 text-left"
+                        >
+                          <p className="text-sm font-medium text-gray-800">
+                            {student.name}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {student.role} • ID: {student.id}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           ) : (
             <>
               {/* Table */}
@@ -959,19 +1118,19 @@ export default function GradeGroupPage() {
                   <thead>
                     <tr className="text-left text-gray-600">
                       <th className="py-2 pr-4">Student</th>
-                      {(rubrics.length > 0
-                        ? rubrics.map((r: any) => r.rubricName)
-                        : criteria
-                      ).map((name) => (
-                        <th key={name} className="py-2 px-3">
-                          <div className="flex flex-col">
-                            <span className="font-medium">{name}</span>
-                            <span className="text-xs text-gray-400">
-                              (Max: 10)
-                            </span>
-                          </div>
-                        </th>
-                      ))}
+                      {hasRubrics &&
+                        rubrics.map((r: any) => (
+                          <th key={r.id || r.rubricName} className="py-2 px-3">
+                            <div className="flex flex-col">
+                              <span className="font-medium">
+                                {r.rubricName || r.name}
+                              </span>
+                              <span className="text-xs text-gray-400">
+                                (Max: 10)
+                              </span>
+                            </div>
+                          </th>
+                        ))}
                       <th className="py-2 px-3">Average</th>
                       <th className="py-2 px-3">Actions</th>
                     </tr>
@@ -1010,7 +1169,12 @@ export default function GradeGroupPage() {
                                   min="0"
                                   max="10"
                                   placeholder="0"
-                                  className="w-20 rounded-md border px-2 py-1 text-sm text-center focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors"
+                                  disabled={rubrics.length === 0}
+                                  className={`w-20 rounded-md border px-2 py-1 text-sm text-center focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors ${
+                                    rubrics.length === 0
+                                      ? "bg-gray-100 cursor-not-allowed opacity-50"
+                                      : ""
+                                  }`}
                                   value={score === 0 ? "" : score.toString()}
                                   onChange={(e) =>
                                     handleScoreChange(
@@ -1071,7 +1235,12 @@ export default function GradeGroupPage() {
                                   }}
                                 />
                                 <textarea
-                                  className="w-full rounded-md border px-2 py-1 text-xs text-gray-700 focus:ring-1 focus:ring-purple-500 focus:border-purple-500 transition-colors"
+                                  disabled={rubrics.length === 0}
+                                  className={`w-full rounded-md border px-2 py-1 text-xs text-gray-700 focus:ring-1 focus:ring-purple-500 focus:border-purple-500 transition-colors ${
+                                    rubrics.length === 0
+                                      ? "bg-gray-100 cursor-not-allowed opacity-50"
+                                      : ""
+                                  }`}
                                   rows={2}
                                   placeholder="Nhận xét mục này..."
                                   value={
@@ -1106,6 +1275,7 @@ export default function GradeGroupPage() {
                                   <button
                                     key={score}
                                     type="button"
+                                    disabled={rubrics.length === 0}
                                     onClick={() => {
                                       const newScores = [...studentScores];
                                       newScores[studentIndex].scores =
@@ -1114,8 +1284,16 @@ export default function GradeGroupPage() {
                                         );
                                       setStudentScores(newScores);
                                     }}
-                                    className="px-1.5 py-0.5 text-xs rounded border bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100 transition-colors"
-                                    title={`Set all scores to ${score}`}
+                                    className={`px-1.5 py-0.5 text-xs rounded border transition-colors ${
+                                      rubrics.length === 0
+                                        ? "bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed opacity-50"
+                                        : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"
+                                    }`}
+                                    title={
+                                      rubrics.length === 0
+                                        ? "Vui lòng thêm tiêu chí đánh giá"
+                                        : `Set all scores to ${score}`
+                                    }
                                   >
                                     {score}
                                   </button>

@@ -27,6 +27,8 @@ import { lecturersApi } from "@/lib/api/lecturers";
 import { semestersApi } from "@/lib/api/semesters";
 import { majorsApi } from "@/lib/api/majors";
 import { swalConfig } from "@/lib/utils/sweetAlert";
+import { getApiErrorMessage } from "@/lib/utils/apiError";
+import { authUtils } from "@/lib/utils/auth";
 import type { SemesterDto, MajorDto } from "@/lib/models";
 
 // --- Types ---
@@ -57,12 +59,8 @@ const allRoles = [
   "All Roles",
   "Administrator",
   "Lecturer",
-  "Moderator",
-  "Chair",
-  "Member",
-  "Secretary",
   "Student",
-  "No Role",
+  "Moderator",
 ];
 
 const PAGE_SIZE = 8;
@@ -136,11 +134,20 @@ export default function AccountManagementPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-  const [uploadStep, setUploadStep] = useState<null | "student" | "lecturer">(null);
+  const [uploadStep, setUploadStep] = useState<null | "student" | "lecturer">(
+    null
+  );
   const [studentUploadParams, setStudentUploadParams] = useState({
     semesterId: "",
     majorId: "",
   });
+
+  // Loading states for download/import operations
+  const [isDownloadingStudentTemplate, setIsDownloadingStudentTemplate] =
+    useState(false);
+  const [isDownloadingLecturerTemplate, setIsDownloadingLecturerTemplate] =
+    useState(false);
+  const [isImportingFile, setIsImportingFile] = useState(false);
   const [semesters, setSemesters] = useState<SemesterDto[]>([]);
   const [majors, setMajors] = useState<MajorDto[]>([]);
   const [uploadMetaLoading, setUploadMetaLoading] = useState(false);
@@ -218,7 +225,6 @@ export default function AccountManagementPage() {
       Member: 0,
       Secretary: 0,
       Student: 0,
-      "No Role": 0,
     };
     users.forEach((user) => {
       user.roles.forEach((role) => {
@@ -229,7 +235,6 @@ export default function AccountManagementPage() {
         else if (role === "Member") counts.Member++;
         else if (role === "Secretary") counts.Secretary++;
         else if (role === "Student") counts.Student++;
-        else if (role === "No Role") counts["No Role"]++;
       });
     });
     return counts;
@@ -303,7 +308,9 @@ export default function AccountManagementPage() {
       console.log("Create account response:", response);
 
       if (data.role && data.role !== "Student") {
-        await authApi.assignRole(data.email, data.role);
+        // Gửi "Admin" thay vì "Administrator" cho backend
+        const roleToSend = data.role === "Administrator" ? "Admin" : data.role;
+        await authApi.assignRole(data.email, roleToSend);
       }
 
       // Refresh users list
@@ -314,24 +321,10 @@ export default function AccountManagementPage() {
     } catch (error: any) {
       console.error("Error creating account:", error);
 
-      // Enhanced error handling
-      let errorMessage = "Failed to create account";
-      if (error.response?.data?.errors) {
-        // Handle validation errors
-        const validationErrors = error.response.data.errors;
-        const errorMessages = Object.entries(validationErrors)
-          .map(
-            ([field, messages]) =>
-              `${field}: ${(messages as string[]).join(", ")}`
-          )
-          .join("\n");
-        errorMessage = `Validation errors:\n${errorMessages}`;
-      } else if (error.response?.data?.title) {
-        errorMessage = error.response.data.title;
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
-
+      const errorMessage = getApiErrorMessage(
+        error,
+        "Failed to create account"
+      );
       swalConfig.error("Error Creating Account", errorMessage);
     }
   };
@@ -341,9 +334,16 @@ export default function AccountManagementPage() {
     data: AccountEditFormData
   ) => {
     try {
+      // Find the original user to get email (required by backend)
+      const originalUser = users.find((u) => u.id === id);
+      if (!originalUser) {
+        await swalConfig.error("Error", "User not found");
+        return;
+      }
+
       const updateData: any = {
         fullName: data.fullName,
-        email: data.email,
+        email: originalUser.email, // Email is required by backend
       };
 
       // Include password if provided
@@ -354,12 +354,10 @@ export default function AccountManagementPage() {
 
       await authApi.updateAccount(String(id), updateData);
 
-      if (
-        data.role &&
-        editingUser &&
-        data.role !== editingUser.primaryRole
-      ) {
-        await authApi.assignRole(data.email, data.role);
+      if (data.role && editingUser && data.role !== editingUser.primaryRole) {
+        // Gửi "Admin" thay vì "Administrator" cho backend
+        const roleToSend = data.role === "Administrator" ? "Admin" : data.role;
+        await authApi.assignRole(editingUser.email, roleToSend);
       }
 
       // Refresh users list
@@ -370,10 +368,11 @@ export default function AccountManagementPage() {
       swalConfig.success("Success!", "Account updated successfully!");
     } catch (error: any) {
       console.error("Error updating account:", error);
-      swalConfig.error(
-        "Error Updating Account",
-        error.message || "Failed to update account"
+      const errorMessage = getApiErrorMessage(
+        error,
+        "Failed to update account"
       );
+      swalConfig.error("Error Updating Account", errorMessage);
     }
   };
 
@@ -381,6 +380,58 @@ export default function AccountManagementPage() {
     const user = users.find((u) => u.id === id);
     if (!user) {
       swalConfig.error("Error", "User not found!");
+      return;
+    }
+
+    // Lấy thông tin user hiện tại đang login
+    const currentUser = authUtils.getCurrentUserInfo();
+
+    // Kiểm tra xem user đang được xóa có phải là admin không
+    const isUserAdmin =
+      user.roles?.some((r) => {
+        const roleLower = r?.toLowerCase();
+        return roleLower === "administrator" || roleLower === "admin";
+      }) ||
+      user.primaryRole?.toLowerCase() === "administrator" ||
+      user.primaryRole?.toLowerCase() === "admin";
+
+    // Kiểm tra xem có phải đang xóa chính mình không
+    let isDeletingSelf = false;
+
+    // So sánh bằng userId (chuyển về string để so sánh chính xác)
+    if (currentUser.userId) {
+      const currentUserIdStr = String(currentUser.userId).trim();
+      const userToDeleteIdStr = String(user.id).trim();
+      const idToDeleteStr = String(id).trim();
+      if (
+        currentUserIdStr === userToDeleteIdStr ||
+        currentUserIdStr === idToDeleteStr
+      ) {
+        isDeletingSelf = true;
+      }
+    }
+
+    // So sánh bằng email (case-insensitive) nếu chưa match bằng id
+    if (!isDeletingSelf && currentUser.email && user.email) {
+      const currentEmailLower = currentUser.email.toLowerCase().trim();
+      const userEmailLower = user.email.toLowerCase().trim();
+      if (currentEmailLower === userEmailLower) {
+        isDeletingSelf = true;
+      }
+    }
+
+    // Nếu đang cố xóa chính mình và là admin, chặn lại
+    if (isDeletingSelf && isUserAdmin) {
+      console.log("BLOCKED: Admin trying to delete themselves", {
+        currentUser: currentUser,
+        userToDelete: { id: user.id, email: user.email, roles: user.roles },
+        isDeletingSelf,
+        isUserAdmin,
+      });
+      await swalConfig.error(
+        "Không thể xóa",
+        "Bạn không thể tự xóa chính tài khoản Administrator của mình!"
+      );
       return;
     }
 
@@ -434,27 +485,47 @@ export default function AccountManagementPage() {
 
   const handleDownloadStudentTemplate = async () => {
     try {
+      setIsDownloadingStudentTemplate(true);
+      swalConfig.loading("Đang tải template...", "Vui lòng chờ trong giây lát");
+
       await studentsApi.downloadStudentGroupTemplate();
+
       setIsDownloadModalOpen(false);
+      await swalConfig.success(
+        "Template Downloaded",
+        "Student template has been downloaded successfully."
+      );
     } catch (error: any) {
       console.error("Error downloading student-group template:", error);
       swalConfig.error(
         "Download Failed",
         error.message || "Unable to download student-group template."
       );
+    } finally {
+      setIsDownloadingStudentTemplate(false);
     }
   };
 
   const handleDownloadLecturerTemplate = async () => {
     try {
+      setIsDownloadingLecturerTemplate(true);
+      swalConfig.loading("Đang tải template...", "Vui lòng chờ trong giây lát");
+
       await lecturersApi.downloadTemplate();
+
       setIsDownloadModalOpen(false);
+      await swalConfig.success(
+        "Template Downloaded",
+        "Lecturer template has been downloaded successfully."
+      );
     } catch (error: any) {
       console.error("Error downloading lecturer template:", error);
       swalConfig.error(
         "Download Failed",
         error.message || "Unable to download lecturer template."
       );
+    } finally {
+      setIsDownloadingLecturerTemplate(false);
     }
   };
 
@@ -499,10 +570,16 @@ export default function AccountManagementPage() {
     }
 
     try {
+      setIsImportingFile(true);
+      swalConfig.loading(
+        "Đang import dữ liệu sinh viên...",
+        "Vui lòng chờ hệ thống xử lý file"
+      );
+
       // Validate semester and major IDs
       const semesterId = Number(studentUploadParams.semesterId);
       const majorId = Number(studentUploadParams.majorId);
-      
+
       if (!semesterId || !majorId || isNaN(semesterId) || isNaN(majorId)) {
         swalConfig.error(
           "Invalid Selection",
@@ -513,8 +590,8 @@ export default function AccountManagementPage() {
       }
 
       // Validate file type
-      const fileExtension = file.name.split('.').pop()?.toLowerCase();
-      if (fileExtension !== 'xlsx' && fileExtension !== 'xls') {
+      const fileExtension = file.name.split(".").pop()?.toLowerCase();
+      if (fileExtension !== "xlsx" && fileExtension !== "xls") {
         swalConfig.error(
           "Invalid File Type",
           "Please upload an Excel file (.xlsx or .xls)"
@@ -528,34 +605,36 @@ export default function AccountManagementPage() {
         majorId,
         file,
       });
-      
+
       // Refresh users list after successful upload
       const usersResponse = await authApi.getAllUsers();
       setUsers(mapUsersFromApi(usersResponse.data || []));
-      
-      swalConfig.success("Upload Complete", "Student-group data uploaded successfully!");
+
+      swalConfig.success(
+        "Upload Complete",
+        "Student-group data uploaded successfully!"
+      );
       closeUploadModal();
     } catch (error: any) {
       console.error("Error uploading student-group file:", error);
-      
+
       // Extract detailed error message
-      let errorMessage = error.message || "Unable to upload student-group file.";
-      
+      let errorMessage =
+        error.message || "Unable to upload student-group file.";
+
       // If error has errorData, try to get more details
       if (error.errorData) {
         if (error.errorData.details) {
           errorMessage += `\n\n${error.errorData.details}`;
         }
-        if (error.errorData.data && typeof error.errorData.data === 'string') {
+        if (error.errorData.data && typeof error.errorData.data === "string") {
           errorMessage += `\n\n${error.errorData.data}`;
         }
       }
-      
-      swalConfig.error(
-        "Upload Failed",
-        errorMessage
-      );
+
+      swalConfig.error("Upload Failed", errorMessage);
     } finally {
+      setIsImportingFile(false);
       event.target.value = "";
     }
   };
@@ -567,6 +646,12 @@ export default function AccountManagementPage() {
     if (!file) return;
 
     try {
+      setIsImportingFile(true);
+      swalConfig.loading(
+        "Đang import dữ liệu giảng viên...",
+        "Vui lòng chờ hệ thống xử lý file"
+      );
+
       await lecturersApi.importLecturers(file);
       swalConfig.success("Upload Complete", "Lecturer data uploaded!");
       closeUploadModal();
@@ -577,6 +662,7 @@ export default function AccountManagementPage() {
         error.message || "Unable to upload lecturer file."
       );
     } finally {
+      setIsImportingFile(false);
       event.target.value = "";
     }
   };
@@ -584,6 +670,78 @@ export default function AccountManagementPage() {
   const openEditModal = (user: UserAccount) => {
     setEditingUser(user);
     setIsEditModalOpen(true);
+  };
+
+  // Lấy thông tin user hiện tại đang login
+  const currentUserInfo = useMemo(() => {
+    // Thử lấy từ localStorage trước (cách chính)
+    if (typeof window !== "undefined") {
+      try {
+        const userStr = localStorage.getItem("user");
+        if (userStr) {
+          const user = JSON.parse(userStr);
+          console.log("Current logged in user from localStorage:", user);
+          return {
+            userId: user.id || user.Id || user.userId || null,
+            email: user.email || user.Email || null,
+            name: user.fullName || user.FullName || user.name || null,
+            role: user.role || user.Role || null,
+          };
+        }
+      } catch (error) {
+        console.error("Error parsing user from localStorage:", error);
+      }
+    }
+
+    // Fallback: thử lấy từ authUtils (token)
+    const userInfo = authUtils.getCurrentUserInfo();
+    console.log("Current logged in user from token:", userInfo);
+    return userInfo;
+  }, []);
+
+  // Kiểm tra xem user có phải là admin đang login chính mình không
+  const isCurrentUserAdminSelf = (user: UserAccount): boolean => {
+    // Kiểm tra role của user - phải là admin
+    const isUserAdmin =
+      user.roles?.some((r) => {
+        const roleLower = r?.toLowerCase();
+        return roleLower === "administrator" || roleLower === "admin";
+      }) ||
+      user.primaryRole?.toLowerCase() === "administrator" ||
+      user.primaryRole?.toLowerCase() === "admin";
+
+    if (!isUserAdmin) return false;
+
+    // Kiểm tra xem có phải chính mình không
+    // So sánh bằng userId
+    if (currentUserInfo.userId) {
+      const currentUserIdStr = String(currentUserInfo.userId).trim();
+      const userToCheckIdStr = String(user.id).trim();
+      if (currentUserIdStr === userToCheckIdStr) {
+        console.log("Match by userId:", {
+          currentUserIdStr,
+          userToCheckIdStr,
+          userEmail: user.email,
+        });
+        return true;
+      }
+    }
+
+    // So sánh bằng email (case-insensitive)
+    if (currentUserInfo.email && user.email) {
+      const currentEmailLower = currentUserInfo.email.toLowerCase().trim();
+      const userEmailLower = user.email.toLowerCase().trim();
+      if (currentEmailLower === userEmailLower) {
+        console.log("Match by email:", {
+          currentEmailLower,
+          userEmailLower,
+          userId: user.id,
+        });
+        return true;
+      }
+    }
+
+    return false;
   };
 
   return (
@@ -718,7 +876,17 @@ export default function AccountManagementPage() {
                       </button>
                       <button
                         className="btn-subtle p-1 text-red-600 hover:bg-red-50"
-                        onClick={() => handleDeleteAccount(user.id)}
+                        onClick={() => {
+                          // Kiểm tra nếu là admin đang xóa chính mình, hiển thị alert
+                          if (isCurrentUserAdminSelf(user)) {
+                            swalConfig.error(
+                              "Không thể xóa",
+                              "Bạn không thể tự xóa chính tài khoản Administrator của mình!"
+                            );
+                            return;
+                          }
+                          handleDeleteAccount(user.id);
+                        }}
                         disabled={deletingUserId === user.id}
                         title={
                           deletingUserId === user.id ? "Deleting..." : "Delete"
@@ -811,24 +979,38 @@ export default function AccountManagementPage() {
               <button
                 type="button"
                 onClick={handleDownloadStudentTemplate}
-                className="flex w-full items-center justify-between rounded-2xl bg-gradient-to-r from-purple-600 to-[#7c3aed] px-5 py-4 text-white"
+                disabled={isDownloadingStudentTemplate}
+                className="flex w-full items-center justify-between rounded-2xl bg-gradient-to-r from-purple-600 to-[#7c3aed] px-5 py-4 text-white disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <span className="flex items-center gap-2 text-sm font-semibold">
                   <GraduationCap className="w-4 h-4" />
-                  Student-Group Template
+                  {isDownloadingStudentTemplate
+                    ? "Downloading..."
+                    : "Student-Group Template"}
                 </span>
-                <Download className="w-4 h-4" />
+                {isDownloadingStudentTemplate ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Download className="w-4 h-4" />
+                )}
               </button>
               <button
                 type="button"
                 onClick={handleDownloadLecturerTemplate}
-                className="flex w-full items-center justify-between rounded-2xl bg-gradient-to-r from-blue-500 to-cyan-500 px-5 py-4 text-white"
+                disabled={isDownloadingLecturerTemplate}
+                className="flex w-full items-center justify-between rounded-2xl bg-gradient-to-r from-blue-500 to-cyan-500 px-5 py-4 text-white disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <span className="flex items-center gap-2 text-sm font-semibold">
                   <UserRound className="w-4 h-4" />
-                  Lecturer Template
+                  {isDownloadingLecturerTemplate
+                    ? "Downloading..."
+                    : "Lecturer Template"}
                 </span>
-                <Download className="w-4 h-4" />
+                {isDownloadingLecturerTemplate ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Download className="w-4 h-4" />
+                )}
               </button>
             </div>
           </div>
@@ -953,14 +1135,19 @@ export default function AccountManagementPage() {
                     !studentUploadParams.majorId ||
                     uploadMetaLoading ||
                     !semesters.length ||
-                    !majors.length
+                    !majors.length ||
+                    isImportingFile
                   }
                 >
                   <span className="flex items-center gap-2 text-sm font-semibold">
                     <GraduationCap className="w-4 h-4" />
                     Choose Student-Group File
                   </span>
-                  <Upload className="w-4 h-4" />
+                  {isImportingFile ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Upload className="w-4 h-4" />
+                  )}
                 </button>
                 <input
                   ref={studentFileInputRef}
@@ -989,12 +1176,17 @@ export default function AccountManagementPage() {
                   type="button"
                   onClick={() => lecturerFileInputRef.current?.click()}
                   className="flex w-full items-center justify-between rounded-2xl bg-gradient-to-r from-blue-500 to-cyan-500 px-5 py-4 text-white"
+                  disabled={isImportingFile}
                 >
                   <span className="flex items-center gap-2 text-sm font-semibold">
                     <UserRound className="w-4 h-4" />
                     Choose Lecturer File
                   </span>
-                  <Upload className="w-4 h-4" />
+                  {isImportingFile ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Upload className="w-4 h-4" />
+                  )}
                 </button>
                 <input
                   ref={lecturerFileInputRef}

@@ -10,7 +10,11 @@ import { groupsApi } from "@/lib/api/groups";
 import { committeeAssignmentsApi } from "@/lib/api/committee-assignments";
 import { councilsApi } from "@/lib/api/councils";
 import { authApi } from "@/lib/api/auth";
+import { memberNotesApi } from "@/lib/api/member-notes";
+import { reportsApi } from "@/lib/api/reports";
+import { defenseSessionsApi } from "@/lib/api/defense-sessions";
 import { swalConfig } from "@/lib/utils/sweetAlert";
+import { getApiErrorMessage } from "@/lib/utils/apiError";
 import type {
   MajorDto,
   SemesterDto,
@@ -20,6 +24,9 @@ import type {
   CommitteeAssignmentDto,
   CouncilDto,
   UserDto,
+  MemberNoteDto,
+  ReportDto,
+  DefenseSessionDto,
 } from "@/lib/models";
 
 // Import các Modal đã tạo:
@@ -44,6 +51,7 @@ import AddRubricModal from "../dashboard/components/AddRubricModal";
 import EditRubricModal from "../dashboard/components/EditRubricModal";
 import EditAssignmentModal from "../dashboard/components/EditAssignmentModal";
 import EditGroupModal from "../../moderator/create-sessions/components/EditGroupModal";
+import EditReportModal from "../dashboard/components/EditReportModal";
 
 import {
   ClipboardList,
@@ -67,14 +75,7 @@ interface Task {
   assignedTo: string;
   status: "Pending" | "Completed" | "Inprogress";
 }
-interface Note {
-  id: number;
-  committeeAssignmentId: string;
-  userName: string | null;
-  groupId: string;
-  noteContent: string;
-  createdAt: string;
-}
+// Note interface removed - using MemberNoteDto from models
 
 type AdminTabKey =
   | "tasks"
@@ -83,6 +84,7 @@ type AdminTabKey =
   | "groups"
   | "rubrics"
   | "notes"
+  | "reports"
   | "assignments";
 
 const formatDateInputValue = (value?: string) => {
@@ -121,6 +123,7 @@ const adminTabs: {
   { key: "groups", label: "Groups", icon: Users },
   { key: "rubrics", label: "Rubrics", icon: BookOpen },
   { key: "notes", label: "Notes", icon: StickyNote },
+  { key: "reports", label: "Reports", icon: BookOpen },
   { key: "assignments", label: "Assignments", icon: Users },
 ];
 
@@ -146,6 +149,8 @@ export default function AdminDataManagementPage() {
   const [editingAssignment, setEditingAssignment] =
     useState<CommitteeAssignmentDto | null>(null);
   const [editingGroup, setEditingGroup] = useState<GroupDto | null>(null);
+  const [editingNote, setEditingNote] = useState<MemberNoteDto | null>(null);
+  const [editingReport, setEditingReport] = useState<ReportDto | null>(null);
 
   /* ============ State data ============ */
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -179,37 +184,13 @@ export default function AdminDataManagementPage() {
     },
   ]);
   const [rubrics, setRubrics] = useState<RubricDto[]>([]);
-  const [notes] = useState<Note[]>([
-    {
-      id: 1,
-      committeeAssignmentId: "486D75CF-3E93-4DA5-A231-885BE87D07AF",
-      userName: null,
-      groupId: "457144B6-D625-4F5B-8BAE-AB1E882DA8DE",
-      noteContent:
-        "Ghi chú: Sinh viên trình bày tốt. Cần theo dõi thêm về phần bảo mật dữ liệu người dùng. Đề xuất bổ sung thêm tính năng tự động phát hiện cảm xúc tiêu cực.",
-      createdAt: "2025-11-13T03:26:07.7033333",
-    },
-    {
-      id: 2,
-      committeeAssignmentId: "486D75CF-3E93-4DA5-A231-885BE87D07AF",
-      userName: null,
-      groupId: "457144B6-D625-4F5B-8BAE-AB1E882DA8DE",
-      noteContent:
-        "Nhóm có sự chuẩn bị tốt cho phần demo. Tuy nhiên cần cải thiện thuật toán xử lý dữ liệu để tăng độ chính xác.",
-      createdAt: "2025-11-14T08:15:22.1234567",
-    },
-    {
-      id: 3,
-      committeeAssignmentId: "A123B456-C789-4DEF-8901-234567890ABC",
-      userName: null,
-      groupId: "789ABC12-3456-789D-EFAB-CDEF01234567",
-      noteContent:
-        "Đề tài có tính ứng dụng cao. Sinh viên cần bổ sung thêm phần testing và viết documentation chi tiết hơn.",
-      createdAt: "2025-11-15T14:30:45.9876543",
-    },
-  ]);
+  const [notes, setNotes] = useState<MemberNoteDto[]>([]);
+  const [reports, setReports] = useState<ReportDto[]>([]);
   const [assignments, setAssignments] = useState<CommitteeAssignmentDto[]>([]);
   const [users, setUsers] = useState<UserDto[]>([]);
+  const [defenseSessions, setDefenseSessions] = useState<DefenseSessionDto[]>(
+    []
+  );
 
   // Pagination state for each tab
   const [taskPage, setTaskPage] = useState(1);
@@ -218,6 +199,7 @@ export default function AdminDataManagementPage() {
   const [groupPage, setGroupPage] = useState(1);
   const [rubricPage, setRubricPage] = useState(1);
   const [notePage, setNotePage] = useState(1);
+  const [reportPage, setReportPage] = useState(1);
   const [assignmentPage, setAssignmentPage] = useState(1);
 
   // Map userId to fullName for quick lookup
@@ -250,6 +232,25 @@ export default function AdminDataManagementPage() {
     return map;
   }, [councils]);
 
+  // Map sessionId to session name for quick lookup
+  const sessionMap = useMemo(() => {
+    const map = new Map<number, string>();
+    defenseSessions.forEach((session) => {
+      // Create session name from topic title or defense date
+      let sessionName = session.topicTitle_VN || session.topicTitle_EN;
+      if (!sessionName && session.defenseDate) {
+        sessionName = `Session ${new Date(
+          session.defenseDate
+        ).toLocaleDateString("vi-VN")}`;
+      }
+      if (!sessionName) {
+        sessionName = `Session ${session.id}`;
+      }
+      map.set(session.id, sessionName);
+    });
+    return map;
+  }, [defenseSessions]);
+
   // Reset page to 1 when switching tabs
   useEffect(() => {
     setTaskPage(1);
@@ -258,6 +259,7 @@ export default function AdminDataManagementPage() {
     setGroupPage(1);
     setRubricPage(1);
     setNotePage(1);
+    setReportPage(1);
     setAssignmentPage(1);
   }, [activeTab]);
 
@@ -274,6 +276,9 @@ export default function AdminDataManagementPage() {
           assignmentsRes,
           councilsRes,
           usersRes,
+          notesRes,
+          reportsRes,
+          sessionsRes,
         ] = await Promise.all([
           majorsApi.getAll().catch(() => ({ data: [] })),
           semestersApi.getAll().catch(() => ({ data: [] })),
@@ -283,6 +288,9 @@ export default function AdminDataManagementPage() {
           committeeAssignmentsApi.getAll().catch(() => ({ data: [] })),
           councilsApi.getAll(false).catch(() => ({ data: [] })),
           authApi.getAllUsers().catch(() => ({ data: [] })),
+          memberNotesApi.getAll().catch(() => ({ data: [] })),
+          reportsApi.getAll().catch(() => ({ data: [] })),
+          defenseSessionsApi.getAll().catch(() => ({ data: [] })),
         ]);
 
         setMajors(majorsRes.data || []);
@@ -292,6 +300,9 @@ export default function AdminDataManagementPage() {
         setCouncils(councilsRes.data || []);
         setAssignments(assignmentsRes.data || []);
         setUsers(usersRes.data || []);
+        setNotes(notesRes.data || []);
+        setReports(reportsRes.data || []);
+        setDefenseSessions(sessionsRes.data || []);
 
         // Transform tasks
         const transformedTasks = (tasksRes.data || []).map(
@@ -386,6 +397,24 @@ export default function AdminDataManagementPage() {
       ),
     [assignments, searchQuery]
   );
+  const filteredNotes = useMemo(
+    () =>
+      getFilteredData(
+        notes,
+        ["noteContent", "committeeAssignmentId", "groupId", "userName"],
+        searchQuery
+      ),
+    [notes, searchQuery]
+  );
+  const filteredReports = useMemo(
+    () =>
+      getFilteredData(
+        reports,
+        ["summary", "filePath", "sessionId"],
+        searchQuery
+      ),
+    [reports, searchQuery]
+  );
 
   // Pagination calculations
   const paginatedTasks = useMemo(() => {
@@ -415,8 +444,12 @@ export default function AdminDataManagementPage() {
 
   const paginatedNotes = useMemo(() => {
     const startIndex = (notePage - 1) * PAGE_SIZE;
-    return notes.slice(startIndex, startIndex + PAGE_SIZE);
-  }, [notes, notePage]);
+    return filteredNotes.slice(startIndex, startIndex + PAGE_SIZE);
+  }, [filteredNotes, notePage]);
+  const paginatedReports = useMemo(() => {
+    const startIndex = (reportPage - 1) * PAGE_SIZE;
+    return filteredReports.slice(startIndex, startIndex + PAGE_SIZE);
+  }, [filteredReports, reportPage]);
 
   const paginatedAssignments = useMemo(() => {
     const startIndex = (assignmentPage - 1) * PAGE_SIZE;
@@ -444,7 +477,14 @@ export default function AdminDataManagementPage() {
     1,
     Math.ceil(filteredRubrics.length / PAGE_SIZE)
   );
-  const noteTotalPages = Math.max(1, Math.ceil(notes.length / PAGE_SIZE));
+  const noteTotalPages = Math.max(
+    1,
+    Math.ceil(filteredNotes.length / PAGE_SIZE)
+  );
+  const reportTotalPages = Math.max(
+    1,
+    Math.ceil(filteredReports.length / PAGE_SIZE)
+  );
   const assignmentTotalPages = Math.max(
     1,
     Math.ceil(filteredAssignments.length / PAGE_SIZE)
@@ -568,6 +608,7 @@ export default function AdminDataManagementPage() {
         assignedToId: String(assignedToAssignment.id),
         rubricId: firstRubric,
         status: backendStatus,
+        sessionId: 0, // Default sessionId value
       });
       const response = await projectTasksApi.getAll();
       const transformedTasks = (response.data || []).map(
@@ -591,7 +632,7 @@ export default function AdminDataManagementPage() {
       console.error("Error creating task:", error);
       await swalConfig.error(
         "Error Creating Task",
-        error.message || "Failed to create task"
+        getApiErrorMessage(error, "Failed to create task")
       );
     }
   };
@@ -627,6 +668,7 @@ export default function AdminDataManagementPage() {
           originalTask?.assignedTo || "18D005EB-D9DB-4C84-9AD3-459C209708FE", // Keep original assignedTo
         rubricId: 1, // Default rubric ID - you may want to make this configurable
         status: backendStatus,
+        sessionId: 0, // Default sessionId value for update
       };
 
       console.log("Update payload:", updatePayload);
@@ -655,19 +697,7 @@ export default function AdminDataManagementPage() {
       console.error("Error updating task:", error);
       console.error("Full error object:", JSON.stringify(error, null, 2));
 
-      let errorMessage = error.message || "Failed to update task";
-
-      // Check for more detailed error info
-      if (error.response?.data?.message) {
-        errorMessage = error.response.data.message;
-      } else if (error.response?.data?.details) {
-        errorMessage = error.response.data.details;
-      }
-      if (error.message?.includes("500")) {
-        errorMessage =
-          "Server error while updating the task. Please verify the task exists and try again.";
-      }
-
+      const errorMessage = getApiErrorMessage(error, "Failed to update task");
       await swalConfig.error("Error Updating Task", errorMessage);
     }
   };
@@ -688,7 +718,7 @@ export default function AdminDataManagementPage() {
         console.error("Error deleting task:", error);
         await swalConfig.error(
           "Error Deleting Task",
-          error.message || "Failed to delete task"
+          getApiErrorMessage(error, "Failed to delete task")
         );
       }
     }
@@ -815,7 +845,7 @@ export default function AdminDataManagementPage() {
         console.error("Error deleting semester:", error);
         await swalConfig.error(
           "Error Deleting Semester",
-          error.message || "Failed to delete semester"
+          getApiErrorMessage(error, "Failed to delete semester")
         );
       }
     }
@@ -835,7 +865,7 @@ export default function AdminDataManagementPage() {
       console.error("Error creating major:", error);
       await swalConfig.error(
         "Error Creating Major",
-        error.message || "Failed to create major"
+        getApiErrorMessage(error, "Failed to create major")
       );
     }
   };
@@ -854,7 +884,7 @@ export default function AdminDataManagementPage() {
       console.error("Error updating major:", error);
       await swalConfig.error(
         "Error Updating Major",
-        error.message || "Failed to update major"
+        getApiErrorMessage(error, "Failed to update major")
       );
     }
   };
@@ -886,6 +916,7 @@ export default function AdminDataManagementPage() {
       await rubricsApi.create({
         rubricName: data.name,
         description: data.description,
+        majorId: 1, // Default majorId value
       });
       const response = await rubricsApi.getAll();
       setRubrics(response.data || []);
@@ -895,7 +926,7 @@ export default function AdminDataManagementPage() {
       console.error("Error creating rubric:", error);
       await swalConfig.error(
         "Error Creating Rubric",
-        error.message || "Failed to create rubric"
+        getApiErrorMessage(error, "Failed to create rubric")
       );
     }
   };
@@ -914,7 +945,7 @@ export default function AdminDataManagementPage() {
       console.error("Error updating rubric:", error);
       await swalConfig.error(
         "Error Updating Rubric",
-        error.message || "Failed to update rubric"
+        getApiErrorMessage(error, "Failed to update rubric")
       );
     }
   };
@@ -925,7 +956,7 @@ export default function AdminDataManagementPage() {
     data: { lecturerId: string; councilId: string; role: string }
   ) => {
     try {
-      // Find the original assignment to get defenseSessionId
+      // Find the original assignment to get councilRoleId
       const originalAssignment = assignments.find((a) => String(a.id) === id);
       if (!originalAssignment) {
         await swalConfig.error("Error", "Assignment not found");
@@ -936,33 +967,73 @@ export default function AdminDataManagementPage() {
         ? parseInt(data.councilId, 10)
         : originalAssignment.councilId;
 
-      const result = await committeeAssignmentsApi.update(id, {
+      // Map role name to councilRoleId
+      // Mapping: Chair=0, Member=1, Secretary=2
+      const roleMapping = new Map<string, number>([
+        ["Chair", 0],
+        ["Member", 1],
+        ["Secretary", 2],
+      ]);
+
+      // If role changed, use mapping. Otherwise, try to use existing councilRoleId
+      const currentRoleName =
+        (originalAssignment as any).roleName || originalAssignment.role;
+      let councilRoleId: number | undefined;
+
+      if (data.role !== currentRoleName) {
+        // Role changed, map new role to councilRoleId
+        councilRoleId = roleMapping.get(data.role);
+      } else {
+        // Role unchanged, use existing councilRoleId if available
+        councilRoleId = (originalAssignment as any).councilRoleId;
+        // If councilRoleId is not available, map from role name
+        if (councilRoleId === undefined || councilRoleId === null) {
+          councilRoleId = roleMapping.get(data.role);
+        }
+      }
+
+      // Validate role and councilRoleId
+      if (!data.role || !roleMapping.has(data.role)) {
+        await swalConfig.error(
+          "Error",
+          `Invalid role: "${data.role}". Valid roles are: Chair, Member, Secretary.`
+        );
+        return;
+      }
+
+      // If councilRoleId is still undefined, use mapping
+      if (councilRoleId === undefined) {
+        councilRoleId = roleMapping.get(data.role);
+      }
+
+      // Final validation - councilRoleId should be 0, 1, or 2
+      if (
+        councilRoleId === undefined ||
+        (councilRoleId !== 0 && councilRoleId !== 1 && councilRoleId !== 2)
+      ) {
+        await swalConfig.error(
+          "Error",
+          `Cannot determine Council Role ID for role: "${data.role}". Please contact administrator.`
+        );
+        return;
+      }
+
+      await committeeAssignmentsApi.update(id, {
         lecturerId: data.lecturerId || originalAssignment.lecturerId,
         councilId,
-        defenseSessionId: originalAssignment.defenseSessionId,
-        role: data.role,
+        councilRoleId,
       });
 
-      if (result.code === 200 || result.message?.includes("success")) {
-        await swalConfig.success(
-          "Success!",
-          "Assignment updated successfully!"
-        );
-        // Reload assignments to get updated data
-        const response = await committeeAssignmentsApi.getAll();
-        setAssignments(response.data || []);
-        setEditingAssignment(null);
-      } else {
-        await swalConfig.error(
-          "Update Failed",
-          result.message || "Failed to update assignment"
-        );
-      }
+      await swalConfig.success("Success!", "Assignment updated successfully!");
+      // Reload assignments to get updated data
+      const response = await committeeAssignmentsApi.getAll();
+      setAssignments(response.data || []);
+      setEditingAssignment(null);
     } catch (error: any) {
       console.error("Error updating assignment:", error);
       await swalConfig.error(
         "Error",
-        "An error occurred while updating the assignment"
+        error.message || "An error occurred while updating the assignment"
       );
     }
   };
@@ -1003,7 +1074,7 @@ export default function AdminDataManagementPage() {
     } catch (error: any) {
       await swalConfig.error(
         "Error Editing Group",
-        error.message || "Failed to edit group"
+        getApiErrorMessage(error, "Failed to edit group")
       );
     }
   };
@@ -1024,7 +1095,111 @@ export default function AdminDataManagementPage() {
         console.error("Error deleting rubric:", error);
         await swalConfig.error(
           "Error Deleting Rubric",
-          error.message || "Failed to delete rubric"
+          getApiErrorMessage(error, "Failed to delete rubric")
+        );
+      }
+    }
+  };
+
+  const handleEditNote = async (id: number, content: string) => {
+    try {
+      await memberNotesApi.update(id, { content });
+      const response = await memberNotesApi.getAll();
+      setNotes(response.data || []);
+      setEditingNote(null);
+      await swalConfig.success("Success!", "Note updated successfully!");
+    } catch (error: any) {
+      await swalConfig.error(
+        "Error Editing Note",
+        getApiErrorMessage(error, "Failed to edit note")
+      );
+    }
+  };
+
+  const handleDeleteNote = async (id: number) => {
+    const result = await swalConfig.confirm(
+      "Delete Note?",
+      `Are you sure you want to delete note with ID: ${id}?`,
+      "Yes, delete it!"
+    );
+
+    if (result.isConfirmed) {
+      try {
+        await memberNotesApi.delete(id);
+        const response = await memberNotesApi.getAll();
+        setNotes(response.data || []);
+        await swalConfig.success("Deleted!", "Note deleted successfully!");
+      } catch (error: any) {
+        console.error("Error deleting note:", error);
+        await swalConfig.error(
+          "Error Deleting Note",
+          getApiErrorMessage(error, "Failed to delete note")
+        );
+      }
+    }
+  };
+
+  const handleEditReport = async (
+    id: number,
+    data: { summary?: string; filePath?: string }
+  ) => {
+    try {
+      // Find the original report to get sessionId and status
+      const originalReport = reports.find((r) => r.id === id);
+      if (!originalReport) {
+        await swalConfig.error("Error", "Report not found");
+        return;
+      }
+
+      // Prepare update data matching backend ReportUpdateDto
+      // Backend requires: SessionId (int), FilePath (string), SummaryText (string?), Status (string)
+      const updateData: any = {
+        sessionId: originalReport.sessionId,
+        filePath:
+          data.filePath !== undefined
+            ? data.filePath
+            : originalReport.filePath || "",
+        // Prefer the new summary from modal; fall back to backend SummaryText
+        summaryText:
+          data.summary !== undefined
+            ? data.summary
+            : originalReport.summaryText,
+        status: originalReport.status || "",
+      };
+
+      console.log("Updating report with data:", updateData);
+
+      await reportsApi.update(id, updateData);
+      const response = await reportsApi.getAll();
+      setReports(response.data || []);
+      setEditingReport(null);
+      await swalConfig.success("Success!", "Report updated successfully!");
+    } catch (error: any) {
+      await swalConfig.error(
+        "Error Editing Report",
+        getApiErrorMessage(error, "Failed to edit report")
+      );
+    }
+  };
+
+  const handleDeleteReport = async (id: number) => {
+    const result = await swalConfig.confirm(
+      "Delete Report?",
+      `Are you sure you want to delete report with ID: ${id}?`,
+      "Yes, delete it!"
+    );
+
+    if (result.isConfirmed) {
+      try {
+        await reportsApi.delete(id);
+        const response = await reportsApi.getAll();
+        setReports(response.data || []);
+        await swalConfig.success("Deleted!", "Report deleted successfully!");
+      } catch (error: any) {
+        console.error("Error deleting report:", error);
+        await swalConfig.error(
+          "Error Deleting Report",
+          error.message || "Failed to delete report"
         );
       }
     }
@@ -1032,18 +1207,27 @@ export default function AdminDataManagementPage() {
 
   const handleDeleteAssignment = async (id: number | string) => {
     const assignmentId = String(id);
+
+    // Find assignment to show better confirmation message
+    const assignment = assignments.find((a) => String(a.id) === assignmentId);
+    const lecturerName = assignment
+      ? userMap.get(assignment.lecturerId) || assignment.lecturerId
+      : assignmentId;
+
     const result = await swalConfig.confirm(
       "Delete Assignment?",
-      `Are you sure you want to delete assignment with ID: ${assignmentId}?`,
+      `Are you sure you want to delete assignment for "${lecturerName}" (ID: ${assignmentId})?`,
       "Yes, delete it!"
     );
 
     if (result.isConfirmed) {
       try {
         await committeeAssignmentsApi.delete(assignmentId);
-        setAssignments((prev) =>
-          prev.filter((a) => String(a.id) !== assignmentId)
-        );
+
+        // Reload assignments from API to ensure data consistency
+        const response = await committeeAssignmentsApi.getAll();
+        setAssignments(response.data || []);
+
         await swalConfig.success(
           "Deleted!",
           "Assignment deleted successfully!"
@@ -1052,7 +1236,7 @@ export default function AdminDataManagementPage() {
         console.error("Error deleting assignment:", error);
         await swalConfig.error(
           "Error Deleting Assignment",
-          error.message || "Failed to delete assignment"
+          getApiErrorMessage(error, "Failed to delete assignment")
         );
       }
     }
@@ -1074,7 +1258,7 @@ export default function AdminDataManagementPage() {
         console.error("Error deleting group:", error);
         await swalConfig.error(
           "Error Deleting Group",
-          error.message || "Failed to delete group"
+          getApiErrorMessage(error, "Failed to delete group")
         );
       }
     }
@@ -1388,15 +1572,50 @@ export default function AdminDataManagementPage() {
       {activeTab === "notes" && (
         <>
           {renderHeader("Member Notes")}
+          {renderSearch("Search notes...")}
           {renderTable(
-            ["ID", "Assignment ID", "Group ID", "Note Content", "Created At"],
+            [
+              "ID",
+              "Assignment ID",
+              "Group ID",
+              "Note Content",
+              "Created At",
+              "Actions",
+            ],
             paginatedNotes.map((n) => (
               <tr key={n.id}>
                 <td>{n.id}</td>
                 <td>{n.committeeAssignmentId}</td>
                 <td>{n.groupId}</td>
-                <td>{n.noteContent}</td>
+                <td className="max-w-md truncate">{n.noteContent}</td>
                 <td>{new Date(n.createdAt).toLocaleString()}</td>
+                <td className="text-center align-middle">
+                  <div className="flex gap-2 justify-center items-center">
+                    <button
+                      className="btn-subtle"
+                      onClick={() => {
+                        const newContent = prompt(
+                          "Edit note content:",
+                          n.noteContent
+                        );
+                        if (
+                          newContent !== null &&
+                          newContent !== n.noteContent
+                        ) {
+                          handleEditNote(n.id, newContent);
+                        }
+                      }}
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button
+                      className="btn-subtle text-red-600 hover:bg-red-50"
+                      onClick={() => handleDeleteNote(n.id)}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </td>
               </tr>
             ))
           )}
@@ -1404,11 +1623,61 @@ export default function AdminDataManagementPage() {
         </>
       )}
 
+      {activeTab === "reports" && (
+        <>
+          {renderHeader("Reports")}
+          {renderSearch("Search reports...")}
+          {renderTable(
+            [
+              "ID",
+              "Session Name",
+              "Summary",
+              "File Path",
+              "Generated Date",
+              "Actions",
+            ],
+            paginatedReports.map((r) => (
+              <tr key={r.id}>
+                <td>{r.id}</td>
+                <td>
+                  {sessionMap.get(r.sessionId) || `Session ${r.sessionId}`}
+                </td>
+                <td className="max-w-md truncate">{r.summary}</td>
+                <td className="max-w-md truncate">{r.filePath || "N/A"}</td>
+                <td>
+                  {r.generatedDate
+                    ? new Date(r.generatedDate).toLocaleString()
+                    : "N/A"}
+                </td>
+                <td className="text-center align-middle">
+                  <div className="flex gap-2 justify-center items-center">
+                    <button
+                      className="btn-subtle"
+                      onClick={() => setEditingReport(r)}
+                      title="Edit"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button
+                      className="btn-subtle text-red-600 hover:bg-red-50"
+                      onClick={() => handleDeleteReport(r.id)}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))
+          )}
+          {renderPagination(reportPage, reportTotalPages, setReportPage)}
+        </>
+      )}
+
       {activeTab === "assignments" && (
         <>
           {renderHeader("Committee Assignments")}
           {renderTable(
-            ["ID", "Lecturer", "Council Name", "Role"],
+            ["ID", "Lecturer", "Council Name", "Role", "Actions"],
             paginatedAssignments.map((a) => (
               <tr key={a.id}>
                 <td>{a.id}</td>
@@ -1421,6 +1690,24 @@ export default function AdminDataManagementPage() {
                   {councilMap.get(a.councilId) || `Council ${a.councilId}`}
                 </td>
                 <td>{(a as any).roleName || a.role}</td>
+                <td>
+                  <div className="flex items-center gap-2">
+                    <button
+                      className="btn-subtle p-1"
+                      onClick={() => setEditingAssignment(a)}
+                      title="Edit"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button
+                      className="btn-subtle p-1 text-red-600 hover:bg-red-50"
+                      onClick={() => handleDeleteAssignment(a.id)}
+                      title="Delete"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </td>
               </tr>
             ))
           )}
@@ -1562,7 +1849,50 @@ export default function AdminDataManagementPage() {
           }))}
         />
       )}
-      {/* Assignment actions temporarily disabled */}
+      {editingAssignment && (
+        <EditAssignmentModal
+          isOpen
+          onClose={() => setEditingAssignment(null)}
+          onSubmit={(id, data) => handleEditAssignment(id, data)}
+          assignmentData={{
+            id: String(editingAssignment.id),
+            lecturerId: editingAssignment.lecturerId,
+            councilId: String(editingAssignment.councilId),
+            role: editingAssignment.role || "",
+            roleName:
+              (editingAssignment as any).roleName ||
+              editingAssignment.role ||
+              "",
+          }}
+          lecturers={users
+            .filter(
+              (u) =>
+                u.role && (u.role === "Lecturer" || u.role === "Administrator")
+            )
+            .map((u) => ({ id: u.id, fullName: u.fullName }))}
+          councils={councils.map((c) => ({
+            id: String(c.id),
+            councilName: c.councilName || `Council ${c.id}`,
+          }))}
+        />
+      )}
+      {editingReport && (
+        <EditReportModal
+          isOpen
+          onClose={() => setEditingReport(null)}
+          onSubmit={(id, data) => handleEditReport(id, data)}
+          reportData={{
+            id: editingReport.id,
+            sessionId: editingReport.sessionId,
+            summary: editingReport.summary,
+            filePath: editingReport.filePath,
+          }}
+          sessionName={
+            sessionMap.get(editingReport.sessionId) ||
+            `Session ${editingReport.sessionId}`
+          }
+        />
+      )}
     </main>
   );
 }
