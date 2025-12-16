@@ -780,6 +780,14 @@ export default function ViewScorePage() {
       return;
     }
 
+    if (!currentUserId) {
+      swalConfig.error(
+        "Error",
+        "User ID not found. Please refresh the page and try again."
+      );
+      return;
+    }
+
     try {
       setSaving(true);
       const loadingSwal = swalConfig.loading(
@@ -798,22 +806,113 @@ export default function ViewScorePage() {
           if (!rubric) continue;
 
           if (existingScoreId && existingScoreId > 0) {
-            // Update existing score
-            await scoresApi.update(existingScoreId, {
-              value: score,
-              comment: criterionComment || undefined,
-            });
+            // Update existing score - validate rubric ID from name for consistency
+            try {
+              const rubricName = (rubric.rubricName || rubric.name)?.trim();
+              if (rubricName) {
+                try {
+                  const rubricIdRes = await rubricsApi.getIdByName(rubricName);
+                  const validatedRubricId = rubricIdRes.data;
+                  console.log(`✅ Validated rubric ID ${validatedRubricId} for update, name: "${rubricName}"`);
+                } catch (nameError: any) {
+                  console.warn(`⚠️ Could not validate rubric by name "${rubricName}" for update:`, nameError.message);
+                  // Continue with update anyway since rubricId is not required in ScoreUpdateDto
+                }
+              }
+              
+              await scoresApi.update(existingScoreId, {
+                value: score,
+                comment: criterionComment || undefined,
+              });
+            } catch (error) {
+              console.error("Error updating score:", error);
+              // Continue with next score instead of breaking the entire save process
+            }
           } else if (score > 0) {
-            // Create new score
-            const newScore: ScoreCreateDto = {
-              value: score,
-              rubricId: rubric.id,
-              evaluatorId: currentUserId,
-              studentId: student.id,
-              sessionId: sessionId,
-              comment: criterionComment || undefined,
-            };
-            await scoresApi.create(newScore);
+            // Create new score - get rubric ID by name using API, with fallback to rubric.id
+            let rubricId: number;
+            try {
+              // Get rubric ID by name using API
+              const rubricName = (rubric.rubricName || rubric.name)?.trim();
+              if (!rubricName) {
+                console.error("Missing rubric name for rubric:", rubric);
+                // Fallback: try to use rubric.id if available
+                if (rubric.id && typeof rubric.id === "number") {
+                  console.warn("Using rubric.id as fallback:", rubric.id);
+                  rubricId = rubric.id;
+                } else {
+                  continue; // Skip this rubric if no name and no id
+                }
+              } else {
+                try {
+                  const rubricIdRes = await rubricsApi.getIdByName(rubricName);
+                  rubricId = rubricIdRes.data;
+                  console.log(`✅ Found rubric ID ${rubricId} for name: "${rubricName}"`);
+                } catch (nameError: any) {
+                  console.warn(`⚠️ Could not find rubric by name "${rubricName}":`, nameError.message);
+                  // Fallback: try to use rubric.id if available
+                  if (rubric.id && typeof rubric.id === "number") {
+                    console.warn(`Using rubric.id ${rubric.id} as fallback for name "${rubricName}"`);
+                    rubricId = rubric.id;
+                  } else {
+                    console.error(`❌ Cannot create score: rubric not found by name "${rubricName}" and no rubric.id available`);
+                    continue; // Skip this rubric
+                  }
+                }
+              }
+
+              const newScore: ScoreCreateDto = {
+                value: score,
+                rubricId: rubricId,
+                evaluatorId: currentUserId,
+                studentId: student.id,
+                sessionId: sessionId,
+                comment: criterionComment || undefined,
+              };
+
+              // Debug logging before API call
+              console.log("Creating score with DTO:", {
+                value: score,
+                rubricId,
+                evaluatorId: currentUserId,
+                studentId: student.id,
+                sessionId,
+                comment: criterionComment,
+                hasValidData: !!(
+                  score &&
+                  rubricId &&
+                  currentUserId &&
+                  student.id &&
+                  sessionId
+                ),
+              });
+
+              // Validate all required fields are present
+              if (
+                !score ||
+                !rubricId ||
+                !currentUserId ||
+                !student.id ||
+                !sessionId
+              ) {
+                console.error("Missing required fields for score creation:", {
+                  score: !!score,
+                  rubricId: !!rubricId,
+                  currentUserId: !!currentUserId,
+                  studentId: !!student.id,
+                  sessionId: !!sessionId,
+                });
+                continue; // Skip this score
+              }
+
+              await scoresApi.create(newScore);
+            } catch (error) {
+              console.error(
+                "Error getting rubric ID or creating score:",
+                error
+              );
+              // Continue with next score instead of breaking the entire save process
+            }
           }
         }
 

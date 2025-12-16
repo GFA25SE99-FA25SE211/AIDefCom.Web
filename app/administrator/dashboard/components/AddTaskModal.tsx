@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import Modal from "../../../moderator/create-sessions/components/Modal";
 import { Plus } from "lucide-react";
 import { swalConfig } from "@/lib/utils/sweetAlert";
+import { projectTasksApi } from "@/lib/api/project-tasks";
 
 interface AddTaskData {
   title: string;
@@ -71,7 +72,7 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({
     };
   }, []);
 
-  // Check for duplicate task title
+  // Check for duplicate task title using API
   const checkTitleDuplicate = async (titleValue: string) => {
     if (!titleValue.trim()) {
       setTitleError("");
@@ -82,16 +83,10 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({
     setIsCheckingTitle(true);
     setTitleError("");
 
-    // Simulate delay for better UX
-    await new Promise((resolve) => setTimeout(resolve, 300));
-
     try {
-      const titleExists = existingTasks.some(
-        (task) => task.title.toLowerCase() === titleValue.toLowerCase()
-      );
-
-      if (titleExists) {
-        setTitleError("Tên task này đã tồn tại trong hệ thống");
+      const exists = await projectTasksApi.checkTitleExists(titleValue.trim());
+      if (exists) {
+        setTitleError("This task title already exists in the system");
       } else {
         setTitleError("");
       }
@@ -122,7 +117,7 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({
     e.preventDefault();
 
     if (titleError) {
-      swalConfig.error("Tên task không hợp lệ", "Vui lòng sử dụng tên khác.");
+      swalConfig.error("Invalid Task Title", "Please use a different title.");
       return;
     }
 
@@ -194,7 +189,7 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({
           )}
           {isCheckingTitle && (
             <span className="text-blue-500 text-sm mt-1">
-              Đang kiểm tra tên task...
+              Checking task title...
             </span>
           )}
         </div>

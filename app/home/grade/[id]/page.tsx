@@ -570,16 +570,42 @@ export default function ViewScorePage() {
               comment: criterionComment || undefined,
             });
           } else if (score > 0) {
-            // Create new score
-            const newScore: ScoreCreateDto = {
-              value: score,
-              rubricId: rubric.id,
-              evaluatorId: currentUserId,
-              studentId: student.id,
-              sessionId: sessionId,
-              comment: criterionComment || undefined,
-            };
-            await scoresApi.create(newScore);
+            // Create new score - get rubric ID by name first
+            let rubricId: number;
+            try {
+              // Use rubric.id if available, otherwise get ID by name
+              if (rubric.id && typeof rubric.id === "number") {
+                rubricId = rubric.id;
+              } else {
+                // Get rubric ID by name using the new API
+                const rubricName = rubric.rubricName || rubric.name;
+                if (!rubricName) {
+                  console.error("Missing rubric name for rubric:", rubric);
+                  continue; // Skip this rubric if no name
+                }
+
+                const rubricIdRes = await projectTasksApi.getRubricIdByName(
+                  rubricName
+                );
+                rubricId = rubricIdRes.data;
+              }
+
+              const newScore: ScoreCreateDto = {
+                value: score,
+                rubricId: rubricId,
+                evaluatorId: currentUserId,
+                studentId: student.id,
+                sessionId: sessionId,
+                comment: criterionComment || undefined,
+              };
+              await scoresApi.create(newScore);
+            } catch (error) {
+              console.error(
+                "Error getting rubric ID or creating score:",
+                error
+              );
+              // Continue with next score instead of breaking the entire save process
+            }
           }
         }
 

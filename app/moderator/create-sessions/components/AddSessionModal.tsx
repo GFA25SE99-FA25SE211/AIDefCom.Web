@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Modal from "./Modal";
+import { defenseSessionsApi } from "@/lib/api/defense-sessions";
 
 const PlusIcon = () => (
   <svg
@@ -84,6 +85,72 @@ const AddSessionModal: React.FC<AddSessionModalProps> = ({
   const [endTime, setEndTime] = useState("");
   const [status, setStatus] = useState("Scheduled");
   const [councilId, setCouncilId] = useState<number>(0);
+  const [sessionError, setSessionError] = useState("");
+  const [isCheckingSession, setIsCheckingSession] = useState(false);
+  const debounceTimer = useRef<NodeJS.Timeout | null>(null);
+
+  // Reset states when modal opens/closes
+  useEffect(() => {
+    if (isOpen) {
+      setGroupId("");
+      setLocation("");
+      setDate("");
+      setStartTime("");
+      setEndTime("");
+      setStatus("Scheduled");
+      setCouncilId(0);
+      setSessionError("");
+      setIsCheckingSession(false);
+    }
+  }, [isOpen]);
+
+  // Cleanup debounce timer
+  useEffect(() => {
+    return () => {
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current);
+      }
+    };
+  }, []);
+
+  // Handle date/time/group change with debounce
+  useEffect(() => {
+    // Clear previous timer
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current);
+    }
+
+    if (groupId && date && startTime) {
+      setIsCheckingSession(true);
+      setSessionError("");
+
+      // Set new timer
+      debounceTimer.current = setTimeout(async () => {
+        try {
+          const exists = await defenseSessionsApi.checkSessionExists(groupId, date, startTime);
+          if (exists) {
+            setSessionError("A session already exists for this group on the selected date and time");
+          } else {
+            setSessionError("");
+          }
+        } catch (error) {
+          console.error("Error checking session:", error);
+          setSessionError("");
+        } finally {
+          setIsCheckingSession(false);
+        }
+      }, 500);
+    } else {
+      setSessionError("");
+      setIsCheckingSession(false);
+    }
+
+    return () => {
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current);
+      }
+    };
+  }, [groupId, date, startTime]);
 
   const resetForm = () => {
     setGroupId("");
@@ -102,6 +169,15 @@ const AddSessionModal: React.FC<AddSessionModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (sessionError) {
+      return;
+    }
+
+    if (isCheckingSession) {
+      return;
+    }
+
     onSubmit({
       groupId,
       location,
@@ -263,6 +339,15 @@ const AddSessionModal: React.FC<AddSessionModalProps> = ({
             <option value="Completed">Completed</option>
           </select>
         </div>
+
+        {sessionError && (
+          <div className="text-red-500 text-sm mt-1">{sessionError}</div>
+        )}
+        {isCheckingSession && !sessionError && (
+          <div className="text-blue-500 text-sm mt-1">
+            Checking session availability...
+          </div>
+        )}
       </form>
     </Modal>
   );

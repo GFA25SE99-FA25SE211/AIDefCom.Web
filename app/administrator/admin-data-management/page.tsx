@@ -627,7 +627,10 @@ export default function AdminDataManagementPage() {
       );
       setTasks(transformedTasks);
       setIsAddTaskModalOpen(false);
-      await swalConfig.success("Success!", "Task created successfully!");
+      await swalConfig.success(
+        "Success",
+        "Task has been created successfully!"
+      );
     } catch (error: any) {
       console.error("Error creating task:", error);
       await swalConfig.error(
@@ -692,7 +695,10 @@ export default function AdminDataManagementPage() {
       );
       setTasks(transformedTasks);
       setEditingTask(null);
-      await swalConfig.success("Success!", "Task updated successfully!");
+      await swalConfig.success(
+        "Success",
+        "Task has been updated successfully!"
+      );
     } catch (error: any) {
       console.error("Error updating task:", error);
       console.error("Full error object:", JSON.stringify(error, null, 2));
@@ -704,16 +710,19 @@ export default function AdminDataManagementPage() {
 
   const handleDeleteTask = async (id: number) => {
     const result = await swalConfig.confirm(
-      "Delete Task?",
-      `Are you sure you want to delete task with ID: ${id}?`,
-      "Yes, delete it!"
+      "Delete Task",
+      `Are you sure you want to delete this task? This action cannot be undone.`,
+      "Yes, Delete"
     );
 
     if (result.isConfirmed) {
       try {
         await projectTasksApi.delete(id);
         setTasks(tasks.filter((t) => t.id !== id));
-        await swalConfig.success("Deleted!", "Task deleted successfully!");
+        await swalConfig.success(
+          "Success",
+          "Task has been deleted successfully!"
+        );
       } catch (error: any) {
         console.error("Error deleting task:", error);
         await swalConfig.error(
@@ -753,7 +762,10 @@ export default function AdminDataManagementPage() {
       const response = await semestersApi.getAll();
       setSemesters(response.data || []);
       setIsAddSemesterModalOpen(false);
-      await swalConfig.success("Success!", "Semester created successfully!");
+      await swalConfig.success(
+        "Success",
+        "Semester has been created successfully!"
+      );
     } catch (error: any) {
       console.error("Error creating semester:", error);
 
@@ -807,7 +819,10 @@ export default function AdminDataManagementPage() {
       const response = await semestersApi.getAll();
       setSemesters(response.data || []);
       setEditingSemester(null);
-      await swalConfig.success("Success!", "Semester updated successfully!");
+      await swalConfig.success(
+        "Success",
+        "Semester has been updated successfully!"
+      );
     } catch (error: any) {
       console.error("Error updating semester:", error);
 
@@ -831,16 +846,19 @@ export default function AdminDataManagementPage() {
 
   const handleDeleteSemester = async (id: number) => {
     const result = await swalConfig.confirm(
-      "Delete Semester?",
-      `Are you sure you want to delete semester with ID: ${id}?`,
-      "Yes, delete it!"
+      "Delete Semester",
+      `Are you sure you want to delete this semester? This action cannot be undone.`,
+      "Yes, Delete"
     );
 
     if (result.isConfirmed) {
       try {
         await semestersApi.delete(id);
         setSemesters(semesters.filter((s) => s.id !== id));
-        await swalConfig.success("Deleted!", "Semester deleted successfully!");
+        await swalConfig.success(
+          "Success",
+          "Semester has been deleted successfully!"
+        );
       } catch (error: any) {
         console.error("Error deleting semester:", error);
         await swalConfig.error(
@@ -860,7 +878,10 @@ export default function AdminDataManagementPage() {
       const response = await majorsApi.getAll();
       setMajors(response.data || []);
       setIsAddMajorModalOpen(false);
-      await swalConfig.success("Success!", "Major created successfully!");
+      await swalConfig.success(
+        "Success",
+        "Major has been created successfully!"
+      );
     } catch (error: any) {
       console.error("Error creating major:", error);
       await swalConfig.error(
@@ -879,7 +900,10 @@ export default function AdminDataManagementPage() {
       const response = await majorsApi.getAll();
       setMajors(response.data || []);
       setEditingMajor(null);
-      await swalConfig.success("Success!", "Major updated successfully!");
+      await swalConfig.success(
+        "Success",
+        "Major has been updated successfully!"
+      );
     } catch (error: any) {
       console.error("Error updating major:", error);
       await swalConfig.error(
@@ -891,16 +915,19 @@ export default function AdminDataManagementPage() {
 
   const handleDeleteMajor = async (id: number) => {
     const result = await swalConfig.confirm(
-      "Delete Major?",
-      `Are you sure you want to delete major with ID: ${id}?`,
-      "Yes, delete it!"
+      "Delete Major",
+      `Are you sure you want to delete this major? This action cannot be undone.`,
+      "Yes, Delete"
     );
 
     if (result.isConfirmed) {
       try {
         await majorsApi.delete(id);
         setMajors(majors.filter((m) => m.id !== id));
-        await swalConfig.success("Deleted!", "Major deleted successfully!");
+        await swalConfig.success(
+          "Success",
+          "Major has been deleted successfully!"
+        );
       } catch (error: any) {
         console.error("Error deleting major:", error);
         await swalConfig.error(
@@ -921,7 +948,10 @@ export default function AdminDataManagementPage() {
       const response = await rubricsApi.getAll();
       setRubrics(response.data || []);
       setIsAddRubricModalOpen(false);
-      await swalConfig.success("Success!", "Rubric created successfully!");
+      await swalConfig.success(
+        "Success",
+        "Rubric has been created successfully!"
+      );
     } catch (error: any) {
       console.error("Error creating rubric:", error);
       await swalConfig.error(
@@ -940,7 +970,10 @@ export default function AdminDataManagementPage() {
       const response = await rubricsApi.getAll();
       setRubrics(response.data || []);
       setEditingRubric(null);
-      await swalConfig.success("Success!", "Rubric updated successfully!");
+      await swalConfig.success(
+        "Success",
+        "Rubric has been updated successfully!"
+      );
     } catch (error: any) {
       console.error("Error updating rubric:", error);
       await swalConfig.error(
@@ -1024,7 +1057,10 @@ export default function AdminDataManagementPage() {
         councilRoleId,
       });
 
-      await swalConfig.success("Success!", "Assignment updated successfully!");
+      await swalConfig.success(
+        "Success",
+        "Assignment has been updated successfully!"
+      );
       // Reload assignments to get updated data
       const response = await committeeAssignmentsApi.getAll();
       setAssignments(response.data || []);
@@ -1070,7 +1106,10 @@ export default function AdminDataManagementPage() {
       setGroups(response.data || []);
 
       setEditingGroup(null);
-      await swalConfig.success("Success!", "Group updated successfully!");
+      await swalConfig.success(
+        "Success",
+        "Group has been updated successfully!"
+      );
     } catch (error: any) {
       await swalConfig.error(
         "Error Editing Group",
@@ -1081,16 +1120,19 @@ export default function AdminDataManagementPage() {
 
   const handleDeleteRubric = async (id: number) => {
     const result = await swalConfig.confirm(
-      "Delete Rubric?",
-      `Are you sure you want to delete rubric with ID: ${id}?`,
-      "Yes, delete it!"
+      "Delete Rubric",
+      `Are you sure you want to delete this rubric? This action cannot be undone.`,
+      "Yes, Delete"
     );
 
     if (result.isConfirmed) {
       try {
         await rubricsApi.delete(id);
         setRubrics(rubrics.filter((r) => r.id !== id));
-        await swalConfig.success("Deleted!", "Rubric deleted successfully!");
+        await swalConfig.success(
+          "Success",
+          "Rubric has been deleted successfully!"
+        );
       } catch (error: any) {
         console.error("Error deleting rubric:", error);
         await swalConfig.error(
@@ -1107,7 +1149,10 @@ export default function AdminDataManagementPage() {
       const response = await memberNotesApi.getAll();
       setNotes(response.data || []);
       setEditingNote(null);
-      await swalConfig.success("Success!", "Note updated successfully!");
+      await swalConfig.success(
+        "Success",
+        "Note has been updated successfully!"
+      );
     } catch (error: any) {
       await swalConfig.error(
         "Error Editing Note",
@@ -1118,9 +1163,9 @@ export default function AdminDataManagementPage() {
 
   const handleDeleteNote = async (id: number) => {
     const result = await swalConfig.confirm(
-      "Delete Note?",
-      `Are you sure you want to delete note with ID: ${id}?`,
-      "Yes, delete it!"
+      "Delete Note",
+      `Are you sure you want to delete this note? This action cannot be undone.`,
+      "Yes, Delete"
     );
 
     if (result.isConfirmed) {
@@ -1128,7 +1173,10 @@ export default function AdminDataManagementPage() {
         await memberNotesApi.delete(id);
         const response = await memberNotesApi.getAll();
         setNotes(response.data || []);
-        await swalConfig.success("Deleted!", "Note deleted successfully!");
+        await swalConfig.success(
+          "Success",
+          "Note has been deleted successfully!"
+        );
       } catch (error: any) {
         console.error("Error deleting note:", error);
         await swalConfig.error(
@@ -1173,7 +1221,10 @@ export default function AdminDataManagementPage() {
       const response = await reportsApi.getAll();
       setReports(response.data || []);
       setEditingReport(null);
-      await swalConfig.success("Success!", "Report updated successfully!");
+      await swalConfig.success(
+        "Success",
+        "Report has been updated successfully!"
+      );
     } catch (error: any) {
       await swalConfig.error(
         "Error Editing Report",
@@ -1184,9 +1235,9 @@ export default function AdminDataManagementPage() {
 
   const handleDeleteReport = async (id: number) => {
     const result = await swalConfig.confirm(
-      "Delete Report?",
-      `Are you sure you want to delete report with ID: ${id}?`,
-      "Yes, delete it!"
+      "Delete Report",
+      `Are you sure you want to delete this report? This action cannot be undone.`,
+      "Yes, Delete"
     );
 
     if (result.isConfirmed) {
@@ -1194,7 +1245,10 @@ export default function AdminDataManagementPage() {
         await reportsApi.delete(id);
         const response = await reportsApi.getAll();
         setReports(response.data || []);
-        await swalConfig.success("Deleted!", "Report deleted successfully!");
+        await swalConfig.success(
+          "Success",
+          "Report has been deleted successfully!"
+        );
       } catch (error: any) {
         console.error("Error deleting report:", error);
         await swalConfig.error(
@@ -1215,9 +1269,9 @@ export default function AdminDataManagementPage() {
       : assignmentId;
 
     const result = await swalConfig.confirm(
-      "Delete Assignment?",
-      `Are you sure you want to delete assignment for "${lecturerName}" (ID: ${assignmentId})?`,
-      "Yes, delete it!"
+      "Delete Assignment",
+      `Are you sure you want to delete this assignment? This action cannot be undone.`,
+      "Yes, Delete"
     );
 
     if (result.isConfirmed) {
@@ -1244,16 +1298,19 @@ export default function AdminDataManagementPage() {
 
   const handleDeleteGroup = async (id: string) => {
     const result = await swalConfig.confirm(
-      "Delete Group?",
-      `Are you sure you want to delete this group?`,
-      "Yes, delete it!"
+      "Delete Group",
+      `Are you sure you want to delete this group? This action cannot be undone.`,
+      "Yes, Delete"
     );
 
     if (result.isConfirmed) {
       try {
         await groupsApi.delete(id);
         setGroups(groups.filter((g) => g.id !== id));
-        await swalConfig.success("Deleted!", "Group deleted successfully!");
+        await swalConfig.success(
+          "Success",
+          "Group has been deleted successfully!"
+        );
       } catch (error: any) {
         console.error("Error deleting group:", error);
         await swalConfig.error(

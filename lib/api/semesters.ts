@@ -33,5 +33,18 @@ export const semestersApi = {
   restore: async (id: number) => {
     return apiClient.put(`/api/semesters/${id}/restore`, {});
   },
+
+  // Check if semester name exists for a major (duplicate check)
+  checkNameExists: async (semesterName: string, majorId: number): Promise<boolean> => {
+    try {
+      const semesters = await semestersApi.getByMajorId(majorId);
+      return (semesters.data || []).some(
+        (semester) => semester.semesterName?.toLowerCase() === semesterName.trim().toLowerCase()
+      );
+    } catch (error) {
+      console.error('Error checking semester name:', error);
+      return false;
+    }
+  },
 };
 

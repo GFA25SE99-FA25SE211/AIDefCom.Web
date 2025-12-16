@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import Modal from "../../../moderator/create-sessions/components/Modal";
 import { Plus, Eye, EyeOff } from "lucide-react"; // Icon thống nhất UI
 import { swalConfig } from "@/lib/utils/sweetAlert";
+import { authApi } from "@/lib/api/auth";
 
 export interface AccountFormData {
   fullName: string;
@@ -65,7 +66,7 @@ const CreateAccountModal: React.FC<CreateAccountModalProps> = ({
     };
   }, []);
 
-  // Check for duplicate email with optimized frontend validation
+  // Check for duplicate email using API
   const checkEmailDuplicate = async (emailValue: string) => {
     if (!emailValue || !emailValue.includes("@")) {
       setEmailError("");
@@ -76,17 +77,10 @@ const CreateAccountModal: React.FC<CreateAccountModalProps> = ({
     setIsCheckingEmail(true);
     setEmailError("");
 
-    // Simulate network delay for better UX
-    await new Promise((resolve) => setTimeout(resolve, 300));
-
     try {
-      const emailExists = existingEmails.some(
-        (existingEmail) =>
-          existingEmail.toLowerCase() === emailValue.toLowerCase()
-      );
-
-      if (emailExists) {
-        setEmailError("Email này đã tồn tại trong hệ thống");
+      const exists = await authApi.checkEmailExists(emailValue.trim());
+      if (exists) {
+        setEmailError("This email already exists in the system");
       } else {
         setEmailError("");
       }
@@ -118,7 +112,7 @@ const CreateAccountModal: React.FC<CreateAccountModalProps> = ({
 
     // Check email duplicate before submitting
     if (emailError) {
-      swalConfig.error("Email không hợp lệ", "Vui lòng sử dụng email khác.");
+      swalConfig.error("Invalid Email", "Please use a different email.");
       return;
     }
 
@@ -208,7 +202,7 @@ const CreateAccountModal: React.FC<CreateAccountModalProps> = ({
           )}
           {isCheckingEmail && (
             <span className="text-blue-500 text-sm mt-1">
-              Đang kiểm tra email...
+              Checking email...
             </span>
           )}
         </div>

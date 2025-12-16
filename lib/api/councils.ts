@@ -55,5 +55,20 @@ export const councilsApi = {
     formData.append('File', file);
     return apiClient.postFormData<any>('/api/councils/import', formData);
   },
+
+  // Check if council description exists for a major (duplicate check)
+  checkDescriptionExists: async (description: string, majorId: number): Promise<boolean> => {
+    try {
+      const allCouncils = await councilsApi.getAll(true);
+      return (allCouncils.data || []).some(
+        (council) => 
+          council.majorId === majorId &&
+          council.description?.toLowerCase() === description.trim().toLowerCase()
+      );
+    } catch (error) {
+      console.error('Error checking council description:', error);
+      return false;
+    }
+  },
 };
 
