@@ -3,6 +3,7 @@
 import { div } from "framer-motion/client";
 import Link from "next/link";
 import { useState, useEffect } from "react";
+import { BACKEND_API_URL } from "@/lib/config/api-urls";
 
 interface Report {
   id: number;
@@ -26,14 +27,11 @@ export default function SecretaryReportDashboard() {
   const fetchReports = async () => {
     try {
       setLoading(true);
-      const response = await fetch(
-        "https://aidefcomapi.azurewebsites.net/api/reports",
-        {
-          headers: {
-            Accept: "*/*",
-          },
-        }
-      );
+      const response = await fetch(`${BACKEND_API_URL}/api/reports`, {
+        headers: {
+          Accept: "*/*",
+        },
+      });
 
       if (!response.ok) {
         throw new Error("Failed to fetch reports");
@@ -63,7 +61,7 @@ export default function SecretaryReportDashboard() {
   const handleDownload = async (filePath: string, fileName?: string) => {
     try {
       const renewResponse = await fetch(
-        `https://aidefcomapi.azurewebsites.net/api/defense-reports/download?blobUrl=${encodeURIComponent(
+        `${BACKEND_API_URL}/api/defense-reports/download?blobUrl=${encodeURIComponent(
           filePath
         )}&expiryMinutes=60`,
         {

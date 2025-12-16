@@ -10,6 +10,7 @@ import { authApi } from "@/lib/api/auth";
 import { rubricsApi } from "@/lib/api/rubrics";
 import { studentsApi } from "@/lib/api/students";
 import { useScoreRealTime } from "@/lib/hooks/useScoreRealTime";
+import { useVoiceEnrollmentCheck } from "@/lib/hooks/useVoiceEnrollmentCheck";
 import { ScoreNotifications } from "@/lib/components/ScoreNotifications";
 import type { GroupDto, DefenseSessionDto, ScoreReadDto } from "@/lib/models";
 
@@ -47,6 +48,9 @@ const getProjectTitle = (group: GroupDto) =>
   "No project title";
 
 export default function PeerScoresPage() {
+  // Voice enrollment check - must be enrolled to access this page
+  const { isChecking: checkingVoice } = useVoiceEnrollmentCheck();
+
   const [scoreData, setScoreData] = useState<ScoreData[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});

@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
+import { BACKEND_API_URL } from "@/lib/config/api-urls";
 
 // Ignore SSL errors for localhost testing if needed
 if (process.env.NODE_ENV === "development") {
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "https://aidefcomapi.azurewebsites.net";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || BACKEND_API_URL;
 
 export async function POST(request: Request) {
   try {
@@ -19,17 +20,14 @@ export async function POST(request: Request) {
     }
 
     // Use the environment variable for the API URL
-    const res = await fetch(
-      `${API_BASE_URL}/api/auth/password/reset`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "accept": "*/*",
-        },
-        body: JSON.stringify({ email, token, newPassword }),
-      }
-    );
+    const res = await fetch(`${API_BASE_URL}/api/auth/password/reset`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        accept: "*/*",
+      },
+      body: JSON.stringify({ email, token, newPassword }),
+    });
 
     const data = await res.json();
 

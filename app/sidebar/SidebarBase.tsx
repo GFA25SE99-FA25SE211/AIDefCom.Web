@@ -7,7 +7,13 @@ import { LogOut } from "lucide-react";
 import { useEffect, useState } from "react";
 
 interface SidebarBaseProps {
-  role: "Chair" | "Secretary" | "Moderator" | "Member" | "Administrator" | "Lecturer";
+  role:
+    | "Chair"
+    | "Secretary"
+    | "Moderator"
+    | "Member"
+    | "Administrator"
+    | "Lecturer";
   links: { href: string; label: string; icon: React.ElementType }[];
 }
 
@@ -27,7 +33,7 @@ export default function SidebarBase({ role, links }: SidebarBaseProps) {
         // Lấy tên user
         const name = parsedUser.fullName || parsedUser.userName || "";
         setUserName(name);
-        
+
         // Lấy role từ localStorage hoặc từ prop
         let roleFromStorage = "";
         if (parsedUser.role) {
@@ -69,7 +75,7 @@ export default function SidebarBase({ role, links }: SidebarBaseProps) {
 
     // Lắng nghe sự kiện storage
     window.addEventListener("storage", handleStorageChange);
-    
+
     // Kiểm tra định kỳ (vì storage event chỉ hoạt động giữa các tab)
     const interval = setInterval(handleStorageChange, 500);
 
@@ -80,28 +86,23 @@ export default function SidebarBase({ role, links }: SidebarBaseProps) {
   }, []);
 
   // Kiểm tra route active
-  
+
   const isActive = (href: string) => {
-    
     if (pathname === href) return true;
 
-    
     if (pathname.startsWith(href)) {
-      
-      const isSubPath = pathname.startsWith(href + "/") || href === "/"; 
-      
+      const isSubPath = pathname.startsWith(href + "/") || href === "/";
+
       if (isSubPath) {
-        
         const betterMatch = links.find(
-          (link) => 
-            link.href !== href && 
-            pathname.startsWith(link.href) && 
+          (link) =>
+            link.href !== href &&
+            pathname.startsWith(link.href) &&
             link.href.length > href.length
         );
-        
-        
+
         if (betterMatch) return false;
-        
+
         return true;
       }
     }
@@ -125,14 +126,20 @@ export default function SidebarBase({ role, links }: SidebarBaseProps) {
     <aside className="w-64 bg-[#0F1D37] text-white flex flex-col justify-between">
       {/* Header */}
       <div>
-        <Link href="/home" className="flex items-center gap-3 px-6 py-4 border-b border-white/10 hover:bg-white/5 transition-colors cursor-pointer">
+        <Link
+          href="/home"
+          className="flex items-center gap-3 px-6 py-4 border-b border-white/10 hover:bg-white/5 transition-colors cursor-pointer"
+        >
           <img src="/favicon-new.ico" alt="logo" className="w-8" />
           <span className="text-lg font-semibold tracking-wide">AIDefCom</span>
         </Link>
 
-        {/* User Info */}
+        {/* User Info - Clickable to go to Profile */}
         {userName && (
-          <div className="px-6 py-4 border-b border-white/10">
+          <Link
+            href="/profile"
+            className="block px-6 py-4 border-b border-white/10 hover:bg-white/5 transition-colors cursor-pointer"
+          >
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
                 {userName.charAt(0).toUpperCase()}
@@ -153,7 +160,7 @@ export default function SidebarBase({ role, links }: SidebarBaseProps) {
                 )}
               </div>
             </div>
-          </div>
+          </Link>
         )}
 
         {/* Navigation */}

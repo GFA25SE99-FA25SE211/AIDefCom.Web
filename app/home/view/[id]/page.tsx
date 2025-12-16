@@ -8,6 +8,7 @@ import { defenseSessionsApi } from "@/lib/api/defense-sessions";
 import { rubricsApi } from "@/lib/api/rubrics";
 import { memberNotesApi } from "@/lib/api/member-notes";
 import { projectTasksApi } from "@/lib/api/project-tasks";
+import { useVoiceEnrollmentCheck } from "@/lib/hooks/useVoiceEnrollmentCheck";
 import type {
   GroupDto,
   StudentDto,
@@ -24,6 +25,9 @@ export default function GroupDetailsPage() {
   const params = useParams();
   const router = useRouter();
   const id = params?.id as string;
+
+  // Voice enrollment check - must be enrolled to access this page
+  const { isChecking: checkingVoice } = useVoiceEnrollmentCheck();
 
   const [group, setGroup] = useState<GroupDto | null>(null);
   const [students, setStudents] = useState<StudentDto[]>([]);

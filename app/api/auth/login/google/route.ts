@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { jwtDecode } from "jwt-decode";
+import { BACKEND_API_URL } from "@/lib/config/api-urls";
 
 export async function POST(req: Request) {
   try {
     const { token } = await req.json();
 
     const API_BASE_URL =
-      process.env.NEXT_PUBLIC_API_BASE_URL ||
-      "https://aidefcomapi.azurewebsites.net";
+      process.env.NEXT_PUBLIC_API_BASE_URL || BACKEND_API_URL;
 
     console.log(
       "🔵 Calling backend Google login API:",

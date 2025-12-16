@@ -6,6 +6,7 @@ import SessionCard, { SessionStatus } from "./components/SessionCard";
 import { defenseSessionsApi } from "@/lib/api/defense-sessions";
 import { groupsApi } from "@/lib/api/groups";
 import { studentsApi } from "@/lib/api/students";
+import { useVoiceEnrollmentCheck } from "@/lib/hooks/useVoiceEnrollmentCheck";
 import type { DefenseSessionDto, GroupDto, StudentDto } from "@/lib/models";
 import { swalConfig } from "@/lib/utils/sweetAlert";
 
@@ -28,6 +29,7 @@ const getProjectTitle = (group: GroupDto) =>
   "No project title";
 
 export default function HomePage() {
+  const { isChecking: checkingVoice } = useVoiceEnrollmentCheck();
   const [sessionsData, setSessionsData] = useState<SessionWithGroup[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -37,6 +39,9 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
+    // Only fetch sessions after voice check passes
+    if (checkingVoice) return;
+
     const fetchSessions = async () => {
       try {
         setLoading(true);
@@ -256,7 +261,7 @@ export default function HomePage() {
     };
 
     fetchSessions();
-  }, []);
+  }, [checkingVoice]);
 
   const totalCount = sessionsData.length;
 
@@ -265,7 +270,12 @@ export default function HomePage() {
       <Header totalCount={totalCount} />
 
       {/* Danh sách sessions */}
-      {loading ? (
+      {checkingVoice ? (
+        <div className="text-center py-8 text-gray-500">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto mb-4"></div>
+          Checking voice enrollment status...
+        </div>
+      ) : loading ? (
         <div className="text-center py-8 text-gray-500">
           Loading defense sessions...
         </div>

@@ -22,9 +22,11 @@ import { projectTasksApi } from "@/lib/api/project-tasks";
 import { committeeAssignmentsApi } from "@/lib/api/committee-assignments";
 import { swalConfig, closeSwal } from "@/lib/utils/sweetAlert";
 import { useAudioRecorder } from "@/lib/hooks/useAudioRecorder";
+import { useVoiceEnrollmentCheck } from "@/lib/hooks/useVoiceEnrollmentCheck";
 import { authUtils } from "@/lib/utils/auth";
 import Swal from "sweetalert2";
 import type { GroupDto, StudentDto, ScoreCreateDto } from "@/lib/models";
+import { getWebSocketUrl } from "@/lib/config/api-urls";
 
 interface StudentScore {
   id: string;
@@ -98,6 +100,10 @@ export default function GradeGroupPage() {
   const params = useParams();
   const searchParams = useSearchParams();
   const groupId = params.id as string;
+
+  // Voice enrollment check - must be enrolled to access this page
+  const { isChecking: checkingVoice } = useVoiceEnrollmentCheck();
+
   const [groupData, setGroupData] = useState<GroupData | null>(null);
   const [studentScores, setStudentScores] = useState<StudentScore[]>([]);
   const [notesVisibility, setNotesVisibility] = useState<NotesVisibility>({});
@@ -106,9 +112,10 @@ export default function GradeGroupPage() {
   const [rubrics, setRubrics] = useState<any[]>([]);
 
   // Helper: xác định có rubrics hợp lệ không
-  const hasRubrics = Array.isArray(rubrics)
-    && rubrics.length > 0
-    && rubrics.every((r) => r && (r.id || r.rubricName));
+  const hasRubrics =
+    Array.isArray(rubrics) &&
+    rubrics.length > 0 &&
+    rubrics.every((r) => r && (r.id || r.rubricName));
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string>("");
 
@@ -243,9 +250,7 @@ export default function GradeGroupPage() {
   };
 
   // WebSocket URL - kết nối cùng session với thư ký
-  const WS_URL = sessionId
-    ? `wss://ai-service.thankfultree-4b6bfec6.southeastasia.azurecontainerapps.io/ws/stt?defense_session_id=${sessionId}&role=member`
-    : null;
+  const WS_URL = sessionId ? getWebSocketUrl(sessionId, "member") : null;
 
   const {
     isRecording,
@@ -500,7 +505,9 @@ export default function GradeGroupPage() {
               );
             } else {
               // API trả về data: [] - không có rubrics
-              console.warn("⚠️ No rubrics found from lecturer/session API (empty array)");
+              console.warn(
+                "⚠️ No rubrics found from lecturer/session API (empty array)"
+              );
               setRubrics([]); // Set empty để hiển thị message yêu cầu thêm tiêu chí
               rubricsList = []; // Đảm bảo rubricsList rỗng
               shouldSkipFallback = true; // Đánh dấu không fallback sang major rubrics
@@ -815,25 +822,37 @@ export default function GradeGroupPage() {
   const handleSave = async () => {
     // Triple check - prevent save if no rubrics (check for undefined, null, or empty)
     if (!hasRubrics) {
-      await swalConfig.error("Error", "No grading criteria available. Please contact the administrator to add grading criteria.");
+      await swalConfig.error(
+        "Error",
+        "No grading criteria available. Please contact the administrator to add grading criteria."
+      );
       return;
     }
 
     if (!sessionId) {
-      await swalConfig.error("Error", "No defense session found for this group");
+      await swalConfig.error(
+        "Error",
+        "No defense session found for this group"
+      );
       return;
     }
 
     // Additional safety check - verify rubrics before proceeding
     if (!hasRubrics) {
-      await swalConfig.error("Error", "Cannot save scores without grading criteria.");
+      await swalConfig.error(
+        "Error",
+        "Cannot save scores without grading criteria."
+      );
       return;
     }
 
     try {
       // Final safety check trước khi lưu - không cho lưu nếu không có rubrics
       if (!hasRubrics) {
-        await swalConfig.error("Error", "Cannot save scores without grading criteria.");
+        await swalConfig.error(
+          "Error",
+          "Cannot save scores without grading criteria."
+        );
         return;
       }
 
@@ -1053,7 +1072,10 @@ export default function GradeGroupPage() {
                     e.preventDefault();
                     e.stopPropagation();
                     if (hasNoRubrics) {
-                      swalConfig.error("Error", "No grading criteria available. Please contact the administrator to add grading criteria.");
+                      swalConfig.error(
+                        "Error",
+                        "No grading criteria available. Please contact the administrator to add grading criteria."
+                      );
                     }
                     return;
                   }
@@ -1065,7 +1087,11 @@ export default function GradeGroupPage() {
                     ? "bg-gray-400 cursor-not-allowed opacity-60 pointer-events-none"
                     : "bg-gradient-to-r from-purple-600 to-blue-500 hover:opacity-90 transition cursor-pointer"
                 }`}
-                title={!hasRubrics ? "Please add grading criteria before saving scores" : ""}
+                title={
+                  !hasRubrics
+                    ? "Please add grading criteria before saving scores"
+                    : ""
+                }
               >
                 <Save className="w-4 h-4" />
                 <span>{saving ? "Saving..." : "Save All Scores"}</span>
@@ -1084,7 +1110,9 @@ export default function GradeGroupPage() {
                   No Grading Criteria Available
                 </h3>
                 <p className="text-sm text-gray-600 mb-4 text-left">
-                  No grading criteria have been assigned to you for this session. Please contact the administrator to add grading criteria.
+                  No grading criteria have been assigned to you for this
+                  session. Please contact the administrator to add grading
+                  criteria.
                 </p>
                 <div className="mt-4">
                   <p className="text-sm font-medium text-gray-700 mb-2 text-left">

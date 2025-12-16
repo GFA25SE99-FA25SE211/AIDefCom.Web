@@ -9,19 +9,8 @@ export const env = {
   apiUrl: getApiUrl(),
 } as const;
 
-// Fetch voice API URL từ server-side API route
-export const getVoiceApiUrl = async (): Promise<string> => {
-  try {
-    const response = await fetch("/api/config/voice");
-    if (!response.ok) {
-      throw new Error("Failed to fetch voice API URL");
-    }
-    const data = await response.json();
-    return data.voiceApiUrl;
-  } catch (error) {
-    console.error("Error fetching voice API URL:", error);
-    throw error;
-  }
-};
+// Voice API URL - fixed constant (no need to fetch)
+export const VOICE_API_URL =
+  "https://ai-service.thankfultree-4b6bfec6.southeastasia.azurecontainerapps.io";
 
 export type EnvConfig = typeof env;

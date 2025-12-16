@@ -22,9 +22,11 @@ import { projectTasksApi } from "@/lib/api/project-tasks";
 import { committeeAssignmentsApi } from "@/lib/api/committee-assignments";
 import { swalConfig, closeSwal } from "@/lib/utils/sweetAlert";
 import { useAudioRecorder } from "@/lib/hooks/useAudioRecorder";
+import { useVoiceEnrollmentCheck } from "@/lib/hooks/useVoiceEnrollmentCheck";
 import { authUtils } from "@/lib/utils/auth";
 import Swal from "sweetalert2";
 import type { GroupDto, StudentDto, ScoreCreateDto } from "@/lib/models";
+import { getWebSocketUrl } from "@/lib/config/api-urls";
 
 // --- (Code Icons giữ nguyên) ---
 
@@ -98,6 +100,10 @@ export default function ViewScorePage() {
   const params = useParams();
   const searchParams = useSearchParams();
   const groupId = params.id as string;
+
+  // Voice enrollment check - must be enrolled to access this page
+  const { isChecking: checkingVoice } = useVoiceEnrollmentCheck();
+
   const [groupData, setGroupData] = useState<GroupData | null>(null);
   const [studentScores, setStudentScores] = useState<StudentScore[]>([]);
   const [notesVisibility, setNotesVisibility] = useState<NotesVisibility>({});
@@ -291,7 +297,9 @@ export default function ViewScorePage() {
               );
             } else {
               // API trả về data: [] - không có rubrics
-              console.warn("⚠️ No rubrics found from lecturer/session API (empty array)");
+              console.warn(
+                "⚠️ No rubrics found from lecturer/session API (empty array)"
+              );
               setRubrics([]); // Set empty để hiển thị message yêu cầu thêm tiêu chí
               rubricsList = []; // Đảm bảo rubricsList rỗng
               shouldSkipFallback = true; // Đánh dấu không fallback sang major rubrics
@@ -640,9 +648,7 @@ export default function ViewScorePage() {
   };
 
   // WebSocket URL - kết nối cùng session với thư ký
-  const WS_URL = sessionId
-    ? `wss://ai-service.thankfultree-4b6bfec6.southeastasia.azurecontainerapps.io/ws/stt?defense_session_id=${sessionId}&role=member`
-    : null;
+  const WS_URL = sessionId ? getWebSocketUrl(sessionId, "member") : null;
 
   const {
     isRecording,
@@ -1001,7 +1007,9 @@ export default function ViewScorePage() {
                   No Grading Criteria Available
                 </h3>
                 <p className="text-sm text-gray-600 mb-4 text-left">
-                  No grading criteria have been assigned to you for this session. Please contact the administrator to add grading criteria.
+                  No grading criteria have been assigned to you for this
+                  session. Please contact the administrator to add grading
+                  criteria.
                 </p>
                 <div className="mt-4">
                   <p className="text-sm font-medium text-gray-700 mb-2 text-left">
