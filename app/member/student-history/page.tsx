@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Search, Users } from "lucide-react";
 import { studentsApi } from "@/lib/api/students";
 import { defenseSessionsApi } from "@/lib/api/defense-sessions";
+import { useVoiceEnrollmentCheck } from "@/lib/hooks/useVoiceEnrollmentCheck";
 import type { StudentDto } from "@/lib/models";
 
 interface StudentWithHistory extends StudentDto {
@@ -14,6 +15,9 @@ interface StudentWithHistory extends StudentDto {
 const PAGE_SIZE = 10;
 
 export default function StudentHistoryListPage() {
+  // Voice enrollment check - must be enrolled to access this page
+  const { isChecking: checkingVoice } = useVoiceEnrollmentCheck();
+
   const [students, setStudents] = useState<StudentWithHistory[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
@@ -32,14 +36,16 @@ export default function StudentHistoryListPage() {
         const sessions = sessionsRes.data || [];
 
         // Calculate failed defenses for each student
-        const studentsWithHistory: StudentWithHistory[] = studentsData.map((student: StudentDto) => {
-          // This is a simplified calculation - you may need to adjust based on actual score data
-          const failedDefenses = 0; // TODO: Calculate from scores when score API is available
-          return {
-            ...student,
-            failedDefenses,
-          };
-        });
+        const studentsWithHistory: StudentWithHistory[] = studentsData.map(
+          (student: StudentDto) => {
+            // This is a simplified calculation - you may need to adjust based on actual score data
+            const failedDefenses = 0; // TODO: Calculate from scores when score API is available
+            return {
+              ...student,
+              failedDefenses,
+            };
+          }
+        );
 
         setStudents(studentsWithHistory);
       } catch (error) {
@@ -73,7 +79,10 @@ export default function StudentHistoryListPage() {
     return filteredStudents.slice(startIndex, startIndex + PAGE_SIZE);
   }, [filteredStudents, currentPage]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredStudents.length / PAGE_SIZE));
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredStudents.length / PAGE_SIZE)
+  );
 
   // Pagination component helper
   const renderPagination = () => {
@@ -124,7 +133,6 @@ export default function StudentHistoryListPage() {
               View past defense sessions and performance history
             </p>
           </div>
-
         </header>
 
         {/* Search bar */}
@@ -151,74 +159,81 @@ export default function StudentHistoryListPage() {
           </div>
 
           {loading ? (
-            <div className="text-center py-8 text-gray-500">Loading students...</div>
+            <div className="text-center py-8 text-gray-500">
+              Loading students...
+            </div>
           ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="text-gray-600 border-b">
-                  <th className="text-left py-3 px-4">Student ID</th>
-                  <th className="text-left py-3 px-4">Name</th>
-                  <th className="text-left py-3 px-4">Email</th>
-                  <th className="text-center py-3 px-4">Failed Defenses</th>
-                  <th className="text-right py-3 px-4">Actions</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                  {paginatedStudents.map((student) => (
-                  <tr
-                    key={student.id}
-                    className="border-b last:border-0 hover:bg-gray-50 transition"
-                  >
-                    <td className="py-3 px-4 font-medium text-gray-800">
-                        {student.studentCode || student.id}
-                    </td>
-
-                    <td className="py-3 px-4">
-                      <Link
-                        href={`/member/student-history/${student.id}`}
-                        className="text-indigo-600 hover:underline font-medium"
-                      >
-                          {student.fullName || student.userName || "Unknown"}
-                      </Link>
-                    </td>
-
-                      <td className="py-3 px-4 text-gray-700">{student.email || "N/A"}</td>
-
-                    <td className="py-3 px-4 text-center">
-                      <span
-                        className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${
-                          student.failedDefenses > 0
-                            ? "bg-red-50 text-red-700"
-                            : "bg-green-50 text-green-700"
-                        }`}
-                      >
-                        {student.failedDefenses}
-                      </span>
-                    </td>
-
-                    <td className="py-3 px-4 text-right">
-                      <Link
-                        href={`/member/student-history/${student.id}`}
-                        className="inline-flex items-center justify-center px-3 py-1.5 rounded-md text-sm font-semibold text-white bg-gradient-to-r from-purple-600 to-blue-500 shadow-md hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-purple-500 transition whitespace-nowrap"
-                      >
-                        View History
-                      </Link>
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="text-gray-600 border-b">
+                    <th className="text-left py-3 px-4">Student ID</th>
+                    <th className="text-left py-3 px-4">Name</th>
+                    <th className="text-left py-3 px-4">Email</th>
+                    <th className="text-center py-3 px-4">Failed Defenses</th>
+                    <th className="text-right py-3 px-4">Actions</th>
                   </tr>
-                ))}
+                </thead>
+
+                <tbody>
+                  {paginatedStudents.map((student) => (
+                    <tr
+                      key={student.id}
+                      className="border-b last:border-0 hover:bg-gray-50 transition"
+                    >
+                      <td className="py-3 px-4 font-medium text-gray-800">
+                        {student.studentCode || student.id}
+                      </td>
+
+                      <td className="py-3 px-4">
+                        <Link
+                          href={`/member/student-history/${student.id}`}
+                          className="text-indigo-600 hover:underline font-medium"
+                        >
+                          {student.fullName || student.userName || "Unknown"}
+                        </Link>
+                      </td>
+
+                      <td className="py-3 px-4 text-gray-700">
+                        {student.email || "N/A"}
+                      </td>
+
+                      <td className="py-3 px-4 text-center">
+                        <span
+                          className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${
+                            student.failedDefenses > 0
+                              ? "bg-red-50 text-red-700"
+                              : "bg-green-50 text-green-700"
+                          }`}
+                        >
+                          {student.failedDefenses}
+                        </span>
+                      </td>
+
+                      <td className="py-3 px-4 text-right">
+                        <Link
+                          href={`/member/student-history/${student.id}`}
+                          className="inline-flex items-center justify-center px-3 py-1.5 rounded-md text-sm font-semibold text-white bg-gradient-to-r from-purple-600 to-blue-500 shadow-md hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-purple-500 transition whitespace-nowrap"
+                        >
+                          View History
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
                   {paginatedStudents.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="text-center py-8 text-gray-400">
+                      <td
+                        colSpan={5}
+                        className="text-center py-8 text-gray-400"
+                      >
                         No students found.
                       </td>
                     </tr>
                   )}
-              </tbody>
-            </table>
-            {renderPagination()}
-          </div>
+                </tbody>
+              </table>
+              {renderPagination()}
+            </div>
           )}
         </div>
 

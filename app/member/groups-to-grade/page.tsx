@@ -11,6 +11,7 @@ import { studentsApi } from "@/lib/api/students";
 import { scoresApi } from "@/lib/api/scores";
 import { projectTasksApi } from "@/lib/api/project-tasks";
 import { authUtils } from "@/lib/utils/auth";
+import { useVoiceEnrollmentCheck } from "@/lib/hooks/useVoiceEnrollmentCheck";
 import type {
   GroupDto,
   DefenseSessionDto,
@@ -18,7 +19,8 @@ import type {
   ProjectTaskDto,
 } from "@/lib/models";
 
-interface GroupWithSession extends Omit<GroupDto, 'groupName' | 'projectTitle' | 'totalScore'> {
+interface GroupWithSession
+  extends Omit<GroupDto, "groupName" | "projectTitle" | "totalScore"> {
   groupName: string;
   projectTitle: string;
   status: GroupStatus;
@@ -167,6 +169,9 @@ function GroupsToGradePageContent() {
   const searchParams = useSearchParams();
   const sessionIdParam = searchParams?.get("sessionId");
   const selectedSessionId = sessionIdParam ? parseInt(sessionIdParam) : null;
+
+  // Voice enrollment check - must be enrolled to access this page
+  const { isChecking: checkingVoice } = useVoiceEnrollmentCheck();
 
   // Xóa session role khi vào trang danh sách (không phải detail)
   useEffect(() => {
@@ -433,15 +438,15 @@ function GroupsToGradePageContent() {
 
 export default function GroupsToGradePage() {
   return (
-    <Suspense fallback={
-      <div className="flex min-h-screen bg-[#F3F6FB]">
-        <main className="flex-1 p-4 sm:p-6 lg:p-8">
-          <div className="text-center py-8 text-gray-500">
-            Loading...
-          </div>
-        </main>
-      </div>
-    }>
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen bg-[#F3F6FB]">
+          <main className="flex-1 p-4 sm:p-6 lg:p-8">
+            <div className="text-center py-8 text-gray-500">Loading...</div>
+          </main>
+        </div>
+      }
+    >
       <GroupsToGradePageContent />
     </Suspense>
   );

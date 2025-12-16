@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Calendar, Clock, Users } from "lucide-react";
 import { defenseSessionsApi } from "@/lib/api/defense-sessions";
 import { groupsApi } from "@/lib/api/groups";
+import { useVoiceEnrollmentCheck } from "@/lib/hooks/useVoiceEnrollmentCheck";
 import type { DefenseSessionDto, GroupDto } from "@/lib/models";
 
 interface SessionCard extends DefenseSessionDto {
@@ -17,6 +18,7 @@ interface SessionCard extends DefenseSessionDto {
 
 function DefenseSessionsContent() {
   const router = useRouter();
+  const { isChecking: checkingVoice } = useVoiceEnrollmentCheck();
   const [sessions, setSessions] = useState<SessionCard[]>([]);
   const [loading, setLoading] = useState(true);
 

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, use } from "react";
 import Link from "next/link";
 import { useAudioRecorder } from "@/lib/hooks/useAudioRecorder";
+import { useVoiceEnrollmentCheck } from "@/lib/hooks/useVoiceEnrollmentCheck";
 import { swalConfig, closeSwal } from "@/lib/utils/sweetAlert";
 // import { useSTTWebSocket, STTEvent } from "@/lib/hooks/useSTTWebSocket";
 import { defenseSessionsApi } from "@/lib/api/defense-sessions";
@@ -10,6 +11,7 @@ import { transcriptsApi } from "@/lib/api/transcripts";
 import { DefenseSessionDto, TranscriptDto } from "@/lib/models";
 import MeetingMinutesForm from "../../components/MeetingMinutesForm";
 import { Pencil, Check, X, Trash2, Plus } from "lucide-react";
+import { getWebSocketUrl, BACKEND_API_URL } from "@/lib/config/api-urls";
 
 // Define STTEvent locally if needed or import from a shared types file
 interface STTEvent {
@@ -35,6 +37,10 @@ export default function TranscriptPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
+
+  // Voice enrollment check - must be enrolled to access this page
+  const { isChecking: checkingVoice } = useVoiceEnrollmentCheck();
+
   const [transcript, setTranscript] = useState<STTEvent[]>([]);
   const [notes, setNotes] = useState("");
   const [isClient, setIsClient] = useState(false);
@@ -84,7 +90,11 @@ export default function TranscriptPage({
     const minutes = Math.floor((totalSeconds % 3600) / 60);
     const seconds = totalSeconds % 60;
     const milliseconds = ms % 1000;
-    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}`;
+    return `${hours.toString().padStart(2, "0")}:${minutes
+      .toString()
+      .padStart(2, "0")}:${seconds.toString().padStart(2, "0")}.${milliseconds
+      .toString()
+      .padStart(3, "0")}`;
   };
 
   // ==========================================
@@ -124,7 +134,7 @@ export default function TranscriptPage({
   };
 
   // API base URL for recording
-  const RECORDING_API_BASE = "https://aidefcomapi.azurewebsites.net";
+  const RECORDING_API_BASE = BACKEND_API_URL;
 
   // Xóa session role khi rời khỏi trang (nếu cần)
   useEffect(() => {
@@ -157,7 +167,8 @@ export default function TranscriptPage({
             const currentUserId = parsedUser.id;
 
             // Fire and forget - don't await
-            defenseSessionsApi.getUsersBySessionId(Number(id))
+            defenseSessionsApi
+              .getUsersBySessionId(Number(id))
               .then((lecturersRes) => {
                 if (lecturersRes.data) {
                   const currentUserInSession = lecturersRes.data.find(
@@ -166,11 +177,16 @@ export default function TranscriptPage({
                       String(currentUserId).toLowerCase()
                   );
                   if (currentUserInSession?.role) {
-                    localStorage.setItem("sessionRole", currentUserInSession.role.toLowerCase());
+                    localStorage.setItem(
+                      "sessionRole",
+                      currentUserInSession.role.toLowerCase()
+                    );
                   }
                 }
               })
-              .catch(() => {/* Ignore role fetch errors */});
+              .catch(() => {
+                /* Ignore role fetch errors */
+              });
           }
         }
 
@@ -191,7 +207,7 @@ export default function TranscriptPage({
                     event: "recognized",
                     // Keep ORIGINAL text - not edited
                     text: item.text || item.content || "",
-                    // Keep ORIGINAL speaker - not edited  
+                    // Keep ORIGINAL speaker - not edited
                     speaker: item.speaker || item.speaker_name || "Unknown",
                     id: item.id || `loaded_${index}_${Date.now()}`,
                     isNew: false,
@@ -255,7 +271,7 @@ export default function TranscriptPage({
 
   const handleSTTEvent = (msg: any) => {
     const eventType = msg.type || msg.event;
-    
+
     // DEBUG: Log all events from WebSocket
     console.log("📨 [STT Event]", eventType, msg);
 
@@ -336,21 +352,24 @@ export default function TranscriptPage({
       // Calculate VTT timestamps based on REAL elapsed time since session start
       let startVtt = msg.start_time_vtt;
       let endVtt = msg.end_time_vtt;
-      
+
       if (!startVtt || !endVtt) {
         const now = Date.now();
         if (sessionStartTimeRef.current) {
           // endMs = actual elapsed time when we receive the final result
           const endMs = now - sessionStartTimeRef.current;
-          
+
           // Estimate when speech started based on text length
           // ~80ms per character for speaking speed
           const textLength = (msg.text || "").length;
-          const estimatedDurationMs = Math.min(Math.max(textLength * 80, 1000), 15000);
-          
+          const estimatedDurationMs = Math.min(
+            Math.max(textLength * 80, 1000),
+            15000
+          );
+
           // startMs = endMs - estimated duration
           const startMs = Math.max(0, endMs - estimatedDurationMs);
-          
+
           startVtt = formatVttTime(startMs);
           endVtt = formatVttTime(endMs);
         }
@@ -360,7 +379,9 @@ export default function TranscriptPage({
       const newEntry: STTEvent = {
         ...msg,
         event: "recognized",
-        id: msg.id || `stt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        id:
+          msg.id ||
+          `stt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         isNew: true,
         user_id: msg.user_id || null,
         timestamp: msg.timestamp || new Date().toISOString(),
@@ -441,20 +462,23 @@ export default function TranscriptPage({
         // Calculate VTT timestamps if not provided
         let startVtt = msg.start_time_vtt;
         let endVtt = msg.end_time_vtt;
-        
+
         if (!startVtt || !endVtt) {
           const now = Date.now();
           if (sessionStartTimeRef.current) {
             // endMs = actual elapsed time when we receive the final result
             const endMs = now - sessionStartTimeRef.current;
-            
+
             // Estimate when speech started based on text length
             const textLength = (msg.text || "").length;
-            const estimatedDurationMs = Math.min(Math.max(textLength * 80, 1000), 15000);
-            
+            const estimatedDurationMs = Math.min(
+              Math.max(textLength * 80, 1000),
+              15000
+            );
+
             // startMs = endMs - estimated duration
             const startMs = Math.max(0, endMs - estimatedDurationMs);
-            
+
             startVtt = formatVttTime(startMs);
             endVtt = formatVttTime(endMs);
           }
@@ -464,9 +488,11 @@ export default function TranscriptPage({
           event: "recognized",
           text: msg.text,
           speaker: msg.speaker_name || msg.speaker || "Identifying",
-          id: msg.id || `broadcast_${Date.now()}_${Math.random()
-            .toString(36)
-            .substr(2, 9)}`,
+          id:
+            msg.id ||
+            `broadcast_${Date.now()}_${Math.random()
+              .toString(36)
+              .substr(2, 9)}`,
           isNew: true,
           user_id: msg.user_id || null,
           timestamp: msg.timestamp || new Date().toISOString(),
@@ -579,7 +605,7 @@ export default function TranscriptPage({
   }, [transcript, interimText, broadcastInterimText]);
 
   //const WS_URL = `ws://localhost:8000/ws/stt?defense_session_id=${id}`;
-  const WS_URL = `wss://ai-service.thankfultree-4b6bfec6.southeastasia.azurecontainerapps.io/ws/stt?defense_session_id=${id}`;
+  const WS_URL = getWebSocketUrl(id as string, "secretary");
 
   const {
     isRecording,
@@ -609,12 +635,12 @@ export default function TranscriptPage({
     } else {
       setPacketsSent(0);
       await startRecording();
-      
+
       // Initialize session start time for VTT timestamp calculation (only on first start)
       if (!sessionStartTimeRef.current) {
         sessionStartTimeRef.current = Date.now();
       }
-      
+
       // Broadcast session:start cho member biết thư ký đã bắt đầu
       if (!hasStartedSession) {
         // Gọi API start để chuyển status sang InProgress (chỉ khi chưa InProgress/Completed)
@@ -624,19 +650,22 @@ export default function TranscriptPage({
           session.status !== "Completed"
         ) {
           // Fire and forget - don't block UI
-          defenseSessionsApi.start(Number(id)).then((startResult) => {
-            if (startResult.data) {
-              setSession(startResult.data);
-              swalConfig.toast.success("Defense session started");
-            }
-          }).catch((error: any) => {
-            if (
-              !error.message?.includes("409") &&
-              !error.message?.includes("Conflict")
-            ) {
-              swalConfig.toast.error("Failed to update session status");
-            }
-          });
+          defenseSessionsApi
+            .start(Number(id))
+            .then((startResult) => {
+              if (startResult.data) {
+                setSession(startResult.data);
+                swalConfig.toast.success("Defense session started");
+              }
+            })
+            .catch((error: any) => {
+              if (
+                !error.message?.includes("409") &&
+                !error.message?.includes("Conflict")
+              ) {
+                swalConfig.toast.error("Failed to update session status");
+              }
+            });
         }
         // Broadcast immediately
         broadcastSessionStart();
@@ -879,21 +908,23 @@ export default function TranscriptPage({
     setTranscript((prev) => {
       const newTranscript = [...prev];
       const original = newTranscript[editingIndex];
-      
+
       // Get the ORIGINAL values (not edited values)
       const originalText = original.text;
       const originalSpeaker = original.speaker;
-      
+
       // Check if user changed from original
       const textChanged = editText !== originalText;
       const speakerChanged = editSpeaker !== originalSpeaker;
-      
+
       newTranscript[editingIndex] = {
         ...original,
         // KEEP original speaker and text unchanged
         // Only store edits in edited_* fields
-        edited_text: textChanged ? editText : (original.edited_text || null),
-        edited_speaker: speakerChanged ? editSpeaker : (original.edited_speaker || null),
+        edited_text: textChanged ? editText : original.edited_text || null,
+        edited_speaker: speakerChanged
+          ? editSpeaker
+          : original.edited_speaker || null,
         // DO NOT overwrite original speaker/text
       };
       return newTranscript;
@@ -941,16 +972,18 @@ export default function TranscriptPage({
 
       // Filter out entries with unknown speakers ("Khách", "Unknown", "Identifying")
       const unknownSpeakers = ["khách", "unknown", "identifying", "guest"];
-      
+
       // Check if there are any entries with unknown speakers - block saving if so
       const entriesWithUnknownSpeaker = transcript.filter((item) => {
-        const speaker = (item.edited_speaker || item.speaker || "").toLowerCase().trim();
+        const speaker = (item.edited_speaker || item.speaker || "")
+          .toLowerCase()
+          .trim();
         return !speaker || unknownSpeakers.includes(speaker);
       });
 
       if (entriesWithUnknownSpeaker.length > 0) {
         swalConfig.error(
-          "Cannot Complete Session", 
+          "Cannot Complete Session",
           `There are ${entriesWithUnknownSpeaker.length} transcript entries with unknown speakers ("Khách", "Unknown"). Please identify all speakers before completing the session.`
         );
         setSaving(false);
@@ -1302,21 +1335,35 @@ export default function TranscriptPage({
                         {/* VTT Timestamp line */}
                         {(item.start_time_vtt || item.end_time_vtt) && (
                           <div className="text-[10px] text-gray-400 mb-1">
-                            {item.start_time_vtt || "00:00:00.000"} --&gt; {item.end_time_vtt || "00:00:00.000"}
+                            {item.start_time_vtt || "00:00:00.000"} --&gt;{" "}
+                            {item.end_time_vtt || "00:00:00.000"}
                           </div>
                         )}
                         {/* Speaker name with edit indicator - show edited value if exists */}
                         {(() => {
-                          const displaySpeaker = item.edited_speaker || item.speaker || "Unknown";
-                          const isUnknown = ["khách", "unknown", "identifying", "guest"].includes(displaySpeaker.toLowerCase());
-                          const isEdited = !!item.edited_speaker || !!item.edited_text;
+                          const displaySpeaker =
+                            item.edited_speaker || item.speaker || "Unknown";
+                          const isUnknown = [
+                            "khách",
+                            "unknown",
+                            "identifying",
+                            "guest",
+                          ].includes(displaySpeaker.toLowerCase());
+                          const isEdited =
+                            !!item.edited_speaker || !!item.edited_text;
                           return (
                             <div className="flex items-center gap-1.5">
-                              <span className={`text-xs font-medium ${isUnknown ? "text-red-500" : "text-purple-600"}`}>
+                              <span
+                                className={`text-xs font-medium ${
+                                  isUnknown ? "text-red-500" : "text-purple-600"
+                                }`}
+                              >
                                 {displaySpeaker}
                               </span>
                               {isEdited && (
-                                <span className="text-[10px] text-orange-500 font-sans">(edited)</span>
+                                <span className="text-[10px] text-orange-500 font-sans">
+                                  (edited)
+                                </span>
                               )}
                             </div>
                           );

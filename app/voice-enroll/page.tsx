@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { voiceApi, VoiceEnrollmentStatus } from "@/lib/api/voice";
 import { swalConfig } from "@/lib/utils/sweetAlert";
+import { AI_SERVICE_URL } from "@/lib/config/api-urls";
 
 const SAMPLE_TEXTS = [
   "Xin chào, tôi là {NAME}. Đây là đoạn thu mẫu để hỗ trợ hệ thống AIDefCom, một nền tảng AI được thiết kế giúp số hóa và tối ưu hóa toàn bộ quy trình chấm điểm và ghi biên bản bảo vệ khóa luận. Hệ thống sử dụng giọng nói của tôi để cải thiện khả năng tương tác và hỗ trợ hội đồng trong các phiên bảo vệ sau này.",
@@ -385,7 +386,7 @@ export default function VoiceEnrollPage() {
 
       // Gọi API DELETE để reset enrollment
       const response = await fetch(
-        `https://ai-service.thankfultree-4b6bfec6.southeastasia.azurecontainerapps.io/voice/users/${user.id}/enrollment`,
+        `${AI_SERVICE_URL}/voice/users/${user.id}/enrollment`,
         {
           method: "DELETE",
           headers: { "Content-Type": "application/json" },

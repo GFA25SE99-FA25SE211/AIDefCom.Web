@@ -9,6 +9,7 @@ import { defenseSessionsApi } from "@/lib/api/defense-sessions";
 import { rubricsApi } from "@/lib/api/rubrics";
 import { memberNotesApi } from "@/lib/api/member-notes";
 import { useAudioRecorder } from "@/lib/hooks/useAudioRecorder";
+import { useVoiceEnrollmentCheck } from "@/lib/hooks/useVoiceEnrollmentCheck";
 import { swalConfig, closeSwal } from "@/lib/utils/sweetAlert";
 import type {
   GroupDto,
@@ -20,11 +21,15 @@ import type {
 } from "@/lib/models";
 import { scoresApi } from "@/lib/api/scores";
 import CreateTaskModal from "../../components/CreateTaskModal";
+import { getWebSocketUrl } from "@/lib/config/api-urls";
 
 export default function GroupDetailsPage() {
   const params = useParams();
   const router = useRouter();
   const id = params?.id as string;
+
+  // Voice enrollment check - must be enrolled to access this page
+  const { isChecking: checkingVoice } = useVoiceEnrollmentCheck();
 
   const [group, setGroup] = useState<GroupDto | null>(null);
   const [students, setStudents] = useState<StudentDto[]>([]);
@@ -171,7 +176,7 @@ export default function GroupDetailsPage() {
 
   // WebSocket URL - kết nối cùng session với thư ký
   const WS_URL = defenseSession?.id
-    ? `wss://ai-service.thankfultree-4b6bfec6.southeastasia.azurecontainerapps.io/ws/stt?defense_session_id=${defenseSession.id}&role=chair`
+    ? getWebSocketUrl(defenseSession.id, "chair")
     : null;
 
   const {
@@ -388,6 +393,15 @@ export default function GroupDetailsPage() {
 
     fetchScores();
   }, [selectedStudentId]);
+
+  // Show loading while checking voice enrollment
+  if (checkingVoice) {
+    return (
+      <div className="flex justify-center items-center min-h-[60vh]">
+        <div className="text-gray-500">Checking voice enrollment...</div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (

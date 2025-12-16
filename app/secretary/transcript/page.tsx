@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { defenseSessionsApi } from "@/lib/api/defense-sessions";
 import { groupsApi } from "@/lib/api/groups";
+import { useVoiceEnrollmentCheck } from "@/lib/hooks/useVoiceEnrollmentCheck";
 import { DefenseSessionDto, GroupDto } from "@/lib/models";
 
 interface SessionWithGroup {
@@ -12,6 +13,7 @@ interface SessionWithGroup {
 }
 
 export default function TranscriptListPage() {
+  const { isChecking: checkingVoice } = useVoiceEnrollmentCheck();
   const [sessionsWithGroups, setSessionsWithGroups] = useState<
     SessionWithGroup[]
   >([]);

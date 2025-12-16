@@ -5,6 +5,7 @@ import { reportsApi } from "@/lib/api/reports";
 import { defenseSessionsApi } from "@/lib/api/defense-sessions";
 import { swalConfig } from "@/lib/utils/sweetAlert";
 import type { ReportDto } from "@/lib/models";
+import { BACKEND_API_URL } from "@/lib/config/api-urls";
 
 export default function ChairReportStatus() {
   const [reports, setReports] = useState<ReportDto[]>([]);
@@ -159,7 +160,7 @@ export default function ChairReportStatus() {
   const handleDownload = async (filePath: string, fileName?: string) => {
     try {
       const renewResponse = await fetch(
-        `https://aidefcomapi.azurewebsites.net/api/defense-reports/download?blobUrl=${encodeURIComponent(
+        `${BACKEND_API_URL}/api/defense-reports/download?blobUrl=${encodeURIComponent(
           filePath
         )}&expiryMinutes=60`,
         {

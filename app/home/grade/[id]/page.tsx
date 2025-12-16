@@ -12,6 +12,7 @@ import { majorRubricsApi } from "@/lib/api/major-rubrics";
 import { scoresApi, type ScoreReadDto } from "@/lib/api/scores";
 import { defenseSessionsApi } from "@/lib/api/defense-sessions";
 import { projectTasksApi } from "@/lib/api/project-tasks";
+import { useVoiceEnrollmentCheck } from "@/lib/hooks/useVoiceEnrollmentCheck";
 import { swalConfig } from "@/lib/utils/sweetAlert";
 import { authUtils } from "@/lib/utils/auth";
 import Swal from "sweetalert2";
@@ -89,6 +90,10 @@ export default function ViewScorePage() {
   const params = useParams();
   const searchParams = useSearchParams();
   const groupId = params.id as string;
+
+  // Voice enrollment check - must be enrolled to access this page
+  const { isChecking: checkingVoice } = useVoiceEnrollmentCheck();
+
   const [groupData, setGroupData] = useState<GroupData | null>(null);
   const [studentScores, setStudentScores] = useState<StudentScore[]>([]);
   const [notesVisibility, setNotesVisibility] = useState<NotesVisibility>({});

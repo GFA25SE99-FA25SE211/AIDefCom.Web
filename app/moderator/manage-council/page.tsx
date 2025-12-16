@@ -45,22 +45,29 @@ export default function ManageCouncilPage() {
   const [isFormVisible, setIsFormVisible] = useState(false);
   const [councils, setCouncils] = useState<CouncilWithMembers[]>([]);
   const [majors, setMajors] = useState<Array<{ id: number; name: string }>>([]);
-  const [lecturers, setLecturers] = useState<Array<{ id: string; fullName: string; email: string }>>([]);
+  const [lecturers, setLecturers] = useState<
+    Array<{ id: string; fullName: string; email: string }>
+  >([]);
   const [loading, setLoading] = useState(true);
   const [isAddMemberModalOpen, setIsAddMemberModalOpen] = useState(false);
-  const [selectedCouncilId, setSelectedCouncilId] = useState<number | null>(null);
-  const [roleMapping, setRoleMapping] = useState<Map<string, number>>(new Map());
+  const [selectedCouncilId, setSelectedCouncilId] = useState<number | null>(
+    null
+  );
+  const [roleMapping, setRoleMapping] = useState<Map<string, number>>(
+    new Map()
+  );
 
   useEffect(() => {
     const fetchCouncils = async () => {
       try {
         setLoading(true);
-        const [councilsRes, assignmentsRes, usersRes, majorsRes] = await Promise.all([
-          councilsApi.getAll(false).catch(() => ({ data: [] })),
-          committeeAssignmentsApi.getAll().catch(() => ({ data: [] })),
-          authApi.getAllUsers().catch(() => ({ data: [] })),
-          majorsApi.getAll().catch(() => ({ data: [] })),
-        ]);
+        const [councilsRes, assignmentsRes, usersRes, majorsRes] =
+          await Promise.all([
+            councilsApi.getAll(false).catch(() => ({ data: [] })),
+            committeeAssignmentsApi.getAll().catch(() => ({ data: [] })),
+            authApi.getAllUsers().catch(() => ({ data: [] })),
+            majorsApi.getAll().catch(() => ({ data: [] })),
+          ]);
 
         const councilsData = councilsRes.data || [];
         const assignments = assignmentsRes.data || [];
@@ -76,16 +83,18 @@ export default function ManageCouncilPage() {
         const lecturersData = (users || [])
           .filter((u: any) => {
             // Handle role as string or array
-            const roles = Array.isArray(u.role) 
+            const roles = Array.isArray(u.role)
               ? u.role.map((r: string) => r?.toLowerCase())
-              : u.role 
-                ? [u.role.toLowerCase()]
-                : u.Role
-                  ? [u.Role.toLowerCase()]
-                  : u.roles
-                    ? (Array.isArray(u.roles) ? u.roles.map((r: string) => r?.toLowerCase()) : [u.roles.toLowerCase()])
-                    : [];
-            
+              : u.role
+              ? [u.role.toLowerCase()]
+              : u.Role
+              ? [u.Role.toLowerCase()]
+              : u.roles
+              ? Array.isArray(u.roles)
+                ? u.roles.map((r: string) => r?.toLowerCase())
+                : [u.roles.toLowerCase()]
+              : [];
+
             // Check if user has any of the allowed roles
             return roles.some((role: string) => allowedRoles.includes(role));
           })
@@ -104,11 +113,20 @@ export default function ManageCouncilPage() {
           const councilRoleId = a.councilRoleId;
           if (roleName && councilRoleId) {
             // Map common role names
-            if (roleName.toLowerCase().includes("chair") || roleName.toLowerCase().includes("chủ tịch")) {
+            if (
+              roleName.toLowerCase().includes("chair") ||
+              roleName.toLowerCase().includes("chủ tịch")
+            ) {
               mapping.set("Chair", councilRoleId);
-            } else if (roleName.toLowerCase().includes("secretary") || roleName.toLowerCase().includes("thư ký")) {
+            } else if (
+              roleName.toLowerCase().includes("secretary") ||
+              roleName.toLowerCase().includes("thư ký")
+            ) {
               mapping.set("Secretary", councilRoleId);
-            } else if (roleName.toLowerCase().includes("member") || roleName.toLowerCase().includes("thành viên")) {
+            } else if (
+              roleName.toLowerCase().includes("member") ||
+              roleName.toLowerCase().includes("thành viên")
+            ) {
               mapping.set("Member", councilRoleId);
             }
           }
@@ -155,7 +173,9 @@ export default function ManageCouncilPage() {
     fetchCouncils();
   }, []);
 
-  const handleCreateCouncil = async (formData: CouncilFormData & { members?: any[] }) => {
+  const handleCreateCouncil = async (
+    formData: CouncilFormData & { members?: any[] }
+  ) => {
     try {
       // Step 1: Create the council
       const councilResponse = await councilsApi.create({
@@ -172,17 +192,20 @@ export default function ManageCouncilPage() {
       // Step 2: Create committee assignments for members
       if (formData.members && formData.members.length > 0) {
         const assignmentPromises = formData.members.map((member) => {
-          const councilRoleId = roleMapping.get(member.role) || 
+          const councilRoleId =
+            roleMapping.get(member.role) ||
             (member.role === "Chair" ? 1 : member.role === "Secretary" ? 3 : 2);
-          
-          return committeeAssignmentsApi.create({
-            lecturerId: member.lecturerId,
-            councilId: newCouncilId,
-            councilRoleId: councilRoleId,
-          }).catch((err) => {
-            console.error(`Failed to add member ${member.fullName}:`, err);
-            return null;
-          });
+
+          return committeeAssignmentsApi
+            .create({
+              lecturerId: member.lecturerId,
+              councilId: newCouncilId,
+              councilRoleId: councilRoleId,
+            })
+            .catch((err) => {
+              console.error(`Failed to add member ${member.fullName}:`, err);
+              return null;
+            });
         });
 
         await Promise.all(assignmentPromises);
@@ -201,16 +224,18 @@ export default function ManageCouncilPage() {
       const lecturersData = (users || [])
         .filter((u: any) => {
           // Handle role as string or array
-          const roles = Array.isArray(u.role) 
+          const roles = Array.isArray(u.role)
             ? u.role.map((r: string) => r?.toLowerCase())
-            : u.role 
-              ? [u.role.toLowerCase()]
-              : u.Role
-                ? [u.Role.toLowerCase()]
-                : u.roles
-                  ? (Array.isArray(u.roles) ? u.roles.map((r: string) => r?.toLowerCase()) : [u.roles.toLowerCase()])
-                  : [];
-          
+            : u.role
+            ? [u.role.toLowerCase()]
+            : u.Role
+            ? [u.Role.toLowerCase()]
+            : u.roles
+            ? Array.isArray(u.roles)
+              ? u.roles.map((r: string) => r?.toLowerCase())
+              : [u.roles.toLowerCase()]
+            : [];
+
           // Check if user has any of the allowed roles
           return roles.some((role: string) => allowedRoles.includes(role));
         })
@@ -251,7 +276,9 @@ export default function ManageCouncilPage() {
 
       await swalConfig.success(
         "Council Created Successfully!",
-        `The new defense council has been created with ${formData.members?.length || 0} member(s).`
+        `The new defense council has been created with ${
+          formData.members?.length || 0
+        } member(s).`
       );
     } catch (error: any) {
       console.error("Error creating council:", error);
@@ -263,7 +290,11 @@ export default function ManageCouncilPage() {
     }
   };
 
-  const handleAddMember = async (data: { lecturerId: string; role: string; councilRoleId: number }) => {
+  const handleAddMember = async (data: {
+    lecturerId: string;
+    role: string;
+    councilRoleId: number;
+  }) => {
     if (!selectedCouncilId) return;
 
     try {
@@ -289,16 +320,18 @@ export default function ManageCouncilPage() {
       const lecturersData = (users || [])
         .filter((u: any) => {
           // Handle role as string or array
-          const roles = Array.isArray(u.role) 
+          const roles = Array.isArray(u.role)
             ? u.role.map((r: string) => r?.toLowerCase())
-            : u.role 
-              ? [u.role.toLowerCase()]
-              : u.Role
-                ? [u.Role.toLowerCase()]
-                : u.roles
-                  ? (Array.isArray(u.roles) ? u.roles.map((r: string) => r?.toLowerCase()) : [u.roles.toLowerCase()])
-                  : [];
-          
+            : u.role
+            ? [u.role.toLowerCase()]
+            : u.Role
+            ? [u.Role.toLowerCase()]
+            : u.roles
+            ? Array.isArray(u.roles)
+              ? u.roles.map((r: string) => r?.toLowerCase())
+              : [u.roles.toLowerCase()]
+            : [];
+
           // Check if user has any of the allowed roles
           return roles.some((role: string) => allowedRoles.includes(role));
         })
@@ -369,7 +402,10 @@ export default function ManageCouncilPage() {
 
         <button
           onClick={() => {
-            console.log("Create New Council clicked, isFormVisible:", isFormVisible);
+            console.log(
+              "Create New Council clicked, isFormVisible:",
+              isFormVisible
+            );
             setIsFormVisible(true);
           }}
           className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-blue-500 text-white text-sm shadow hover:opacity-90 transition"
@@ -517,7 +553,8 @@ export default function ManageCouncilPage() {
             councils
               .find((c) => c.id === selectedCouncilId)
               ?.members.map((m) => ({
-                lecturerId: lecturers.find((l) => l.email === m.email)?.id || "",
+                lecturerId:
+                  lecturers.find((l) => l.email === m.email)?.id || "",
               })) || []
           }
           roleMapping={roleMapping}
