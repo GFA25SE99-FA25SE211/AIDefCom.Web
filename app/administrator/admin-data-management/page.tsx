@@ -9,6 +9,7 @@ import { projectTasksApi } from "@/lib/api/project-tasks";
 import { groupsApi } from "@/lib/api/groups";
 import { committeeAssignmentsApi } from "@/lib/api/committee-assignments";
 import { councilsApi } from "@/lib/api/councils";
+import { councilRolesApi } from "@/lib/api/council-roles";
 import { authApi } from "@/lib/api/auth";
 import { memberNotesApi } from "@/lib/api/member-notes";
 import { reportsApi } from "@/lib/api/reports";
@@ -188,6 +189,7 @@ export default function AdminDataManagementPage() {
   const [reports, setReports] = useState<ReportDto[]>([]);
   const [assignments, setAssignments] = useState<CommitteeAssignmentDto[]>([]);
   const [users, setUsers] = useState<UserDto[]>([]);
+  const [councilRoles, setCouncilRoles] = useState<any[]>([]);
   const [defenseSessions, setDefenseSessions] = useState<DefenseSessionDto[]>(
     []
   );
@@ -300,6 +302,37 @@ export default function AdminDataManagementPage() {
         setCouncils(councilsRes.data || []);
         setAssignments(assignmentsRes.data || []);
         setUsers(usersRes.data || []);
+        setNotes(notesRes.data || []);
+        setReports(reportsRes.data || []);
+        setDefenseSessions(sessionsRes.data || []);
+
+        // Try to get council roles from API (getAll), filter standard roles, use fallback if needed
+        try {
+          const councilRolesRes = await councilRolesApi.getAll();
+          const apiRoles = councilRolesRes.data || [];
+          const standardRoleNames = [
+            "Chair",
+            "Member",
+            "Secretary",
+            "Chủ tịch",
+            "Thành viên",
+            "Thư ký",
+          ];
+          const filteredRoles = apiRoles.filter((r: any) =>
+            standardRoleNames.some(
+              (name) => (r.roleName || "").toLowerCase() === name.toLowerCase()
+            )
+          );
+          setCouncilRoles(filteredRoles);
+        } catch (error) {
+          console.warn("Failed to fetch council roles, using fallback", error);
+          // Use fallback roles if API fails
+          setCouncilRoles([
+            { id: 1, roleName: "Chair" },
+            { id: 2, roleName: "Member" },
+            { id: 3, roleName: "Secretary" },
+          ]);
+        }
         setNotes(notesRes.data || []);
         setReports(reportsRes.data || []);
         setDefenseSessions(sessionsRes.data || []);
@@ -1931,6 +1964,7 @@ export default function AdminDataManagementPage() {
             id: String(c.id),
             councilName: c.councilName || `Council ${c.id}`,
           }))}
+          councilRoles={councilRoles}
         />
       )}
       {editingReport && (

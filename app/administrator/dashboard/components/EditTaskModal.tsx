@@ -96,7 +96,7 @@ const EditTaskModal: React.FC<EditTaskModalProps> = ({
       );
 
       if (titleExists) {
-        setTitleError("Tên task này đã tồn tại trong hệ thống");
+        setTitleError("Task name already exists");
       } else {
         setTitleError("");
       }

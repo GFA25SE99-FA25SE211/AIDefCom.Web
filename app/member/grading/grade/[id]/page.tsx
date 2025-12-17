@@ -165,8 +165,8 @@ export default function GradeGroupPage() {
     } else if (eventType === "error") {
       console.error("STT Error:", msg.message || msg.error);
       swalConfig.error(
-        "STT Error",
-        msg.message || msg.error || "An unknown error occurred"
+        "Speech Error",
+        msg.message || msg.error || "Speech processing failed"
       );
     } else if (eventType === "broadcast_transcript") {
       // Transcript từ client khác trong cùng session (thư ký hoặc member khác nói)
@@ -298,8 +298,8 @@ export default function GradeGroupPage() {
       const upgradePopupTimeout = setTimeout(() => {
         if (waitingForQuestionResult.current) {
           swalConfig.warning(
-            "Processing question...",
-            "The system is analyzing your question. You can continue with the defense session, results will be displayed when ready."
+            "Processing...",
+            "Analyzing question. You can continue with the defense."
           );
         }
       }, 5000);
@@ -839,7 +839,7 @@ export default function GradeGroupPage() {
 
     if (!currentUserId) {
       await swalConfig.error(
-        "Error", 
+        "Error",
         "User ID not found. Please refresh the page and try again."
       );
       return;
@@ -891,13 +891,18 @@ export default function GradeGroupPage() {
                 try {
                   const rubricIdRes = await rubricsApi.getIdByName(rubricName);
                   const validatedRubricId = rubricIdRes.data;
-                  console.log(`✅ Validated rubric ID ${validatedRubricId} for update, name: "${rubricName}"`);
+                  console.log(
+                    `✅ Validated rubric ID ${validatedRubricId} for update, name: "${rubricName}"`
+                  );
                 } catch (nameError: any) {
-                  console.warn(`⚠️ Could not validate rubric by name "${rubricName}" for update:`, nameError.message);
+                  console.warn(
+                    `⚠️ Could not validate rubric by name "${rubricName}" for update:`,
+                    nameError.message
+                  );
                   // Continue with update anyway since rubricId is not required in ScoreUpdateDto
                 }
               }
-              
+
               await scoresApi.update(existingScoreId, {
                 value: score,
                 comment: criterionComment || undefined,
@@ -925,15 +930,24 @@ export default function GradeGroupPage() {
                 try {
                   const rubricIdRes = await rubricsApi.getIdByName(rubricName);
                   rubricId = rubricIdRes.data;
-                  console.log(`✅ Found rubric ID ${rubricId} for name: "${rubricName}"`);
+                  console.log(
+                    `✅ Found rubric ID ${rubricId} for name: "${rubricName}"`
+                  );
                 } catch (nameError: any) {
-                  console.warn(`⚠️ Could not find rubric by name "${rubricName}":`, nameError.message);
+                  console.warn(
+                    `⚠️ Could not find rubric by name "${rubricName}":`,
+                    nameError.message
+                  );
                   // Fallback: try to use rubric.id if available
                   if (rubric.id && typeof rubric.id === "number") {
-                    console.warn(`Using rubric.id ${rubric.id} as fallback for name "${rubricName}"`);
+                    console.warn(
+                      `Using rubric.id ${rubric.id} as fallback for name "${rubricName}"`
+                    );
                     rubricId = rubric.id;
                   } else {
-                    console.error(`❌ Cannot create score: rubric not found by name "${rubricName}" and no rubric.id available`);
+                    console.error(
+                      `❌ Cannot create score: rubric not found by name "${rubricName}" and no rubric.id available`
+                    );
                     continue; // Skip this rubric
                   }
                 }
@@ -949,11 +963,17 @@ export default function GradeGroupPage() {
                 continue;
               }
               if (!sessionId || sessionId === 0) {
-                console.error("Missing or invalid sessionId for score creation:", sessionId);
+                console.error(
+                  "Missing or invalid sessionId for score creation:",
+                  sessionId
+                );
                 continue;
               }
               if (!rubricId || rubricId === 0) {
-                console.error("Missing or invalid rubricId for score creation:", rubricId);
+                console.error(
+                  "Missing or invalid rubricId for score creation:",
+                  rubricId
+                );
                 continue;
               }
 
@@ -970,10 +990,18 @@ export default function GradeGroupPage() {
               console.log("Score validation check:");
               console.log("- value:", typeof score, score);
               console.log("- rubricId:", typeof rubricId, rubricId);
-              console.log("- evaluatorId:", typeof currentUserId, currentUserId);
+              console.log(
+                "- evaluatorId:",
+                typeof currentUserId,
+                currentUserId
+              );
               console.log("- studentId:", typeof student.id, student.id);
               console.log("- sessionId:", typeof sessionId, sessionId);
-              console.log("- comment:", typeof criterionComment, criterionComment);
+              console.log(
+                "- comment:",
+                typeof criterionComment,
+                criterionComment
+              );
 
               await scoresApi.create(newScore);
             } catch (error) {

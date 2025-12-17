@@ -5,12 +5,14 @@ import CreateCouncilForm, {
   CouncilFormData,
 } from "../create-sessions/components/CreateCouncilForm";
 import AddCouncilMemberModal from "../create-sessions/components/AddCouncilMemberModal";
+import EditCouncilMemberModal from "../create-sessions/components/EditCouncilMemberModal";
 import { councilsApi } from "@/lib/api/councils";
+import { councilRolesApi } from "@/lib/api/council-roles";
 import { committeeAssignmentsApi } from "@/lib/api/committee-assignments";
 import { authApi } from "@/lib/api/auth";
 import { majorsApi } from "@/lib/api/majors";
 import type { CouncilDto, CommitteeAssignmentDto } from "@/lib/models";
-import { Plus, Shield, Users, UserCircle2 } from "lucide-react";
+import { Plus, Shield, Users, UserCircle2, Edit, Trash2 } from "lucide-react";
 import { swalConfig } from "@/lib/utils/sweetAlert";
 
 const IconBadge = ({
@@ -34,10 +36,12 @@ const IconBadge = ({
 interface CouncilWithMembers extends CouncilDto {
   memberCount: number;
   members: Array<{
+    assignmentId?: number | string;
     name: string;
     department: string;
     email: string;
     role: string;
+    lecturerId: string;
   }>;
 }
 
@@ -50,126 +54,154 @@ export default function ManageCouncilPage() {
   >([]);
   const [loading, setLoading] = useState(true);
   const [isAddMemberModalOpen, setIsAddMemberModalOpen] = useState(false);
+  const [isEditMemberModalOpen, setIsEditMemberModalOpen] = useState(false);
   const [selectedCouncilId, setSelectedCouncilId] = useState<number | null>(
     null
   );
+  const [editingMember, setEditingMember] = useState<{
+    assignmentId: number | string;
+    lecturerId: string;
+    role: string;
+    name: string;
+    email: string;
+  } | null>(null);
   const [roleMapping, setRoleMapping] = useState<Map<string, number>>(
     new Map()
   );
 
-  useEffect(() => {
-    const fetchCouncils = async () => {
-      try {
-        setLoading(true);
-        const [councilsRes, assignmentsRes, usersRes, majorsRes] =
-          await Promise.all([
-            councilsApi.getAll(false).catch(() => ({ data: [] })),
-            committeeAssignmentsApi.getAll().catch(() => ({ data: [] })),
-            authApi.getAllUsers().catch(() => ({ data: [] })),
-            majorsApi.getAll().catch(() => ({ data: [] })),
-          ]);
+  const fetchCouncils = async () => {
+    try {
+      setLoading(true);
+      const [councilsRes, assignmentsRes, usersRes, majorsRes] =
+        await Promise.all([
+          councilsApi.getAll(false).catch(() => ({ data: [] })),
+          committeeAssignmentsApi.getAll().catch(() => ({ data: [] })),
+          authApi.getAllUsers().catch(() => ({ data: [] })),
+          majorsApi.getAll().catch(() => ({ data: [] })),
+        ]);
 
-        const councilsData = councilsRes.data || [];
-        const assignments = assignmentsRes.data || [];
-        const users = usersRes.data || [];
-        const majorsData = (majorsRes.data || []).map((m: any) => ({
-          id: m.id,
-          name: m.majorName || m.name || `Major ${m.id}`,
+      const councilsData = councilsRes.data || [];
+      const assignments = assignmentsRes.data || [];
+      const users = usersRes.data || [];
+      const majorsData = (majorsRes.data || []).map((m: any) => ({
+        id: m.id,
+        name: m.majorName || m.name || `Major ${m.id}`,
+      }));
+      setMajors(majorsData);
+
+      // Filter lecturers from users - only show users with role Lecturer, Chair, or Member
+      const allowedRoles = ["lecturer", "chair", "member"];
+      const lecturersData = (users || [])
+        .filter((u: any) => {
+          // Handle role as string or array
+          const roles = Array.isArray(u.role)
+            ? u.role.map((r: string) => r?.toLowerCase())
+            : u.role
+            ? [u.role.toLowerCase()]
+            : u.Role
+            ? [u.Role.toLowerCase()]
+            : u.roles
+            ? Array.isArray(u.roles)
+              ? u.roles.map((r: string) => r?.toLowerCase())
+              : [u.roles.toLowerCase()]
+            : [];
+
+          // Check if user has any of the allowed roles
+          return roles.some((role: string) => allowedRoles.includes(role));
+        })
+        .map((u: any) => ({
+          id: u.id,
+          fullName: u.fullName || u.name || "Unknown",
+          email: u.email || "",
         }));
-        setMajors(majorsData);
+      setLecturers(lecturersData);
 
-        // Filter lecturers from users - only show users with role Lecturer, Chair, or Member
-        const allowedRoles = ["lecturer", "chair", "member"];
-        const lecturersData = (users || [])
-          .filter((u: any) => {
-            // Handle role as string or array
-            const roles = Array.isArray(u.role)
-              ? u.role.map((r: string) => r?.toLowerCase())
-              : u.role
-              ? [u.role.toLowerCase()]
-              : u.Role
-              ? [u.Role.toLowerCase()]
-              : u.roles
-              ? Array.isArray(u.roles)
-                ? u.roles.map((r: string) => r?.toLowerCase())
-                : [u.roles.toLowerCase()]
-              : [];
-
-            // Check if user has any of the allowed roles
-            return roles.some((role: string) => allowedRoles.includes(role));
-          })
-          .map((u: any) => ({
-            id: u.id,
-            fullName: u.fullName || u.name || "Unknown",
-            email: u.email || "",
-          }));
-        setLecturers(lecturersData);
-
-        // Build role mapping from existing assignments
-        // Map role names to councilRoleId (default mapping if not found in assignments)
-        const mapping = new Map<string, number>();
-        assignments.forEach((a: any) => {
-          const roleName = a.roleName || a.role;
-          const councilRoleId = a.councilRoleId;
-          if (roleName && councilRoleId) {
-            // Map common role names
-            if (
-              roleName.toLowerCase().includes("chair") ||
-              roleName.toLowerCase().includes("chủ tịch")
-            ) {
-              mapping.set("Chair", councilRoleId);
-            } else if (
-              roleName.toLowerCase().includes("secretary") ||
-              roleName.toLowerCase().includes("thư ký")
-            ) {
-              mapping.set("Secretary", councilRoleId);
-            } else if (
-              roleName.toLowerCase().includes("member") ||
-              roleName.toLowerCase().includes("thành viên")
-            ) {
-              mapping.set("Member", councilRoleId);
-            }
-          }
-        });
-        // Set default mappings if not found
-        if (!mapping.has("Chair")) mapping.set("Chair", 1);
-        if (!mapping.has("Member")) mapping.set("Member", 2);
-        if (!mapping.has("Secretary")) mapping.set("Secretary", 3);
-        setRoleMapping(mapping);
-
-        const councilsWithMembers: CouncilWithMembers[] = councilsData.map(
-          (council: CouncilDto) => {
-            const councilAssignments = assignments.filter(
-              (a: CommitteeAssignmentDto) => a.councilId === council.id
-            );
-            const members = councilAssignments.map(
-              (a: CommitteeAssignmentDto) => {
-                const user = users.find((u: any) => u.id === a.lecturerId);
-                return {
-                  name: user?.fullName || "Unknown",
-                  department: "N/A",
-                  email: user?.email || "",
-                  role: a.role || (a as any).roleName || "Member",
-                };
-              }
-            );
-
-            return {
-              ...council,
-              memberCount: members.length,
-              members,
-            };
-          }
+      // Try to get council roles from API (getAll), filter standard roles, use fallback if needed
+      let roles: any[] = [];
+      const standardRoleNames = [
+        "Chair",
+        "Member",
+        "Secretary",
+        "Chủ tịch",
+        "Thành viên",
+        "Thư ký",
+      ];
+      try {
+        const rolesRes = await councilRolesApi.getAll();
+        const apiRoles = rolesRes.data || [];
+        roles = apiRoles.filter((r: any) =>
+          standardRoleNames.some(
+            (name) => (r.roleName || "").toLowerCase() === name.toLowerCase()
+          )
         );
-
-        setCouncils(councilsWithMembers);
       } catch (error) {
-        console.error("Error fetching councils:", error);
-      } finally {
-        setLoading(false);
+        console.warn("Failed to fetch council roles, using fallback", error);
+        // Use fallback roles if API fails
+        roles = [
+          { id: 1, roleName: "Chair" },
+          { id: 2, roleName: "Member" },
+          { id: 3, roleName: "Secretary" },
+        ];
       }
-    };
 
+      // Build role mapping from council roles API or fallback
+      const roleMap = new Map<string, number>();
+      roles.forEach((role: any) => {
+        roleMap.set(role.roleName, role.id);
+      });
+
+      // Set additional fallback mappings if still not found
+      if (!roleMap.has("Chair") && !roleMap.has("Chủ tịch")) {
+        roleMap.set("Chair", 1);
+      }
+      if (!roleMap.has("Member") && !roleMap.has("Thành viên")) {
+        roleMap.set("Member", 2);
+      }
+      if (!roleMap.has("Secretary") && !roleMap.has("Thư ký")) {
+        roleMap.set("Secretary", 3);
+      }
+      setRoleMapping(roleMap);
+
+      const councilsWithMembers: CouncilWithMembers[] = councilsData.map(
+        (council: CouncilDto) => {
+          const councilAssignments = assignments.filter(
+            (a: CommitteeAssignmentDto) => a.councilId === council.id
+          );
+          const members = councilAssignments.map(
+            (a: CommitteeAssignmentDto) => {
+              const user = users.find((u: any) => u.id === a.lecturerId);
+              return {
+                assignmentId: a.id,
+                name: user?.fullName || "Unknown",
+                department: "N/A",
+                email: user?.email || "",
+                role: a.role || (a as any).roleName || "Member",
+                lecturerId: a.lecturerId,
+              };
+            }
+          );
+
+          return {
+            ...council,
+            memberCount: members.length,
+            members,
+          };
+        }
+      );
+
+      setCouncils(councilsWithMembers);
+    } catch (error) {
+      console.error("Error fetching councils:", error);
+      await swalConfig.error(
+        "Error Loading Data",
+        "Failed to load council information. Please refresh the page."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchCouncils();
   }, []);
 
@@ -255,10 +287,12 @@ export default function ManageCouncilPage() {
             (a: CommitteeAssignmentDto) => {
               const user = users.find((u: any) => u.id === a.lecturerId);
               return {
+                assignmentId: a.id,
                 name: user?.fullName || "Unknown",
                 department: "N/A",
                 email: user?.email || "",
                 role: a.role || (a as any).roleName || "Member",
+                lecturerId: a.lecturerId,
               };
             }
           );
@@ -283,9 +317,8 @@ export default function ManageCouncilPage() {
     } catch (error: any) {
       console.error("Error creating council:", error);
       await swalConfig.error(
-        "Failed to Create Council",
-        error.message ||
-          "An unexpected error occurred while creating the council."
+        "Creation Failed",
+        error.message || "Unable to create council"
       );
     }
   };
@@ -351,10 +384,12 @@ export default function ManageCouncilPage() {
             (a: CommitteeAssignmentDto) => {
               const user = users.find((u: any) => u.id === a.lecturerId);
               return {
+                assignmentId: a.id,
                 name: user?.fullName || "Unknown",
                 department: "N/A",
                 email: user?.email || "",
                 role: a.role,
+                lecturerId: a.lecturerId,
               };
             }
           );
@@ -378,8 +413,8 @@ export default function ManageCouncilPage() {
     } catch (error: any) {
       console.error("Error adding member:", error);
       await swalConfig.error(
-        "Failed to Add Member",
-        error.message || "An unexpected error occurred while adding the member."
+        "Add Failed",
+        error.message || "Unable to add member"
       );
     }
   };
@@ -387,6 +422,87 @@ export default function ManageCouncilPage() {
   const handleOpenAddMemberModal = (councilId: number) => {
     setSelectedCouncilId(councilId);
     setIsAddMemberModalOpen(true);
+  };
+
+  const handleOpenEditMemberModal = (
+    councilId: number,
+    member: {
+      assignmentId: number | string;
+      lecturerId: string;
+      role: string;
+      name: string;
+      email: string;
+    }
+  ) => {
+    setSelectedCouncilId(councilId);
+    setEditingMember(member);
+    setIsEditMemberModalOpen(true);
+  };
+
+  const handleEditMember = async (data: {
+    assignmentId: number | string;
+    lecturerId: string;
+    role: string;
+    councilRoleId: number;
+  }) => {
+    try {
+      await committeeAssignmentsApi.update(data.assignmentId, {
+        lecturerId: data.lecturerId,
+        councilId: selectedCouncilId!,
+        councilRoleId: data.councilRoleId,
+      });
+
+      // Close modal and reset state
+      setIsEditMemberModalOpen(false);
+      setEditingMember(null);
+      setSelectedCouncilId(null);
+
+      // Refresh data
+      await fetchCouncils();
+
+      await swalConfig.success(
+        "Member Updated Successfully!",
+        "The council member information has been updated."
+      );
+    } catch (error: any) {
+      console.error("Error updating member:", error);
+      await swalConfig.error(
+        "Update Failed",
+        error.message || "Unable to update member"
+      );
+    }
+  };
+
+  const handleDeleteMember = async (
+    assignmentId: number | string,
+    memberName: string
+  ) => {
+    try {
+      const result = await swalConfig.confirm(
+        "Delete Member",
+        `Are you sure you want to remove ${memberName} from the council?`,
+        "Yes, remove member",
+        "Cancel"
+      );
+
+      if (result.isConfirmed) {
+        await committeeAssignmentsApi.delete(assignmentId);
+
+        // Refresh data
+        await fetchCouncils();
+
+        await swalConfig.success(
+          "Member Removed",
+          "The member has been successfully removed from the council."
+        );
+      }
+    } catch (error: any) {
+      console.error("Error deleting member:", error);
+      await swalConfig.error(
+        "Delete Failed",
+        error.message || "Unable to remove member"
+      );
+    }
   };
 
   return (
@@ -494,7 +610,7 @@ export default function ManageCouncilPage() {
                     <div className="divide-y divide-gray-100">
                       {council.members.map((member) => (
                         <div
-                          key={member.email}
+                          key={`${member.email}-${member.assignmentId}`}
                           className="flex items-center justify-between py-2 text-sm"
                         >
                           <div className="flex items-center gap-3">
@@ -511,17 +627,46 @@ export default function ManageCouncilPage() {
                               </p>
                             </div>
                           </div>
-                          <span
-                            className={`px-2 py-1 rounded-full text-xs font-medium ${
-                              member.role === "Chair"
-                                ? "bg-purple-100 text-purple-700"
-                                : member.role === "Secretary"
-                                ? "bg-green-100 text-green-700"
-                                : "bg-gray-100 text-gray-700"
-                            }`}
-                          >
-                            {member.role}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                member.role === "Chair"
+                                  ? "bg-purple-100 text-purple-700"
+                                  : member.role === "Secretary"
+                                  ? "bg-green-100 text-green-700"
+                                  : "bg-gray-100 text-gray-700"
+                              }`}
+                            >
+                              {member.role}
+                            </span>
+                            <button
+                              onClick={() =>
+                                handleOpenEditMemberModal(council.id, {
+                                  assignmentId: member.assignmentId!,
+                                  lecturerId: member.lecturerId,
+                                  role: member.role,
+                                  name: member.name,
+                                  email: member.email,
+                                })
+                              }
+                              className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition"
+                              title="Edit member"
+                            >
+                              <Edit className="w-3 h-3" />
+                            </button>
+                            <button
+                              onClick={() =>
+                                handleDeleteMember(
+                                  member.assignmentId!,
+                                  member.name
+                                )
+                              }
+                              className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition"
+                              title="Remove member"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -553,11 +698,39 @@ export default function ManageCouncilPage() {
             councils
               .find((c) => c.id === selectedCouncilId)
               ?.members.map((m) => ({
-                lecturerId:
-                  lecturers.find((l) => l.email === m.email)?.id || "",
+                lecturerId: m.lecturerId,
+                assignmentId: m.assignmentId,
               })) || []
           }
           roleMapping={roleMapping}
+        />
+      )}
+
+      {/* Edit Member Modal */}
+      {selectedCouncilId && editingMember && (
+        <EditCouncilMemberModal
+          isOpen={isEditMemberModalOpen}
+          onClose={() => {
+            setIsEditMemberModalOpen(false);
+            setEditingMember(null);
+            setSelectedCouncilId(null);
+          }}
+          onSubmit={handleEditMember}
+          councilId={selectedCouncilId}
+          lecturers={lecturers}
+          existingMembers={
+            councils
+              .find((c) => c.id === selectedCouncilId)
+              ?.members.filter(
+                (m) => m.assignmentId !== editingMember.assignmentId
+              )
+              .map((m) => ({
+                lecturerId: m.lecturerId,
+                assignmentId: m.assignmentId,
+              })) || []
+          }
+          roleMapping={roleMapping}
+          editingMember={editingMember}
         />
       )}
     </div>

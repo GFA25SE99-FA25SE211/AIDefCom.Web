@@ -555,18 +555,21 @@ export default function ViewScorePage() {
 
       if (msg.is_duplicate) {
         swalConfig.warning(
-          "Câu hỏi bị trùng",
-          "Hệ thống đã ghi nhận câu hỏi này trước đó."
+          "Duplicate Question",
+          "This question has already been recorded."
         );
       } else {
         setQuestionResults((prev) => [msg, ...prev]);
-        swalConfig.success("Câu hỏi hợp lệ", "Đã ghi nhận câu hỏi mới.");
+        swalConfig.success(
+          "Question Recorded",
+          "New question has been captured."
+        );
       }
     } else if (eventType === "error") {
       console.error("STT Error:", msg.message || msg.error);
       swalConfig.error(
-        "Lỗi STT",
-        msg.message || msg.error || "Đã xảy ra lỗi không xác định"
+        "Speech Error",
+        msg.message || msg.error || "Speech processing failed"
       );
     } else if (eventType === "broadcast_transcript") {
       // Transcript từ client khác trong cùng session (thư ký hoặc member khác nói)
@@ -599,7 +602,7 @@ export default function ViewScorePage() {
         return;
       }
       const speakerName = msg.speaker_name || msg.speaker || "Thành viên";
-      swalConfig.toast.info(`Đang xử lý câu hỏi từ ${speakerName}...`);
+      swalConfig.toast.info(`Processing question from ${speakerName}...`);
     } else if (eventType === "broadcast_question_result") {
       // Kết quả câu hỏi từ người khác
       if (
@@ -688,16 +691,13 @@ export default function ViewScorePage() {
       broadcastQuestionProcessing();
 
       waitingForQuestionResult.current = true;
-      swalConfig.loading(
-        "Đang xử lý câu hỏi...",
-        "Vui lòng chờ hệ thống phân tích câu hỏi"
-      );
+      swalConfig.loading("Processing...", "Analyzing question...");
 
       const upgradePopupTimeout = setTimeout(() => {
         if (waitingForQuestionResult.current) {
           swalConfig.warning(
-            "Đang xử lý câu hỏi...",
-            "Hệ thống đang phân tích câu hỏi. Bạn có thể tiếp tục buổi bảo vệ, kết quả sẽ hiển thị khi hoàn tất."
+            "Processing...",
+            "Analyzing question. You can continue with the defense."
           );
         }
       }, 5000);
@@ -813,13 +813,18 @@ export default function ViewScorePage() {
                 try {
                   const rubricIdRes = await rubricsApi.getIdByName(rubricName);
                   const validatedRubricId = rubricIdRes.data;
-                  console.log(`✅ Validated rubric ID ${validatedRubricId} for update, name: "${rubricName}"`);
+                  console.log(
+                    `✅ Validated rubric ID ${validatedRubricId} for update, name: "${rubricName}"`
+                  );
                 } catch (nameError: any) {
-                  console.warn(`⚠️ Could not validate rubric by name "${rubricName}" for update:`, nameError.message);
+                  console.warn(
+                    `⚠️ Could not validate rubric by name "${rubricName}" for update:`,
+                    nameError.message
+                  );
                   // Continue with update anyway since rubricId is not required in ScoreUpdateDto
                 }
               }
-              
+
               await scoresApi.update(existingScoreId, {
                 value: score,
                 comment: criterionComment || undefined,
@@ -847,15 +852,24 @@ export default function ViewScorePage() {
                 try {
                   const rubricIdRes = await rubricsApi.getIdByName(rubricName);
                   rubricId = rubricIdRes.data;
-                  console.log(`✅ Found rubric ID ${rubricId} for name: "${rubricName}"`);
+                  console.log(
+                    `✅ Found rubric ID ${rubricId} for name: "${rubricName}"`
+                  );
                 } catch (nameError: any) {
-                  console.warn(`⚠️ Could not find rubric by name "${rubricName}":`, nameError.message);
+                  console.warn(
+                    `⚠️ Could not find rubric by name "${rubricName}":`,
+                    nameError.message
+                  );
                   // Fallback: try to use rubric.id if available
                   if (rubric.id && typeof rubric.id === "number") {
-                    console.warn(`Using rubric.id ${rubric.id} as fallback for name "${rubricName}"`);
+                    console.warn(
+                      `Using rubric.id ${rubric.id} as fallback for name "${rubricName}"`
+                    );
                     rubricId = rubric.id;
                   } else {
-                    console.error(`❌ Cannot create score: rubric not found by name "${rubricName}" and no rubric.id available`);
+                    console.error(
+                      `❌ Cannot create score: rubric not found by name "${rubricName}" and no rubric.id available`
+                    );
                     continue; // Skip this rubric
                   }
                 }

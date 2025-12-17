@@ -8,6 +8,7 @@ export * from './groups';
 export * from './students';
 export * from './defense-sessions';
 export * from './councils';
+export * from './council-roles';
 export * from './project-tasks';
 export * from './committee-assignments';
 export * from './transcripts';

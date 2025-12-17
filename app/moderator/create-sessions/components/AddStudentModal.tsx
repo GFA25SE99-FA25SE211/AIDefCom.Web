@@ -44,6 +44,14 @@ interface GroupOption {
   name: string;
 }
 
+interface SemesterOption {
+  id: number;
+  name: string;
+  startDate?: string;
+  endDate?: string;
+  isDefault?: boolean;
+}
+
 interface AddStudentModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -53,8 +61,10 @@ interface AddStudentModalProps {
     dob: string;
     gender: string;
     role: string;
+    semesterId: string;
   }) => void;
   groupOptions: GroupOption[];
+  semesterOptions?: SemesterOption[];
 }
 
 const AddStudentModal: React.FC<AddStudentModalProps> = ({
@@ -62,9 +72,11 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
   onClose,
   onSubmit,
   groupOptions = [],
+  semesterOptions = [],
 }) => {
   const [userId, setUserId] = useState("");
   const [groupId, setGroupId] = useState("");
+  const [semesterId, setSemesterId] = useState("");
   const [dob, setDob] = useState("");
   const [gender, setGender] = useState("");
   const [role, setRole] = useState("");
@@ -77,13 +89,24 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
     if (isOpen) {
       setUserId("");
       setGroupId("");
+
+      // Auto-select default semester
+      const defaultSemester = semesterOptions.find((s) => s.isDefault);
+      setSemesterId(
+        defaultSemester
+          ? String(defaultSemester.id)
+          : semesterOptions.length
+          ? String(semesterOptions[0].id)
+          : ""
+      );
+
       setDob("");
       setGender("");
       setRole("");
       setUserIdError("");
       setIsCheckingUserId(false);
     }
-  }, [isOpen]);
+  }, [isOpen, semesterOptions]);
 
   // Cleanup debounce timer
   useEffect(() => {
@@ -103,7 +126,9 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
     }
 
     try {
-      const exists = await studentsApi.checkStudentCodeExists(userIdValue.trim());
+      const exists = await studentsApi.checkStudentCodeExists(
+        userIdValue.trim()
+      );
       if (exists) {
         setUserIdError("This student code/name already exists in the system");
       } else {
@@ -152,10 +177,11 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
       return;
     }
 
-    onSubmit({ userId, groupId, dob, gender, role });
+    onSubmit({ userId, groupId, dob, gender, role, semesterId });
     // Reset form
     setUserId("");
     setGroupId("");
+    setSemesterId("");
     setDob("");
     setGender("");
     setRole("");
@@ -243,6 +269,37 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
             {groupOptions.map((group) => (
               <option key={group.id} value={group.id}>
                 {group.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Semester */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Semester <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="text"
+            value={
+              semesterOptions.find((s) => s.id.toString() === semesterId)
+                ?.name || ""
+            }
+            readOnly
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-gray-50 cursor-not-allowed focus:outline-none"
+            placeholder="No semester selected"
+          />
+          {/* Hidden select to maintain form data */}
+          <select
+            value={semesterId}
+            onChange={(e) => setSemesterId(e.target.value)}
+            required
+            className="hidden"
+          >
+            <option value="">Select a semester</option>
+            {semesterOptions.map((semester) => (
+              <option key={semester.id} value={semester.id}>
+                {semester.name}
               </option>
             ))}
           </select>
