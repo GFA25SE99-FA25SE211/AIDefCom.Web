@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { swalConfig } from "@/lib/utils/sweetAlert";
 import { voiceApi, VoiceEnrollmentStatus } from "@/lib/api/voice";
+import { useVoiceEnrollmentCheck } from "@/lib/hooks/useVoiceEnrollmentCheck";
 import { AI_SERVICE_URL } from "@/lib/config/api-urls";
 
 interface UserInfo {
@@ -37,6 +38,10 @@ interface UserInfo {
 
 export default function ProfilePage() {
   const router = useRouter();
+
+  // Voice enrollment check - must be enrolled to access this page
+  const { isChecking: checkingVoice } = useVoiceEnrollmentCheck();
+
   const [user, setUser] = useState<UserInfo | null>(null);
   const [loading, setLoading] = useState(true);
 
