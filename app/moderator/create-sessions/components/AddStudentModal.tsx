@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Modal from "./Modal";
+import { studentsApi } from "@/lib/api/students";
 
 // Icon Save
 const SaveIcon = () => (
@@ -67,9 +68,90 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
   const [dob, setDob] = useState("");
   const [gender, setGender] = useState("");
   const [role, setRole] = useState("");
+  const [userIdError, setUserIdError] = useState("");
+  const [isCheckingUserId, setIsCheckingUserId] = useState(false);
+  const debounceTimer = useRef<NodeJS.Timeout | null>(null);
+
+  // Reset states when modal opens/closes
+  useEffect(() => {
+    if (isOpen) {
+      setUserId("");
+      setGroupId("");
+      setDob("");
+      setGender("");
+      setRole("");
+      setUserIdError("");
+      setIsCheckingUserId(false);
+    }
+  }, [isOpen]);
+
+  // Cleanup debounce timer
+  useEffect(() => {
+    return () => {
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current);
+      }
+    };
+  }, []);
+
+  // Check for duplicate student code/userId
+  const checkUserIdDuplicate = async (userIdValue: string) => {
+    if (!userIdValue.trim()) {
+      setUserIdError("");
+      setIsCheckingUserId(false);
+      return;
+    }
+
+    try {
+      const exists = await studentsApi.checkStudentCodeExists(userIdValue.trim());
+      if (exists) {
+        setUserIdError("This student code/name already exists in the system");
+      } else {
+        setUserIdError("");
+      }
+    } catch (error) {
+      console.error("Error checking student code:", error);
+      setUserIdError("");
+    } finally {
+      setIsCheckingUserId(false);
+    }
+  };
+
+  // Handle userId change with debounce
+  const handleUserIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setUserId(value);
+
+    // Clear previous timer
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current);
+    }
+
+    if (value.trim()) {
+      setIsCheckingUserId(true);
+      setUserIdError("");
+
+      // Set new timer
+      debounceTimer.current = setTimeout(() => {
+        checkUserIdDuplicate(value);
+      }, 500);
+    } else {
+      setUserIdError("");
+      setIsCheckingUserId(false);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (userIdError) {
+      return;
+    }
+
+    if (isCheckingUserId) {
+      return;
+    }
+
     onSubmit({ userId, groupId, dob, gender, role });
     // Reset form
     setUserId("");
@@ -113,14 +195,35 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Student Name
           </label>
-          <input
-            type="text"
-            value={userId}
-            onChange={(e) => setUserId(e.target.value)}
-            required
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-            placeholder="Enter student's full name"
-          />
+          <div className="relative">
+            <input
+              type="text"
+              value={userId}
+              onChange={handleUserIdChange}
+              required
+              className={`w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 outline-none ${
+                userIdError
+                  ? "border-red-300 focus:border-red-500 focus:ring-red-500"
+                  : isCheckingUserId
+                  ? "border-blue-300 focus:border-blue-500 focus:ring-blue-500"
+                  : "border-gray-300 focus:ring-blue-500"
+              }`}
+              placeholder="Enter student's full name"
+            />
+            {isCheckingUserId && (
+              <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+              </div>
+            )}
+          </div>
+          {userIdError && (
+            <span className="text-red-500 text-sm mt-1">{userIdError}</span>
+          )}
+          {isCheckingUserId && !userIdError && (
+            <span className="text-blue-500 text-sm mt-1">
+              Checking student code...
+            </span>
+          )}
         </div>
 
         {/* Group ID */}

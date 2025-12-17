@@ -37,10 +37,11 @@ const CalendarIcon = () => (
 );
 
 interface Student {
-  id: string; // Changed from number to string to match API
-  displayId?: number; // Optional display ID
+  id: string; // Real ID from API (can be GUID or student code)
+  displayId?: number; // Display ID for table (1, 2, 3...)
   userId: string;
-  groupId: string | number; // Allow both string and number
+  groupId: string; // Store actual group ID for editing
+  groupName: string; // Display name of the group
   dob: string;
   gender: string;
   role: "Leader" | "Member";
@@ -79,7 +80,7 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({
   useEffect(() => {
     if (studentData) {
       setUserId(studentData.userId);
-      setGroupId(String(studentData.groupId));
+      setGroupId(String(studentData.groupId)); // Ensure groupId is set correctly
       setDob(studentData.dob);
       setGender(studentData.gender);
       setRole(studentData.role);
@@ -123,8 +124,8 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={`Edit Student (ID: ${studentData.id})`}
-      subtitle="Update student details below"
+      title={`Edit Student: ${studentData.userId}`}
+      subtitle={`Current Group: ${studentData.groupName} • ID: ${studentData.id}`}
       footerContent={footer}
     >
       <form

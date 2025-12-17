@@ -34,6 +34,10 @@ export const projectTasksApi = {
     return apiClient.get<string[]>(`/api/project-tasks/lecturer/${lecturerId}/session/${sessionId}/rubrics`);
   },
 
+  getRubricIdByName: async (rubricName: string) => {
+    return apiClient.get<number>(`/api/project-tasks/rubric/by-name/${encodeURIComponent(rubricName)}`);
+  },
+
   create: async (data: ProjectTaskCreateDto) => {
     return apiClient.post<ProjectTaskDto>('/api/project-tasks', data);
   },
@@ -44,6 +48,19 @@ export const projectTasksApi = {
 
   delete: async (id: number) => {
     return apiClient.delete(`/api/project-tasks/${id}`);
+  },
+
+  // Check if task title exists (duplicate check)
+  checkTitleExists: async (title: string): Promise<boolean> => {
+    try {
+      const allTasks = await projectTasksApi.getAll();
+      return (allTasks.data || []).some(
+        (task) => task.title?.toLowerCase() === title.trim().toLowerCase()
+      );
+    } catch (error) {
+      console.error('Error checking task title:', error);
+      return false;
+    }
   },
 };
 

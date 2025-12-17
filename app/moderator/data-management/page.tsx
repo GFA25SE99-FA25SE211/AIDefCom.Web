@@ -452,7 +452,10 @@ export default function DataManagementPage() {
       }));
       setCouncils(councilsData);
       setIsAddCouncilModalOpen(false);
-      await swalConfig.success("Success!", "Council created successfully!");
+      await swalConfig.success(
+        "Success",
+        "Council has been created successfully!"
+      );
     } catch (error: any) {
       await swalConfig.error(
         "Error Creating Council",
@@ -577,7 +580,10 @@ export default function DataManagementPage() {
       }));
       setGroups(groupsData);
       setIsAddGroupModalOpen(false);
-      await swalConfig.success("Success!", "Group created successfully!");
+      await swalConfig.success(
+        "Success",
+        "Group has been created successfully!"
+      );
     } catch (error: any) {
       await swalConfig.error(
         "Error Creating Group",
@@ -632,7 +638,10 @@ export default function DataManagementPage() {
       await studentsApi.create(createPayload);
       await fetchData();
       setIsAddStudentModalOpen(false);
-      await swalConfig.success("Success!", "Student added successfully!");
+      await swalConfig.success(
+        "Success",
+        "Student has been created successfully!"
+      );
     } catch (error: any) {
       await swalConfig.error(
         "Error Adding Student",
@@ -663,8 +672,8 @@ export default function DataManagementPage() {
       await fetchData(); // Refresh the sessions list
       setIsAddSessionModalOpen(false);
       await swalConfig.success(
-        "Success!",
-        "Defense session created successfully!"
+        "Success",
+        "Defense session has been created successfully!"
       );
     } catch (error: any) {
       await swalConfig.error(
@@ -761,7 +770,10 @@ export default function DataManagementPage() {
       setCouncils(councilsData);
       setIsEditCouncilModalOpen(false);
       setEditingCouncil(null);
-      await swalConfig.success("Success!", "Council updated successfully!");
+      await swalConfig.success(
+        "Success",
+        "Council has been updated successfully!"
+      );
     } catch (error: any) {
       await swalConfig.error(
         "Error Updating Council",
@@ -815,7 +827,10 @@ export default function DataManagementPage() {
       setGroups(groupsData);
       setIsEditGroupModalOpen(false);
       setEditingGroup(null);
-      await swalConfig.success("Success!", "Group updated successfully!");
+      await swalConfig.success(
+        "Success",
+        "Group has been updated successfully!"
+      );
     } catch (error: any) {
       await swalConfig.error(
         "Error Updating Group",
@@ -844,12 +859,17 @@ export default function DataManagementPage() {
           studentCode: data.userId,
           fullName: data.userId,
           groupId: data.groupId,
+          dateOfBirth: data.dob,
+          gender: data.gender,
         };
         console.log("Update student payload:", updatePayload);
 
         await studentsApi.update(student.id, updatePayload);
-        await fetchData();
-        await swalConfig.success("Success!", "Student updated successfully!");
+        await fetchData(); // This will refresh the data and update group info
+        await swalConfig.success(
+          "Success",
+          "Student has been updated successfully!"
+        );
       }
       setIsEditStudentModalOpen(false);
       setEditingStudent(null);
@@ -975,7 +995,10 @@ export default function DataManagementPage() {
       setSessions(sessionsData);
       setIsEditSessionModalOpen(false);
       setEditingSession(null);
-      await swalConfig.success("Success!", "Session updated successfully!");
+      await swalConfig.success(
+        "Success",
+        "Session has been updated successfully!"
+      );
     } catch (error: any) {
       await swalConfig.error(
         "Error Updating Session",
@@ -986,16 +1009,19 @@ export default function DataManagementPage() {
   // Delete handlers - all using swalConfig consistently
   const handleDeleteCouncil = async (id: number) => {
     const result = await swalConfig.confirm(
-      "Delete Council?",
-      `Are you sure you want to delete council with ID: ${id}?`,
-      "Yes, delete it!"
+      "Delete Council",
+      `Are you sure you want to delete this council? This action cannot be undone.`,
+      "Yes, Delete"
     );
 
     if (result.isConfirmed) {
       try {
         await councilsApi.softDelete(id);
         setCouncils(councils.filter((c) => c.id !== id));
-        await swalConfig.success("Deleted!", "Council deleted successfully!");
+        await swalConfig.success(
+          "Success",
+          "Council has been deleted successfully!"
+        );
       } catch (error: any) {
         console.error("Error deleting council:", error);
         await swalConfig.error(
@@ -1008,9 +1034,9 @@ export default function DataManagementPage() {
 
   const handleDeleteGroup = async (id: string) => {
     const result = await swalConfig.confirm(
-      "Delete Group?",
+      "Delete Group",
       `Are you sure you want to delete this group? This action cannot be undone.`,
-      "Yes, delete it!"
+      "Yes, Delete"
     );
 
     if (!result.isConfirmed) return;
@@ -1018,7 +1044,10 @@ export default function DataManagementPage() {
     try {
       await groupsApi.delete(id);
       setGroups(groups.filter((g) => g.id !== id));
-      await swalConfig.success("Deleted!", "Group deleted successfully!");
+      await swalConfig.success(
+        "Success",
+        "Group has been deleted successfully!"
+      );
     } catch (error: any) {
       console.error("Error deleting group:", error);
       await swalConfig.error(
@@ -1039,11 +1068,11 @@ export default function DataManagementPage() {
     console.log("Found student for deletion:", student);
 
     const result = await swalConfig.confirm(
-      "Delete Student?",
+      "Delete Student",
       `Are you sure you want to delete student: ${
         student?.userId || studentId
       }? This action cannot be undone.`,
-      "Yes, delete it!"
+      "Yes, Delete"
     );
 
     if (!result.isConfirmed) return;
@@ -1053,7 +1082,10 @@ export default function DataManagementPage() {
       const deleteResponse = await studentsApi.delete(studentId);
       console.log("Delete student API response:", deleteResponse);
       await fetchData();
-      await swalConfig.success("Deleted!", "Student deleted successfully!");
+      await swalConfig.success(
+        "Success",
+        "Student has been deleted successfully!"
+      );
     } catch (error: any) {
       console.error("Error deleting student:", error);
       await swalConfig.error(
@@ -1065,9 +1097,9 @@ export default function DataManagementPage() {
 
   const handleDeleteSession = async (id: number) => {
     const result = await swalConfig.confirm(
-      "Delete Session?",
+      "Delete Session",
       `Are you sure you want to delete this session? This action cannot be undone.`,
-      "Yes, delete it!"
+      "Yes, Delete"
     );
 
     if (!result.isConfirmed) return;
@@ -1075,7 +1107,10 @@ export default function DataManagementPage() {
     try {
       await defenseSessionsApi.delete(id);
       setSessions(sessions.filter((s) => s.id !== id));
-      await swalConfig.success("Deleted!", "Session deleted successfully!");
+      await swalConfig.success(
+        "Success",
+        "Session has been deleted successfully!"
+      );
     } catch (error: any) {
       console.error("Error deleting session:", error);
       await swalConfig.error(
@@ -1087,9 +1122,9 @@ export default function DataManagementPage() {
 
   const handleDeleteTranscript = async (id: number) => {
     const result = await swalConfig.confirm(
-      "Delete Transcript?",
+      "Delete Transcript",
       `Are you sure you want to delete this transcript? This action cannot be undone.`,
-      "Yes, delete it!"
+      "Yes, Delete"
     );
 
     if (!result.isConfirmed) return;
@@ -1100,7 +1135,10 @@ export default function DataManagementPage() {
       console.log("Delete transcript response:", response);
 
       setTranscripts((prev) => prev.filter((t) => t.id !== id));
-      await swalConfig.success("Deleted!", "Transcript deleted successfully!");
+      await swalConfig.success(
+        "Success",
+        "Transcript has been deleted successfully!"
+      );
     } catch (error: any) {
       console.error("Error deleting transcript:", error);
       await swalConfig.error(
@@ -1112,9 +1150,9 @@ export default function DataManagementPage() {
 
   const handleDeleteReport = async (id: number) => {
     const result = await swalConfig.confirm(
-      "Delete Report?",
+      "Delete Report",
       `Are you sure you want to delete this report? This action cannot be undone.`,
-      "Yes, delete it!"
+      "Yes, Delete"
     );
 
     if (!result.isConfirmed) return;
@@ -1125,7 +1163,10 @@ export default function DataManagementPage() {
       console.log("Delete report response:", response);
 
       setReports((prev) => prev.filter((r) => r.id !== id));
-      await swalConfig.success("Deleted!", "Report deleted successfully!");
+      await swalConfig.success(
+        "Success",
+        "Report has been deleted successfully!"
+      );
     } catch (error: any) {
       console.error("Error deleting report:", error);
       await swalConfig.error(
@@ -1160,7 +1201,10 @@ export default function DataManagementPage() {
       }));
       setTranscripts(transcriptsData);
       setSelectedTranscript(null);
-      await swalConfig.success("Success!", "Transcript approved successfully!");
+      await swalConfig.success(
+        "Success",
+        "Transcript has been approved successfully!"
+      );
     } catch (error: any) {
       await swalConfig.error(
         "Error Approving Transcript",
@@ -1214,7 +1258,7 @@ export default function DataManagementPage() {
       }
 
       setIsDownloadingReport(true);
-      
+
       // If filePath is a URL, open it in a new window
       if (filePath.startsWith("http://") || filePath.startsWith("https://")) {
         window.open(filePath, "_blank");
@@ -1231,10 +1275,10 @@ export default function DataManagementPage() {
         link.click();
         document.body.removeChild(link);
 
-      await swalConfig.success(
-        "Download Complete",
-        "Report has been downloaded successfully."
-      );
+        await swalConfig.success(
+          "Download Complete",
+          "Report has been downloaded successfully."
+        );
       }
     } catch (error: any) {
       console.error("Download report error:", error);
@@ -1268,10 +1312,14 @@ export default function DataManagementPage() {
       (g) =>
         (g.id && String(g.id).toLowerCase().includes(searchLower)) ||
         (g.projectCode && g.projectCode.toLowerCase().includes(searchLower)) ||
-        (g.topicTitle_EN && g.topicTitle_EN.toLowerCase().includes(searchLower)) ||
-        (g.topicTitle_VN && g.topicTitle_VN.toLowerCase().includes(searchLower)) ||
-        (g.projectTitle && g.projectTitle.toLowerCase().includes(searchLower)) ||
-        (g.semesterName && g.semesterName.toLowerCase().includes(searchLower)) ||
+        (g.topicTitle_EN &&
+          g.topicTitle_EN.toLowerCase().includes(searchLower)) ||
+        (g.topicTitle_VN &&
+          g.topicTitle_VN.toLowerCase().includes(searchLower)) ||
+        (g.projectTitle &&
+          g.projectTitle.toLowerCase().includes(searchLower)) ||
+        (g.semesterName &&
+          g.semesterName.toLowerCase().includes(searchLower)) ||
         (g.majorName && g.majorName.toLowerCase().includes(searchLower)) ||
         (g.status && g.status.toLowerCase().includes(searchLower))
     );
@@ -1372,15 +1420,30 @@ export default function DataManagementPage() {
   }, [filteredReports, reportPage]);
 
   // Total pages calculations (based on filtered data)
-  const councilTotalPages = Math.max(1, Math.ceil(filteredCouncils.length / PAGE_SIZE));
-  const groupTotalPages = Math.max(1, Math.ceil(filteredGroups.length / PAGE_SIZE));
-  const studentTotalPages = Math.max(1, Math.ceil(filteredStudents.length / PAGE_SIZE));
-  const sessionTotalPages = Math.max(1, Math.ceil(filteredSessions.length / PAGE_SIZE));
+  const councilTotalPages = Math.max(
+    1,
+    Math.ceil(filteredCouncils.length / PAGE_SIZE)
+  );
+  const groupTotalPages = Math.max(
+    1,
+    Math.ceil(filteredGroups.length / PAGE_SIZE)
+  );
+  const studentTotalPages = Math.max(
+    1,
+    Math.ceil(filteredStudents.length / PAGE_SIZE)
+  );
+  const sessionTotalPages = Math.max(
+    1,
+    Math.ceil(filteredSessions.length / PAGE_SIZE)
+  );
   const transcriptTotalPages = Math.max(
     1,
     Math.ceil(filteredTranscripts.length / PAGE_SIZE)
   );
-  const reportTotalPages = Math.max(1, Math.ceil(filteredReports.length / PAGE_SIZE));
+  const reportTotalPages = Math.max(
+    1,
+    Math.ceil(filteredReports.length / PAGE_SIZE)
+  );
 
   // Reset page to 1 when search changes
   useEffect(() => {
@@ -1777,6 +1840,7 @@ export default function DataManagementPage() {
               <tr className="text-left text-gray-600 text-xs uppercase">
                 <th className="px-3 py-2">ID</th>
                 <th className="px-3 py-2">Name</th>
+                <th className="px-3 py-2">Group</th>
                 <th className="px-3 py-2">DOB</th>
                 <th className="px-3 py-2">Gender</th>
                 <th className="px-3 py-2">Role</th>
@@ -1788,6 +1852,11 @@ export default function DataManagementPage() {
                 <tr key={s.id} className="border-t hover:bg-gray-50">
                   <td className="px-3 py-2">{s.displayId}</td>
                   <td className="px-3 py-2">{s.userId}</td>
+                  <td className="px-3 py-2">
+                    <span className="px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-700">
+                      {s.groupName}
+                    </span>
+                  </td>
                   <td className="px-3 py-2">{s.dob}</td>
                   <td className="px-3 py-2">{s.gender}</td>
                   <td className="px-3 py-2">

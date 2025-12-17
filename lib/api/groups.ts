@@ -33,5 +33,35 @@ export const groupsApi = {
   restore: async (id: string) => {
     return apiClient.put(`/api/groups/${id}/restore`, {});
   },
+
+  // Check if topic title (EN) exists (duplicate check)
+  checkTopicENExists: async (topicEN: string): Promise<boolean> => {
+    try {
+      const allGroups = await groupsApi.getAll();
+      return (allGroups.data || []).some(
+        (group) => 
+          (group.topicTitle_EN?.toLowerCase() === topicEN.trim().toLowerCase()) ||
+          (group.projectTitle?.toLowerCase() === topicEN.trim().toLowerCase())
+      );
+    } catch (error) {
+      console.error('Error checking topic EN:', error);
+      return false;
+    }
+  },
+
+  // Check if topic title (VN) exists (duplicate check)
+  checkTopicVNExists: async (topicVN: string): Promise<boolean> => {
+    try {
+      const allGroups = await groupsApi.getAll();
+      return (allGroups.data || []).some(
+        (group) => 
+          (group.topicTitle_VN?.toLowerCase() === topicVN.trim().toLowerCase()) ||
+          (group.projectTitle?.toLowerCase() === topicVN.trim().toLowerCase())
+      );
+    } catch (error) {
+      console.error('Error checking topic VN:', error);
+      return false;
+    }
+  },
 };
 

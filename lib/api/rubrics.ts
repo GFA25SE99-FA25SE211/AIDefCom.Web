@@ -5,6 +5,7 @@ import type {
   RubricUpdateDto,
 } from '@/lib/models';
 import { majorRubricsApi } from './major-rubrics';
+import { projectTasksApi } from './project-tasks';
 
 export const rubricsApi = {
   getAll: async () => {
@@ -13,6 +14,33 @@ export const rubricsApi = {
 
   getById: async (id: number) => {
     return apiClient.get<RubricDto>(`/api/rubrics/${id}`);
+  },
+
+  // Get rubric name by ID (uses existing getById endpoint)
+  getNameById: async (id: number) => {
+    const rubric = await apiClient.get<RubricDto>(`/api/rubrics/${id}`);
+    return {
+      ...rubric,
+      data: rubric.data?.rubricName || ''
+    };
+  },
+
+  // Get rubric ID by name (uses existing project-tasks endpoint)
+  getIdByName: async (rubricName: string) => {
+    return projectTasksApi.getRubricIdByName(rubricName);
+  },
+
+  // Check if rubric name exists (duplicate check)
+  checkNameExists: async (rubricName: string): Promise<boolean> => {
+    try {
+      await rubricsApi.getIdByName(rubricName);
+      return true; // Name exists
+    } catch (error: any) {
+      if (error.status === 404) {
+        return false; // Name does not exist
+      }
+      throw error; // Re-throw other errors
+    }
   },
 
   // Get rubrics by major ID
