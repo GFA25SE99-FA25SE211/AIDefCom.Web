@@ -66,4 +66,17 @@ export const authApi = {
 
     return response.json();
   },
+
+  // Check if email exists (duplicate check)
+  checkEmailExists: async (email: string): Promise<boolean> => {
+    try {
+      const allUsers = await authApi.getAllUsers();
+      return (allUsers.data || []).some(
+        (user) => user.email?.toLowerCase() === email.trim().toLowerCase()
+      );
+    } catch (error) {
+      console.error('Error checking email:', error);
+      return false;
+    }
+  },
 };

@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Modal from "./Modal"; // Base modal import
+import { councilsApi } from "@/lib/api/councils";
 
 const SaveIcon = () => (
   <svg
@@ -36,9 +37,115 @@ const AddCouncilModal: React.FC<AddCouncilModalProps> = ({
   const [majorId, setMajorId] = useState("");
   const [description, setDescription] = useState("");
   const [isActive, setIsActive] = useState(true);
+  const [descriptionError, setDescriptionError] = useState("");
+  const [isCheckingDescription, setIsCheckingDescription] = useState(false);
+  const debounceTimer = useRef<NodeJS.Timeout | null>(null);
+
+  // Reset states when modal opens/closes
+  useEffect(() => {
+    if (isOpen) {
+      setMajorId("");
+      setDescription("");
+      setIsActive(true);
+      setDescriptionError("");
+      setIsCheckingDescription(false);
+    }
+  }, [isOpen]);
+
+  // Cleanup debounce timer
+  useEffect(() => {
+    return () => {
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current);
+      }
+    };
+  }, []);
+
+  // Check for duplicate description
+  const checkDescriptionDuplicate = async (descValue: string, majorIdValue: string) => {
+    if (!descValue.trim() || !majorIdValue) {
+      setDescriptionError("");
+      setIsCheckingDescription(false);
+      return;
+    }
+
+    try {
+      const majorIdNum = Number(majorIdValue);
+      if (isNaN(majorIdNum)) {
+        setDescriptionError("");
+        setIsCheckingDescription(false);
+        return;
+      }
+
+      const exists = await councilsApi.checkDescriptionExists(descValue.trim(), majorIdNum);
+      if (exists) {
+        setDescriptionError("This description already exists for the selected major");
+      } else {
+        setDescriptionError("");
+      }
+    } catch (error) {
+      console.error("Error checking description:", error);
+      setDescriptionError("");
+    } finally {
+      setIsCheckingDescription(false);
+    }
+  };
+
+  // Handle description change with debounce
+  const handleDescriptionChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setDescription(value);
+
+    // Clear previous timer
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current);
+    }
+
+    if (value.trim() && majorId) {
+      setIsCheckingDescription(true);
+      setDescriptionError("");
+
+      // Set new timer
+      debounceTimer.current = setTimeout(() => {
+        checkDescriptionDuplicate(value, majorId);
+      }, 500);
+    } else {
+      setDescriptionError("");
+      setIsCheckingDescription(false);
+    }
+  };
+
+  // Handle major change - also check description if description is already filled
+  const handleMajorChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const value = e.target.value;
+    setMajorId(value);
+
+    // If description is already filled, check duplicate for new major
+    if (description.trim() && value) {
+      setIsCheckingDescription(true);
+      setDescriptionError("");
+
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current);
+      }
+
+      debounceTimer.current = setTimeout(() => {
+        checkDescriptionDuplicate(description, value);
+      }, 500);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (descriptionError) {
+      return;
+    }
+
+    if (isCheckingDescription) {
+      return;
+    }
+
     if (!majorId) return;
     onSubmit({ 
       majorId: parseInt(majorId, 10), 
@@ -89,7 +196,7 @@ const AddCouncilModal: React.FC<AddCouncilModalProps> = ({
           <select
             id="councilMajor"
             value={majorId}
-            onChange={(e) => setMajorId(e.target.value)}
+            onChange={handleMajorChange}
             required
             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
           >
@@ -109,14 +216,35 @@ const AddCouncilModal: React.FC<AddCouncilModalProps> = ({
           >
             Description
           </label>
-          <input
-            type="text"
-            id="councilDescription"
-            placeholder="e.g. AI Defense Council - Fall 2025"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-          />
+          <div className="relative">
+            <input
+              type="text"
+              id="councilDescription"
+              placeholder="e.g. AI Defense Council - Fall 2025"
+              value={description}
+              onChange={handleDescriptionChange}
+              className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 outline-none ${
+                descriptionError
+                  ? "border-red-300 focus:border-red-500 focus:ring-red-500"
+                  : isCheckingDescription
+                  ? "border-blue-300 focus:border-blue-500 focus:ring-blue-500"
+                  : "border-gray-300 focus:ring-blue-500"
+              }`}
+            />
+            {isCheckingDescription && (
+              <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+              </div>
+            )}
+          </div>
+          {descriptionError && (
+            <span className="text-red-500 text-sm mt-1">{descriptionError}</span>
+          )}
+          {isCheckingDescription && !descriptionError && (
+            <span className="text-blue-500 text-sm mt-1">
+              Checking description...
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-3">

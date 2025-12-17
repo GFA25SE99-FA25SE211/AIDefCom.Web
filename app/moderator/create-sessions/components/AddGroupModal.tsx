@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import Modal from "./Modal";
+import { groupsApi } from "@/lib/api/groups";
 
 // Icon Save
 const SaveIcon = () => (
@@ -89,7 +90,7 @@ const AddGroupModal: React.FC<AddGroupModalProps> = ({
     };
   }, []);
 
-  // Check for duplicate Topic Title (English)
+  // Check for duplicate Topic Title (English) using API
   const checkTopicENDuplicate = async (value: string) => {
     if (!value.trim()) {
       setTopicENError("");
@@ -97,29 +98,22 @@ const AddGroupModal: React.FC<AddGroupModalProps> = ({
       return;
     }
 
-    // Simulate API delay
-    await new Promise((resolve) => setTimeout(resolve, 300));
-
-    const isDuplicate = existingGroups.some((group) => {
-      const existingEN =
-        group.topicTitle_EN ||
-        group.topicEN ||
-        group.projectTitle ||
-        "";
-      return (
-        existingEN.toLowerCase().trim() === value.toLowerCase().trim()
-      );
-    });
-
-    if (isDuplicate) {
-      setTopicENError("Topic Title (English) này đã tồn tại trong hệ thống");
-    } else {
+    try {
+      const exists = await groupsApi.checkTopicENExists(value.trim());
+      if (exists) {
+        setTopicENError("This topic title (English) already exists in the system");
+      } else {
+        setTopicENError("");
+      }
+    } catch (error) {
+      console.error("Error checking topic EN:", error);
       setTopicENError("");
+    } finally {
+      setIsCheckingEN(false);
     }
-    setIsCheckingEN(false);
   };
 
-  // Check for duplicate Topic Title (Vietnamese)
+  // Check for duplicate Topic Title (Vietnamese) using API
   const checkTopicVNDuplicate = async (value: string) => {
     if (!value.trim()) {
       setTopicVNError("");
@@ -127,26 +121,19 @@ const AddGroupModal: React.FC<AddGroupModalProps> = ({
       return;
     }
 
-    // Simulate API delay
-    await new Promise((resolve) => setTimeout(resolve, 300));
-
-    const isDuplicate = existingGroups.some((group) => {
-      const existingVN =
-        group.topicTitle_VN ||
-        group.topicVN ||
-        group.projectTitle ||
-        "";
-      return (
-        existingVN.toLowerCase().trim() === value.toLowerCase().trim()
-      );
-    });
-
-    if (isDuplicate) {
-      setTopicVNError("Topic Title (Vietnamese) này đã tồn tại trong hệ thống");
-    } else {
+    try {
+      const exists = await groupsApi.checkTopicVNExists(value.trim());
+      if (exists) {
+        setTopicVNError("This topic title (Vietnamese) already exists in the system");
+      } else {
+        setTopicVNError("");
+      }
+    } catch (error) {
+      console.error("Error checking topic VN:", error);
       setTopicVNError("");
+    } finally {
+      setIsCheckingVN(false);
     }
-    setIsCheckingVN(false);
   };
 
   // Handle Topic EN change with debounce
@@ -276,7 +263,7 @@ const AddGroupModal: React.FC<AddGroupModalProps> = ({
           )}
           {isCheckingEN && !topicENError && (
             <span className="text-blue-500 text-sm mt-1">
-              Đang kiểm tra Topic Title (English)...
+              Checking topic title (English)...
             </span>
           )}
         </div>
@@ -310,7 +297,7 @@ const AddGroupModal: React.FC<AddGroupModalProps> = ({
           )}
           {isCheckingVN && !topicVNError && (
             <span className="text-blue-500 text-sm mt-1">
-              Đang kiểm tra Topic Title (Vietnamese)...
+              Checking topic title (Vietnamese)...
             </span>
           )}
         </div>

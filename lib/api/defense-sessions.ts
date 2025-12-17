@@ -93,4 +93,21 @@ export const defenseSessionsApi = {
       `/api/defense-sessions/${id}/complete`
     );
   },
+
+  // Check if session exists for a group on a specific date/time (duplicate check)
+  checkSessionExists: async (groupId: string, date: string, startTime: string): Promise<boolean> => {
+    try {
+      const sessions = await defenseSessionsApi.getByGroupId(groupId);
+      return (sessions.data || []).some(
+        (session) => {
+          const sessionDate = session.defenseDate ? new Date(session.defenseDate).toISOString().split('T')[0] : '';
+          const sessionTime = session.startTime || '';
+          return sessionDate === date && sessionTime === startTime;
+        }
+      );
+    } catch (error) {
+      console.error('Error checking session:', error);
+      return false;
+    }
+  },
 };

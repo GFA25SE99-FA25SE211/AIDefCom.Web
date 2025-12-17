@@ -87,5 +87,20 @@ export const studentsApi = {
       formData
     );
   },
+
+  // Check if student code/userId exists (duplicate check)
+  checkStudentCodeExists: async (studentCode: string): Promise<boolean> => {
+    try {
+      const allStudents = await studentsApi.getAll();
+      return (allStudents.data || []).some(
+        (student) => 
+          student.studentCode?.toLowerCase() === studentCode.trim().toLowerCase() ||
+          student.fullName?.toLowerCase() === studentCode.trim().toLowerCase()
+      );
+    } catch (error) {
+      console.error('Error checking student code:', error);
+      return false;
+    }
+  },
 };
 

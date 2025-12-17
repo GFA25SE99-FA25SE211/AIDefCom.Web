@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import Modal from "../../../moderator/create-sessions/components/Modal";
 import { Plus } from "lucide-react";
 import { swalConfig } from "@/lib/utils/sweetAlert";
+import { rubricsApi } from "@/lib/api/rubrics";
 
 interface AddRubricData {
   name: string;
@@ -58,7 +59,7 @@ const AddRubricModal: React.FC<AddRubricModalProps> = ({
     };
   }, []);
 
-  // Check for duplicate rubric name
+  // Check for duplicate rubric name using API
   const checkNameDuplicate = async (nameValue: string) => {
     if (!nameValue.trim()) {
       setNameError("");
@@ -66,19 +67,19 @@ const AddRubricModal: React.FC<AddRubricModalProps> = ({
       return;
     }
 
-    // Simulate API delay
-    await new Promise((resolve) => setTimeout(resolve, 300));
-
-    const isDuplicate = existingRubrics.some(
-      (rubric) => rubric.name.toLowerCase() === nameValue.trim().toLowerCase()
-    );
-
-    if (isDuplicate) {
-      setNameError("Tên rubric này đã tồn tại trong hệ thống");
-    } else {
+    try {
+      const exists = await rubricsApi.checkNameExists(nameValue.trim());
+      if (exists) {
+        setNameError("This rubric name already exists in the system");
+      } else {
+        setNameError("");
+      }
+    } catch (error) {
+      console.error("Error checking rubric name:", error);
       setNameError("");
+    } finally {
+      setIsCheckingName(false);
     }
-    setIsCheckingName(false);
   };
 
   // Handle name change with debounce
@@ -109,12 +110,12 @@ const AddRubricModal: React.FC<AddRubricModalProps> = ({
     e.preventDefault();
 
     if (nameError) {
-      swalConfig.error("Tên rubric không hợp lệ", "Vui lòng sử dụng tên khác.");
+      swalConfig.error("Invalid Rubric Name", "Please use a different name.");
       return;
     }
 
     if (!name || !description || majorId === 0) {
-      swalConfig.error("Thiếu thông tin", "Vui lòng điền đầy đủ thông tin.");
+      swalConfig.error("Missing Information", "Please fill in all required fields.");
       return;
     }
 
@@ -172,7 +173,7 @@ const AddRubricModal: React.FC<AddRubricModalProps> = ({
           )}
           {isCheckingName && (
             <span className="text-blue-500 text-sm mt-1">
-              Đang kiểm tra tên rubric...
+              Checking rubric name...
             </span>
           )}
         </div>

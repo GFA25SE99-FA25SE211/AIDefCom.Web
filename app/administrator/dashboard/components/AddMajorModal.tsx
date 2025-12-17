@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import Modal from "../../../moderator/create-sessions/components/Modal";
 import { Plus } from "lucide-react";
 import { swalConfig } from "@/lib/utils/sweetAlert";
+import { majorsApi } from "@/lib/api/majors";
 
 interface AddMajorData {
   name: string;
@@ -62,38 +63,38 @@ const AddMajorModal: React.FC<AddMajorModalProps> = ({
     const invalidCharsRegex =
       /^[a-zA-ZÀÁÂÃÈÉÊÌÍÒÓÔÕÙÚĂĐĨŨƠàáâãèéêìíòóôõùúăđĩũơƯĂẠẢẤẦẨẪẬẮẰẲẴẶẸẺẼỀỂưăạảấầẩẫậắằẳẵặẹẻẽềểỄỆỈỊỌỎỐỒỔỖỘỚỜỞỠỢỤỦỨỪễếệỉịọỏốồổỗộớờởỡợụủứừỬỮỰỲỴÝỶỸửữựỳỵýỷỹ\s]+$/;
     if (!invalidCharsRegex.test(nameValue.trim())) {
-      setNameError("Tên chuyên ngành chỉ được chứa chữ cái và khoảng trắng");
+      setNameError("Major name can only contain letters and spaces");
       setIsCheckingName(false);
       return;
     }
 
     // Check length (2-200 characters as per backend)
     if (nameValue.trim().length < 2) {
-      setNameError("Tên chuyên ngành phải có ít nhất 2 ký tự");
+      setNameError("Major name must be at least 2 characters");
       setIsCheckingName(false);
       return;
     }
 
     if (nameValue.trim().length > 200) {
-      setNameError("Tên chuyên ngành không được vượt quá 200 ký tự");
+      setNameError("Major name cannot exceed 200 characters");
       setIsCheckingName(false);
       return;
     }
 
-    // Simulate API delay
-    await new Promise((resolve) => setTimeout(resolve, 300));
-
-    const isDuplicate = existingMajors.some(
-      (major) =>
-        major.majorName.toLowerCase() === nameValue.trim().toLowerCase()
-    );
-
-    if (isDuplicate) {
-      setNameError("Tên chuyên ngành này đã tồn tại trong hệ thống");
-    } else {
+    // Check duplicate using API
+    try {
+      const exists = await majorsApi.checkNameExists(nameValue.trim());
+      if (exists) {
+        setNameError("This major name already exists in the system");
+      } else {
+        setNameError("");
+      }
+    } catch (error) {
+      console.error("Error checking major name:", error);
       setNameError("");
+    } finally {
+      setIsCheckingName(false);
     }
-    setIsCheckingName(false);
   };
 
   // Handle name change with debounce
@@ -129,7 +130,7 @@ const AddMajorModal: React.FC<AddMajorModalProps> = ({
 
     // Validate description length (max 1000 characters based on backend)
     if (value.length > 1000) {
-      setDescriptionError("Mô tả không được vượt quá 1000 ký tự");
+      setDescriptionError("Description cannot exceed 1000 characters");
     } else {
       setDescriptionError("");
     }
@@ -140,22 +141,22 @@ const AddMajorModal: React.FC<AddMajorModalProps> = ({
 
     if (nameError) {
       swalConfig.error(
-        "Tên chuyên ngành không hợp lệ",
-        "Vui lòng sử dụng tên khác."
+        "Invalid Major Name",
+        "Please use a different name."
       );
       return;
     }
 
     if (descriptionError) {
       swalConfig.error(
-        "Mô tả không hợp lệ",
-        "Vui lòng kiểm tra và sửa lỗi mô tả."
+        "Invalid Description",
+        "Please check and fix the description."
       );
       return;
     }
 
     if (!name.trim() || !description.trim()) {
-      swalConfig.error("Thiếu thông tin", "Vui lòng điền đầy đủ thông tin.");
+      swalConfig.error("Missing Information", "Please fill in all required fields.");
       return;
     }
 
@@ -213,7 +214,7 @@ const AddMajorModal: React.FC<AddMajorModalProps> = ({
           )}
           {isCheckingName && (
             <span className="text-blue-500 text-sm mt-1">
-              Đang kiểm tra tên chuyên ngành...
+              Checking major name...
             </span>
           )}
         </div>
