@@ -68,7 +68,17 @@ const AddGroupModal: React.FC<AddGroupModalProps> = ({
     if (isOpen) {
       setTopicEN("");
       setTopicVN("");
-      setSemesterId("");
+
+      // Auto-select default semester
+      const defaultSemester = semesterOptions.find((s) => (s as any).isDefault);
+      setSemesterId(
+        defaultSemester
+          ? String(defaultSemester.id)
+          : semesterOptions.length
+          ? String(semesterOptions[0].id)
+          : ""
+      );
+
       setMajorId("");
       setStatus("Active");
       setTopicENError("");
@@ -76,7 +86,7 @@ const AddGroupModal: React.FC<AddGroupModalProps> = ({
       setIsCheckingEN(false);
       setIsCheckingVN(false);
     }
-  }, [isOpen]);
+  }, [isOpen, semesterOptions]);
 
   // Cleanup debounce timers
   useEffect(() => {
@@ -101,7 +111,9 @@ const AddGroupModal: React.FC<AddGroupModalProps> = ({
     try {
       const exists = await groupsApi.checkTopicENExists(value.trim());
       if (exists) {
-        setTopicENError("This topic title (English) already exists in the system");
+        setTopicENError(
+          "This topic title (English) already exists in the system"
+        );
       } else {
         setTopicENError("");
       }
@@ -124,7 +136,9 @@ const AddGroupModal: React.FC<AddGroupModalProps> = ({
     try {
       const exists = await groupsApi.checkTopicVNExists(value.trim());
       if (exists) {
-        setTopicVNError("This topic title (Vietnamese) already exists in the system");
+        setTopicVNError(
+          "This topic title (Vietnamese) already exists in the system"
+        );
       } else {
         setTopicVNError("");
       }
@@ -305,12 +319,24 @@ const AddGroupModal: React.FC<AddGroupModalProps> = ({
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Semester <span className="text-red-500">*</span>
+            <span className="ml-1 text-xs text-gray-500">(Auto-selected)</span>
           </label>
+          <input
+            type="text"
+            value={
+              semesterOptions.find((s) => s.id.toString() === semesterId)
+                ?.name || ""
+            }
+            readOnly
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-gray-50 cursor-not-allowed focus:outline-none"
+            placeholder="No semester selected"
+          />
+          {/* Hidden select to maintain form data */}
           <select
             value={semesterId}
             onChange={(e) => setSemesterId(e.target.value)}
             required
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+            className="hidden"
           >
             <option value="">Select a semester</option>
             {semesterOptions.map((semester) => (

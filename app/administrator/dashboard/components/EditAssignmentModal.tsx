@@ -18,6 +18,7 @@ interface EditAssignmentModalProps {
   assignmentData: Assignment | null;
   lecturers: Array<{ id: string; fullName: string }>;
   councils: Array<{ id: string; councilName: string }>;
+  councilRoles?: Array<{ id: number; roleName: string; description?: string }>;
 }
 
 const EditAssignmentModal: React.FC<EditAssignmentModalProps> = ({
@@ -27,6 +28,7 @@ const EditAssignmentModal: React.FC<EditAssignmentModalProps> = ({
   assignmentData,
   lecturers,
   councils,
+  councilRoles = [],
 }) => {
   const [lecturerId, setLecturerId] = useState("");
   const [councilId, setCouncilId] = useState("");
@@ -43,7 +45,12 @@ const EditAssignmentModal: React.FC<EditAssignmentModalProps> = ({
       // Use roleName if available, otherwise use role
       const roleToSet = assignmentData.roleName || assignmentData.role || "";
       setRole(roleToSet);
-      console.log("Setting role:", roleToSet, "from assignmentData:", assignmentData);
+      console.log(
+        "Setting role:",
+        roleToSet,
+        "from assignmentData:",
+        assignmentData
+      );
 
       // Log warning if council not found
       if (!foundCouncil && councils.length > 0) {
@@ -142,9 +149,20 @@ const EditAssignmentModal: React.FC<EditAssignmentModalProps> = ({
             required
           >
             <option value="">Select Role</option>
-            <option value="Chair">Chair</option>
-            <option value="Secretary">Secretary</option>
-            <option value="Member">Member</option>
+            {councilRoles.length > 0 ? (
+              councilRoles.map((councilRole) => (
+                <option key={councilRole.id} value={councilRole.roleName}>
+                  {councilRole.roleName}
+                </option>
+              ))
+            ) : (
+              // Fallback options if no council roles loaded
+              <>
+                <option value="Chair">Chair</option>
+                <option value="Secretary">Secretary</option>
+                <option value="Member">Member</option>
+              </>
+            )}
           </select>
         </div>
       </form>

@@ -72,9 +72,9 @@ export default function CreateSessionsPage() {
         setLoading(true);
         const [sessionsRes, groupsRes, councilsRes, semestersRes] =
           await Promise.all([
-          defenseSessionsApi.getAll().catch(() => ({ data: [] })),
-          groupsApi.getAll().catch(() => ({ data: [] })),
-          councilsApi.getAll(false).catch(() => ({ data: [] })),
+            defenseSessionsApi.getAll().catch(() => ({ data: [] })),
+            groupsApi.getAll().catch(() => ({ data: [] })),
+            councilsApi.getAll(false).catch(() => ({ data: [] })),
             semestersApi.getAll().catch(() => ({ data: [] })),
           ]);
 
@@ -239,9 +239,8 @@ export default function CreateSessionsPage() {
         error?.errorData?.message ||
         error?.message;
       await swalConfig.error(
-        "Failed to Create Session",
-        apiDetails ||
-          "An unexpected error occurred while creating the session."
+        "Creation Failed",
+        apiDetails || "Unable to create session"
       );
     }
   };

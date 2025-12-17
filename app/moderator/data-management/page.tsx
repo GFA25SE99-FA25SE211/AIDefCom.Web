@@ -131,9 +131,15 @@ export default function DataManagementPage() {
   const [isAddStudentModalOpen, setIsAddStudentModalOpen] = useState(false);
   const [isAddSessionModalOpen, setIsAddSessionModalOpen] = useState(false);
   const [majors, setMajors] = useState<{ id: number; name: string }[]>([]);
-  const [semesters, setSemesters] = useState<{ id: number; name: string }[]>(
-    []
-  );
+  const [semesters, setSemesters] = useState<
+    {
+      id: number;
+      name: string;
+      startDate?: string;
+      endDate?: string;
+      isDefault?: boolean;
+    }[]
+  >([]);
 
   const [selectedTranscript, setSelectedTranscript] =
     useState<Transcript | null>(null);
@@ -206,6 +212,59 @@ export default function DataManagementPage() {
       })),
     [groups]
   );
+
+  // Function to automatically select the most appropriate semester based on current date
+  const getDefaultSemesterId = (semesterList: any[]): number | null => {
+    if (!semesterList.length) return null;
+
+    const currentDate = new Date();
+
+    // Find semester where current date is between startDate and endDate
+    const activeSemester = semesterList.find((semester) => {
+      if (semester.startDate && semester.endDate) {
+        const startDate = new Date(semester.startDate);
+        const endDate = new Date(semester.endDate);
+        return currentDate >= startDate && currentDate <= endDate;
+      }
+      return false;
+    });
+
+    if (activeSemester) {
+      return activeSemester.id;
+    }
+
+    // If no active semester, find the nearest upcoming semester
+    const upcomingSemesters = semesterList
+      .filter(
+        (semester) =>
+          semester.startDate && new Date(semester.startDate) > currentDate
+      )
+      .sort(
+        (a, b) =>
+          new Date(a.startDate).getTime() - new Date(b.startDate).getTime()
+      );
+
+    if (upcomingSemesters.length > 0) {
+      return upcomingSemesters[0].id;
+    }
+
+    // If no upcoming semester, get the most recent semester
+    const pastSemesters = semesterList
+      .filter(
+        (semester) =>
+          semester.endDate && new Date(semester.endDate) < currentDate
+      )
+      .sort(
+        (a, b) => new Date(b.endDate).getTime() - new Date(a.endDate).getTime()
+      );
+
+    if (pastSemesters.length > 0) {
+      return pastSemesters[0].id;
+    }
+
+    // Fallback to first semester
+    return semesterList[0].id;
+  };
 
   const fetchData = useCallback(async () => {
     try {
@@ -281,8 +340,19 @@ export default function DataManagementPage() {
       ).map((s: any) => ({
         id: s.id,
         name: s.semesterName || s.name || `Semester ${s.id}`,
+        startDate: s.startDate,
+        endDate: s.endDate,
+        isDefault: false, // Will be set below
       }));
-      setSemesters(semestersList);
+
+      // Set default semester based on current date
+      const defaultSemesterId = getDefaultSemesterId(semestersList);
+      const processedSemestersList = semestersList.map((s: any) => ({
+        ...s,
+        isDefault: s.id === defaultSemesterId,
+      }));
+
+      setSemesters(processedSemestersList);
 
       const majorsList = (
         Array.isArray(majorsRes.data) ? majorsRes.data : []
@@ -515,10 +585,7 @@ export default function DataManagementPage() {
 
     try {
       setIsImportingCouncil(true);
-      swalConfig.loading(
-        "Đang import dữ liệu...",
-        "Vui lòng chờ hệ thống xử lý file"
-      );
+      swalConfig.loading("Importing...", "Processing file...");
 
       const result = await councilsApi.importWithCommittees(
         Number(councilImportMajorId),
@@ -598,6 +665,7 @@ export default function DataManagementPage() {
     dob: string;
     gender: string;
     role: string;
+    semesterId: string;
   }) => {
     try {
       console.log("Add student data:", data);
@@ -632,6 +700,7 @@ export default function DataManagementPage() {
         groupId: data.groupId,
         dateOfBirth: data.dob,
         gender: data.gender,
+        semesterId: Number(data.semesterId), // Include semester ID in the payload
       };
       console.log("Create student payload:", createPayload);
 
@@ -717,10 +786,7 @@ export default function DataManagementPage() {
 
     try {
       setIsImportingStudent(true);
-      swalConfig.loading(
-        "Đang import dữ liệu sinh viên...",
-        "Vui lòng chờ hệ thống xử lý file"
-      );
+      swalConfig.loading("Importing Students...", "Processing file...");
 
       const result = await studentsApi.import(file);
       const data = result?.data || result;
@@ -2275,6 +2341,7 @@ export default function DataManagementPage() {
             g.groupName ||
             `Group ${g.id}`,
         }))}
+        semesterOptions={semesters}
       />
       <AddSessionModal
         isOpen={isAddSessionModalOpen}

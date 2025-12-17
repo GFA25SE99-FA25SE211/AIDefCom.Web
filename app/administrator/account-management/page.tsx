@@ -172,10 +172,8 @@ export default function AccountManagementPage() {
         console.error("Error fetching users:", error);
         // Show user-friendly error message
         swalConfig.error(
-          "Failed to Load Users",
-          `${
-            error.message || "Unknown error"
-          }\n\nPlease check:\n1. Backend API is running at http://localhost:5015\n2. Check browser console for details`
+          "Load Failed",
+          error.message || "Unable to load users"
         );
         setUsers([]);
       } finally {
@@ -185,6 +183,50 @@ export default function AccountManagementPage() {
 
     fetchUsers();
   }, []);
+
+  // Function to automatically select the most appropriate semester based on current date
+  const getDefaultSemesterId = (semesterList: SemesterDto[]): string => {
+    if (!semesterList.length) return "";
+
+    const currentDate = new Date();
+
+    // Find semester where current date is between startDate and endDate
+    const activeSemester = semesterList.find((semester) => {
+      const startDate = new Date(semester.startDate);
+      const endDate = new Date(semester.endDate);
+      return currentDate >= startDate && currentDate <= endDate;
+    });
+
+    if (activeSemester) {
+      return String(activeSemester.id);
+    }
+
+    // If no active semester, find the nearest upcoming semester
+    const upcomingSemesters = semesterList
+      .filter((semester) => new Date(semester.startDate) > currentDate)
+      .sort(
+        (a, b) =>
+          new Date(a.startDate).getTime() - new Date(b.startDate).getTime()
+      );
+
+    if (upcomingSemesters.length > 0) {
+      return String(upcomingSemesters[0].id);
+    }
+
+    // If no upcoming semester, get the most recent semester
+    const pastSemesters = semesterList
+      .filter((semester) => new Date(semester.endDate) < currentDate)
+      .sort(
+        (a, b) => new Date(b.endDate).getTime() - new Date(a.endDate).getTime()
+      );
+
+    if (pastSemesters.length > 0) {
+      return String(pastSemesters[0].id);
+    }
+
+    // Fallback to first semester
+    return String(semesterList[0].id);
+  };
 
   useEffect(() => {
     const fetchUploadMeta = async () => {
@@ -199,9 +241,7 @@ export default function AccountManagementPage() {
         setSemesters(semesterList);
         setMajors(majorList);
         setStudentUploadParams((prev) => ({
-          semesterId:
-            prev.semesterId ||
-            (semesterList.length ? String(semesterList[0].id) : ""),
+          semesterId: prev.semesterId || getDefaultSemesterId(semesterList),
           majorId:
             prev.majorId || (majorList.length ? String(majorList[0].id) : ""),
         }));
@@ -429,8 +469,8 @@ export default function AccountManagementPage() {
         isUserAdmin,
       });
       await swalConfig.error(
-        "Không thể xóa",
-        "Bạn không thể tự xóa chính tài khoản Administrator của mình!"
+        "Cannot Delete",
+        "You cannot delete your own admin account!"
       );
       return;
     }
@@ -499,7 +539,7 @@ export default function AccountManagementPage() {
       console.error("Error downloading student-group template:", error);
       swalConfig.error(
         "Download Failed",
-        error.message || "Unable to download student-group template."
+        error.message || "Template download failed"
       );
     } finally {
       setIsDownloadingStudentTemplate(false);
@@ -522,7 +562,7 @@ export default function AccountManagementPage() {
       console.error("Error downloading lecturer template:", error);
       swalConfig.error(
         "Download Failed",
-        error.message || "Unable to download lecturer template."
+        error.message || "Template download failed"
       );
     } finally {
       setIsDownloadingLecturerTemplate(false);
@@ -544,7 +584,7 @@ export default function AccountManagementPage() {
       return;
     }
     setStudentUploadParams((prev) => ({
-      semesterId: prev.semesterId || String(semesters[0].id),
+      semesterId: prev.semesterId || getDefaultSemesterId(semesters),
       majorId: prev.majorId || String(majors[0].id),
     }));
     setUploadStep("student");
@@ -571,10 +611,7 @@ export default function AccountManagementPage() {
 
     try {
       setIsImportingFile(true);
-      swalConfig.loading(
-        "Đang import dữ liệu sinh viên...",
-        "Vui lòng chờ hệ thống xử lý file"
-      );
+      swalConfig.loading("Importing Students...", "Processing file...");
 
       // Validate semester and major IDs
       const semesterId = Number(studentUploadParams.semesterId);
@@ -619,8 +656,7 @@ export default function AccountManagementPage() {
       console.error("Error uploading student-group file:", error);
 
       // Extract detailed error message
-      let errorMessage =
-        error.message || "Unable to upload student-group file.";
+      let errorMessage = error.message || "Upload failed";
 
       // If error has errorData, try to get more details
       if (error.errorData) {
@@ -647,20 +683,14 @@ export default function AccountManagementPage() {
 
     try {
       setIsImportingFile(true);
-      swalConfig.loading(
-        "Đang import dữ liệu giảng viên...",
-        "Vui lòng chờ hệ thống xử lý file"
-      );
+      swalConfig.loading("Importing Lecturers...", "Processing file...");
 
       await lecturersApi.importLecturers(file);
       swalConfig.success("Upload Complete", "Lecturer data uploaded!");
       closeUploadModal();
     } catch (error: any) {
       console.error("Error uploading lecturer file:", error);
-      swalConfig.error(
-        "Upload Failed",
-        error.message || "Unable to upload lecturer file."
-      );
+      swalConfig.error("Upload Failed", error.message || "Upload failed");
     } finally {
       setIsImportingFile(false);
       event.target.value = "";
@@ -1079,16 +1109,46 @@ export default function AccountManagementPage() {
                     <label className="text-sm font-medium text-gray-700">
                       Semester
                     </label>
+                    <input
+                      type="text"
+                      value={
+                        semesters.find(
+                          (s) =>
+                            s.id.toString() === studentUploadParams.semesterId
+                        )?.semesterName
+                          ? `${
+                              semesters.find(
+                                (s) =>
+                                  s.id.toString() ===
+                                  studentUploadParams.semesterId
+                              )?.semesterName
+                            } (${
+                              semesters.find(
+                                (s) =>
+                                  s.id.toString() ===
+                                  studentUploadParams.semesterId
+                              )?.year
+                            })`
+                          : "No semester selected"
+                      }
+                      readOnly
+                      className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-gray-50 cursor-not-allowed focus:outline-none"
+                      placeholder="No semester selected"
+                    />
+                    {/* Hidden select to maintain form data */}
                     <select
                       value={studentUploadParams.semesterId}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        const newSemesterId = e.target.value;
                         setStudentUploadParams((prev) => ({
                           ...prev,
-                          semesterId: e.target.value,
-                        }))
-                      }
-                      disabled={!semesters.length || uploadMetaLoading}
-                      className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 disabled:bg-gray-100"
+                          semesterId: newSemesterId,
+                          majorId: majors.length
+                            ? String(majors[0].id)
+                            : prev.majorId,
+                        }));
+                      }}
+                      className="hidden"
                     >
                       {semesters.length === 0 && (
                         <option value="">No semester data</option>
