@@ -481,8 +481,7 @@ export default function ManageCouncilPage() {
       const result = await swalConfig.confirm(
         "Delete Member",
         `Are you sure you want to remove ${memberName} from the council?`,
-        "Yes, remove member",
-        "Cancel"
+        "Yes, remove member"
       );
 
       if (result.isConfirmed) {
