@@ -24,37 +24,40 @@ export default function SidebarBase({ role, links }: SidebarBaseProps) {
   const [userRole, setUserRole] = useState<string>("");
   const [sessionRole, setSessionRole] = useState<string>("");
 
-  // Lấy thông tin user từ localStorage
+  // Lấy thông tin user từ API (bảo mật hơn localStorage)
   useEffect(() => {
-    try {
-      const storedUser = localStorage.getItem("user");
-      if (storedUser) {
-        const parsedUser = JSON.parse(storedUser);
-        // Lấy tên user
-        const name = parsedUser.fullName || parsedUser.userName || "";
-        setUserName(name);
+    const fetchUserInfo = async () => {
+      try {
+        const res = await fetch("/api/auth/me", { credentials: "include" });
+        if (res.ok) {
+          const data = await res.json();
+          const user = data.user;
+          const name = user?.fullName || user?.userName || "";
+          setUserName(name);
 
-        // Lấy role từ localStorage hoặc từ prop
-        let roleFromStorage = "";
-        if (parsedUser.role) {
-          roleFromStorage = parsedUser.role;
-        } else if (parsedUser.roles && parsedUser.roles.length > 0) {
-          roleFromStorage = parsedUser.roles[0];
-        } else {
-          roleFromStorage = role; // Fallback to prop role
+          let roleFromUser = "";
+          if (user?.role) {
+            roleFromUser = user.role;
+          } else if (user?.roles && user.roles.length > 0) {
+            roleFromUser = user.roles[0];
+          } else {
+            roleFromUser = role; // Fallback to prop role
+          }
+          setUserRole(roleFromUser);
         }
-        setUserRole(roleFromStorage);
+      } catch (err) {
+        console.error("Error fetching user info:", err);
       }
+    };
 
-      // Lấy session role từ localStorage (nếu có)
-      const storedSessionRole = localStorage.getItem("sessionRole");
-      if (storedSessionRole) {
-        setSessionRole(storedSessionRole);
-      } else {
-        setSessionRole("");
-      }
-    } catch (err) {
-      console.error("Error parsing user from localStorage:", err);
+    fetchUserInfo();
+
+    // Lấy session role từ localStorage (nếu có)
+    const storedSessionRole = localStorage.getItem("sessionRole");
+    if (storedSessionRole) {
+      setSessionRole(storedSessionRole);
+    } else {
+      setSessionRole("");
     }
   }, [role]);
 

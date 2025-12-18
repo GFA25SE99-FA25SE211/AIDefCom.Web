@@ -72,40 +72,21 @@ export default function GroupDetailsPage() {
             memberNotesApi.getByGroupId(id),
           ]);
 
-        // Get current user from localStorage
-        const storedUser = localStorage.getItem("user");
+        // Get current userId and userRole from localStorage (bảo mật)
+        const currentUid = localStorage.getItem("userId") || "";
+        const storedRole = localStorage.getItem("userRole") || "";
 
-        let currentUid = "";
         let isSystemChair = false;
         let currentUserName = "";
-        let currentUserRole = "";
+        let currentUserRole = storedRole;
 
-        if (storedUser) {
-          const parsedUser = JSON.parse(storedUser);
-          currentUid = parsedUser.id;
+        if (currentUid) {
           setCurrentUserId(currentUid);
 
-          // Get user name
-          currentUserName = parsedUser.fullName || parsedUser.userName || "";
-          setUserName(currentUserName);
-
-          // Check if user has system Chair role (for testing/override)
-          if (
-            parsedUser.roles &&
-            parsedUser.roles.some((r: string) => r.toLowerCase() === "chair")
-          ) {
+          // Check if user has system Chair role
+          if (storedRole === "chair") {
             isSystemChair = true;
             currentUserRole = "chair";
-          } else if (
-            parsedUser.role &&
-            parsedUser.role.toLowerCase() === "chair"
-          ) {
-            isSystemChair = true;
-            currentUserRole = parsedUser.role.toLowerCase();
-          } else if (parsedUser.role) {
-            currentUserRole = parsedUser.role.toLowerCase();
-          } else if (parsedUser.roles && parsedUser.roles.length > 0) {
-            currentUserRole = parsedUser.roles[0].toLowerCase();
           }
         }
 

@@ -85,27 +85,22 @@ export default function ProfilePage() {
         // Fetch voice status
         fetchVoiceStatus(data.user.id);
       } else {
-        const storedUser = localStorage.getItem("user");
-        if (storedUser) {
-          const parsed = JSON.parse(storedUser);
-          setUser(parsed);
-          setEditFullName(parsed.fullName || "");
-          setEditPhoneNumber(parsed.phoneNumber || "");
-          // Fetch voice status
-          fetchVoiceStatus(parsed.id);
+        // Fallback: chỉ lấy userId từ localStorage
+        const userId = localStorage.getItem("userId");
+        if (userId) {
+          // Tạo user tối thiểu với id
+          setUser({ id: userId, email: "", fullName: "", phoneNumber: "" });
+          fetchVoiceStatus(userId);
         } else {
           router.push("/login");
         }
       }
     } catch (error) {
       console.error("Failed to fetch user info:", error);
-      const storedUser = localStorage.getItem("user");
-      if (storedUser) {
-        const parsed = JSON.parse(storedUser);
-        setUser(parsed);
-        setEditFullName(parsed.fullName || "");
-        setEditPhoneNumber(parsed.phoneNumber || "");
-        fetchVoiceStatus(parsed.id);
+      const userId = localStorage.getItem("userId");
+      if (userId) {
+        setUser({ id: userId, email: "", fullName: "", phoneNumber: "" });
+        fetchVoiceStatus(userId);
       } else {
         router.push("/login");
       }
@@ -199,7 +194,7 @@ export default function ProfilePage() {
         phoneNumber: editPhoneNumber,
       };
       setUser(updatedUser);
-      localStorage.setItem("user", JSON.stringify(updatedUser));
+      // Không lưu thông tin nhạy cảm vào localStorage
       setIsEditingProfile(false);
       swalConfig.success("Success", "Profile updated successfully");
     } catch (error: any) {

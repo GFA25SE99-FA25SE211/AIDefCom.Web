@@ -20,32 +20,19 @@ export default function ChairReportStatus() {
   const fetchReports = async () => {
     try {
       setLoading(true);
-      // Get current user from localStorage
-      const storedUser = localStorage.getItem("user");
-      if (!storedUser) {
+      // Get current userId and userRole from localStorage (bảo mật)
+      const lecturerId = localStorage.getItem("userId");
+      const userRole = localStorage.getItem("userRole") || "";
+
+      if (!lecturerId) {
         setError("User not found. Please login.");
         setLoading(false);
         return;
       }
 
-      const user = JSON.parse(storedUser);
-      const lecturerId = user.id;
-
       // Check if user has Chair role (including Chair Session)
       // Anyone accessing /chair page should be able to manage reports
-      let chairRole = false;
-
-      // Check roles array for any Chair-related role
-      if (user.roles && Array.isArray(user.roles)) {
-        chairRole = user.roles.some((r: string) =>
-          r.toLowerCase().includes("chair")
-        );
-      }
-
-      // Check single role field
-      if (!chairRole && user.role) {
-        chairRole = user.role.toLowerCase().includes("chair");
-      }
+      let chairRole = userRole.toLowerCase().includes("chair");
 
       // Fallback: if accessing chair page, grant chair permissions
       if (!chairRole && typeof window !== "undefined") {

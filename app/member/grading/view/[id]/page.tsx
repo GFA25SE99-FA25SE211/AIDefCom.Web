@@ -163,15 +163,7 @@ export default function ViewScorePage() {
 
         // Fallback: nếu không có từ token, lấy từ localStorage
         if (!currentUserId) {
-          const storedUser = localStorage.getItem("user");
-          if (storedUser) {
-            try {
-              const parsedUser = JSON.parse(storedUser);
-              currentUserId = parsedUser.id || "";
-            } catch (err) {
-              console.error("Error parsing user:", err);
-            }
-          }
+          currentUserId = localStorage.getItem("userId") || "";
         }
 
         // Set currentUserId state

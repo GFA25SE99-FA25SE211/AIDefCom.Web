@@ -46,9 +46,12 @@ export default function LoginPage() {
         return;
       }
 
-      // FE chỉ dùng role trả về từ API route
-      if (data.user) {
-        localStorage.setItem("user", JSON.stringify(data.user));
+      // FE chỉ lưu userId và role để bảo mật, không lưu thông tin nhạy cảm
+      if (data.user?.id) {
+        localStorage.setItem("userId", data.user.id);
+      }
+      if (data.role) {
+        localStorage.setItem("userRole", data.role.toLowerCase());
       }
       redirectByRole(data.role, router, data.user);
     } catch {
@@ -87,8 +90,12 @@ export default function LoginPage() {
         return;
       }
 
-      if (data.user) {
-        localStorage.setItem("user", JSON.stringify(data.user));
+      // FE chỉ lưu userId và role để bảo mật, không lưu thông tin nhạy cảm
+      if (data.user?.id) {
+        localStorage.setItem("userId", data.user.id);
+      }
+      if (data.role) {
+        localStorage.setItem("userRole", data.role.toLowerCase());
       }
 
       redirectByRole(data.role, router, data.user);
