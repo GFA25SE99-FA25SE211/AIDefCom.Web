@@ -49,13 +49,10 @@ export default function HomePage() {
         // Get current user's lecturerId from localStorage
         let lecturerId: string | null = null;
         try {
-          const storedUser = localStorage.getItem("user");
-          if (storedUser) {
-            const parsedUser = JSON.parse(storedUser);
-            lecturerId = parsedUser.id || null;
-          }
+          // Chỉ lấy userId từ localStorage (bảo mật hơn)
+          lecturerId = localStorage.getItem("userId") || null;
         } catch (err) {
-          console.error("Error parsing user from localStorage:", err);
+          console.error("Error reading userId from localStorage:", err);
         }
 
         // Fetch sessions by lecturerId if available, otherwise fetch all

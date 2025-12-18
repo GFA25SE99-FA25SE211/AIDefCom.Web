@@ -260,27 +260,16 @@ export default function GroupDetailsPage() {
             memberNotesApi.getByGroupId(id),
           ]);
 
-        // Get current user from localStorage
-        const storedUser = localStorage.getItem("user");
+        // Get current userId and userRole from localStorage (bảo mật)
+        const currentUid = localStorage.getItem("userId") || "";
+        const storedRole = localStorage.getItem("userRole") || "";
 
-        let currentUid = "";
         let isSystemChair = false;
-        if (storedUser) {
-          const parsedUser = JSON.parse(storedUser);
-          currentUid = parsedUser.id;
+        if (currentUid) {
           setCurrentUserId(currentUid);
 
-          // Check if user has system Chair role (for testing/override)
-          // Case-insensitive check
-          if (
-            parsedUser.roles &&
-            parsedUser.roles.some((r: string) => r.toLowerCase() === "chair")
-          ) {
-            isSystemChair = true;
-          } else if (
-            parsedUser.role &&
-            parsedUser.role.toLowerCase() === "chair"
-          ) {
+          // Check if user has system Chair role
+          if (storedRole === "chair") {
             isSystemChair = true;
           }
         }

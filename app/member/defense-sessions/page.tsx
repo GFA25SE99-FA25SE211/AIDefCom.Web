@@ -32,16 +32,12 @@ function DefenseSessionsContent() {
       try {
         setLoading(true);
 
-        // Get current user's lecturerId from localStorage
+        // Get current user's lecturerId from localStorage (bảo mật)
         let lecturerId: string | null = null;
         try {
-          const storedUser = localStorage.getItem("user");
-          if (storedUser) {
-            const parsedUser = JSON.parse(storedUser);
-            lecturerId = parsedUser.id || null;
-          }
+          lecturerId = localStorage.getItem("userId") || null;
         } catch (err) {
-          console.error("Error parsing user from localStorage:", err);
+          console.error("Error reading userId from localStorage:", err);
         }
 
         // Fetch sessions by lecturerId if available, otherwise fetch all
@@ -135,15 +131,12 @@ function DefenseSessionsContent() {
         return;
       }
 
-      // Get current user from localStorage
-      const storedUser = localStorage.getItem("user");
-      if (!storedUser) {
+      // Get current userId from localStorage (bảo mật)
+      const currentUserId = localStorage.getItem("userId");
+      if (!currentUserId) {
         router.push(`/member/groups-to-grade?sessionId=${sessionId}`);
         return;
       }
-
-      const parsedUser = JSON.parse(storedUser);
-      const currentUserId = parsedUser.id;
 
       // Check role in session (exactly like home page SessionCard)
       try {

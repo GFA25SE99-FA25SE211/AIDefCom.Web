@@ -29,33 +29,23 @@ export function useVoiceEnrollmentCheck(
   useEffect(() => {
     const checkVoiceEnrollment = async () => {
       try {
-        const storedUser = localStorage.getItem("user");
-        if (!storedUser) {
-          if (redirectOnFail) {
-            router.push("/login");
-          }
-          return;
-        }
-
-        const parsedUser = JSON.parse(storedUser);
-        const userId = parsedUser.id;
-        const userRole = (
-          parsedUser.role ||
-          (parsedUser.roles && parsedUser.roles[0]) ||
-          ""
-        ).toLowerCase();
-
-        // Check if user's role is exempt from voice enrollment
-        if (EXEMPT_ROLES.includes(userRole)) {
-          setIsEnrolled(true);
-          setIsChecking(false);
-          return;
-        }
+        // Lấy userId và role từ localStorage
+        const userId = localStorage.getItem("userId");
 
         if (!userId) {
           if (redirectOnFail) {
             router.push("/login");
           }
+          return;
+        }
+
+        // Lấy role từ localStorage
+        const userRole = localStorage.getItem("userRole") || "";
+
+        // Check if user's role is exempt from voice enrollment
+        if (EXEMPT_ROLES.includes(userRole)) {
+          setIsEnrolled(true);
+          setIsChecking(false);
           return;
         }
 

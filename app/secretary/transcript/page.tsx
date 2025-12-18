@@ -30,14 +30,8 @@ export default function TranscriptListPage() {
       try {
         setLoading(true);
 
-        // Get current user from localStorage
-        const storedUser = localStorage.getItem("user");
-        let currentUserId = "";
-
-        if (storedUser) {
-          const parsedUser = JSON.parse(storedUser);
-          currentUserId = parsedUser.id;
-        }
+        // Get current userId from localStorage (bảo mật)
+        const currentUserId = localStorage.getItem("userId") || "";
 
         if (!currentUserId) {
           setError("User not identified. Please login again.");

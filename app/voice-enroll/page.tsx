@@ -49,17 +49,36 @@ export default function VoiceEnrollPage() {
   ]);
 
   useEffect(() => {
-    // Get user from localStorage
-    const userStr = localStorage.getItem("user");
-    if (!userStr) {
-      router.push("/login");
-      return;
-    }
-    const userData = JSON.parse(userStr);
-    setUser(userData);
+    // Get userId from localStorage and fetch user info from API
+    const initUser = async () => {
+      const userId = localStorage.getItem("userId");
+      if (!userId) {
+        router.push("/login");
+        return;
+      }
 
-    // Fetch status
-    fetchStatus(userData.id);
+      // Fetch user info from API
+      try {
+        const res = await fetch("/api/auth/me", { credentials: "include" });
+        if (res.ok) {
+          const data = await res.json();
+          setUser(data.user);
+          // Fetch voice status
+          fetchStatus(data.user.id);
+        } else {
+          // Fallback: use minimal user data
+          setUser({ id: userId });
+          fetchStatus(userId);
+        }
+      } catch (err) {
+        console.error("Failed to fetch user info:", err);
+        // Fallback: use minimal user data
+        setUser({ id: userId });
+        fetchStatus(userId);
+      }
+    };
+
+    initUser();
 
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
@@ -79,7 +98,7 @@ export default function VoiceEnrollPage() {
           "Completed!",
           "You have successfully registered your voice."
         );
-        router.push("/dashboard");
+        router.push("/home");
       } else if (enrolledCount > 0) {
         // User has partial enrollment, restore their progress
         setCurrentSampleIndex(enrolledCount);
@@ -432,12 +451,14 @@ export default function VoiceEnrollPage() {
   const handleLogout = async () => {
     try {
       await fetch("/api/auth/logout", { method: "POST" });
-      localStorage.removeItem("user");
+      localStorage.removeItem("userId");
+      localStorage.removeItem("userRole");
       router.push("/login");
     } catch (error) {
       console.error("Logout failed:", error);
       // Fallback
-      localStorage.removeItem("user");
+      localStorage.removeItem("userId");
+      localStorage.removeItem("userRole");
       router.push("/login");
     }
   };

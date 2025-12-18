@@ -161,11 +161,8 @@ export default function TranscriptPage({
           setSession(sessionResponse.data);
 
           // Fetch user role in background (non-blocking)
-          const storedUser = localStorage.getItem("user");
-          if (storedUser) {
-            const parsedUser = JSON.parse(storedUser);
-            const currentUserId = parsedUser.id;
-
+          const currentUserId = localStorage.getItem("userId");
+          if (currentUserId) {
             // Fire and forget - don't await
             defenseSessionsApi
               .getUsersBySessionId(Number(id))
@@ -773,11 +770,7 @@ export default function TranscriptPage({
         // Get user ID
         let userId = "unknown";
         try {
-          const storedUser = localStorage.getItem("user");
-          if (storedUser) {
-            const parsedUser = JSON.parse(storedUser);
-            userId = parsedUser.id || "unknown";
-          }
+          userId = localStorage.getItem("userId") || "unknown";
         } catch {}
 
         // Step 1: Begin upload to get SAS URL

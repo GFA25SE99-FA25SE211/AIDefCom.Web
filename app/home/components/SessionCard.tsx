@@ -53,15 +53,12 @@ const SessionCard: React.FC<SessionCardProps> = ({
       try {
         setIsCheckingRole(true);
 
-        // Get current user from localStorage
-        const storedUser = localStorage.getItem("user");
-        if (!storedUser) {
+        // Get current userId from localStorage (bảo mật - không lưu full user)
+        const currentUserId = localStorage.getItem("userId");
+        if (!currentUserId) {
           setIsCheckingRole(false);
           return;
         }
-
-        const parsedUser = JSON.parse(storedUser);
-        const currentUserId = parsedUser.id;
 
         // Check role in session (not system role)
         try {
