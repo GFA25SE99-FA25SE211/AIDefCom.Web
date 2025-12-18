@@ -53,8 +53,9 @@ const SessionCard: React.FC<SessionCardProps> = ({
       try {
         setIsCheckingRole(true);
 
-        // Get current userId from localStorage (bảo mật - không lưu full user)
-        const currentUserId = localStorage.getItem("userId");
+        // Get current userId from accessToken
+        const { authUtils } = await import("@/lib/utils/auth");
+        const currentUserId = authUtils.getCurrentUserId();
         if (!currentUserId) {
           setIsCheckingRole(false);
           return;

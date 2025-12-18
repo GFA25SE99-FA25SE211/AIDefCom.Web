@@ -9,11 +9,6 @@ export async function POST(req: Request) {
     const API_BASE_URL =
       process.env.NEXT_PUBLIC_API_BASE_URL || BACKEND_API_URL;
 
-    console.log(
-      "🔵 Calling backend Google login API:",
-      `${API_BASE_URL}/api/auth/login/google`
-    );
-
     const backendRes = await fetch(
       `${API_BASE_URL}/api/auth/login/google/lecturer`,
       {
@@ -68,7 +63,6 @@ export async function POST(req: Request) {
     }
 
     const decoded: any = jwtDecode(accessToken);
-    console.log("🔵 Decoded JWT:", JSON.stringify(decoded, null, 2));
 
     let roleClaim =
       decoded["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"];
@@ -79,7 +73,6 @@ export async function POST(req: Request) {
     }
 
     const role = (roleClaim || "member").toLowerCase();
-    console.log("🔵 User role extracted:", role);
 
     const userId =
       decoded.sub ||
@@ -98,10 +91,15 @@ export async function POST(req: Request) {
       role: role,
     };
 
-    const res = NextResponse.json({ role, user });
+    // Trả về accessToken và refreshToken cùng với role và user
+    const refreshToken = data?.data?.refreshToken;
 
-    res.cookies.set("token", accessToken, { httpOnly: true, path: "/" });
-    res.cookies.set("role", role, { httpOnly: true, path: "/" });
+    const res = NextResponse.json({
+      role,
+      user,
+      accessToken: accessToken,
+      refreshToken: refreshToken,
+    });
 
     return res;
   } catch (err) {

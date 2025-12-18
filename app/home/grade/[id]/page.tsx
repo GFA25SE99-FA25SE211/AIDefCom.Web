@@ -175,7 +175,7 @@ export default function ViewScorePage() {
                 if (currentUserInSession && currentUserInSession.role) {
                   const sessionRoleValue =
                     currentUserInSession.role.toLowerCase();
-                  localStorage.setItem("sessionRole", sessionRoleValue);
+                  sessionStorage.setItem("sessionRole", sessionRoleValue);
                 }
               }
             }

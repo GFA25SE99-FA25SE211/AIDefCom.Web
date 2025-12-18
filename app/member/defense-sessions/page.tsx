@@ -24,7 +24,7 @@ function DefenseSessionsContent() {
 
   // Xóa session role khi vào trang danh sách (không phải detail)
   useEffect(() => {
-    localStorage.removeItem("sessionRole");
+    sessionStorage.removeItem("sessionRole");
   }, []);
 
   useEffect(() => {
@@ -32,12 +32,13 @@ function DefenseSessionsContent() {
       try {
         setLoading(true);
 
-        // Get current user's lecturerId from localStorage (bảo mật)
+        // Get current user's lecturerId from accessToken
         let lecturerId: string | null = null;
         try {
-          lecturerId = localStorage.getItem("userId") || null;
+          const { authUtils } = await import("@/lib/utils/auth");
+          lecturerId = authUtils.getCurrentUserId();
         } catch (err) {
-          console.error("Error reading userId from localStorage:", err);
+          console.error("Error getting userId from token:", err);
         }
 
         // Fetch sessions by lecturerId if available, otherwise fetch all
@@ -131,8 +132,9 @@ function DefenseSessionsContent() {
         return;
       }
 
-      // Get current userId from localStorage (bảo mật)
-      const currentUserId = localStorage.getItem("userId");
+      // Get current userId from accessToken
+      const { authUtils } = await import("@/lib/utils/auth");
+      const currentUserId = authUtils.getCurrentUserId();
       if (!currentUserId) {
         router.push(`/member/groups-to-grade?sessionId=${sessionId}`);
         return;

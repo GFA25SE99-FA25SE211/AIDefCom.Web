@@ -24,11 +24,14 @@ export default function SidebarBase({ role, links }: SidebarBaseProps) {
   const [userRole, setUserRole] = useState<string>("");
   const [sessionRole, setSessionRole] = useState<string>("");
 
-  // Lấy thông tin user từ API (bảo mật hơn localStorage)
+  // Lấy thông tin user từ API
   useEffect(() => {
     const fetchUserInfo = async () => {
       try {
-        const res = await fetch("/api/auth/me", { credentials: "include" });
+        const token = localStorage.getItem("accessToken");
+        const res = await fetch("/api/auth/me", {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
         if (res.ok) {
           const data = await res.json();
           const user = data.user;
@@ -52,8 +55,8 @@ export default function SidebarBase({ role, links }: SidebarBaseProps) {
 
     fetchUserInfo();
 
-    // Lấy session role từ localStorage (nếu có)
-    const storedSessionRole = localStorage.getItem("sessionRole");
+    // Lấy session role từ sessionStorage (nếu có)
+    const storedSessionRole = sessionStorage.getItem("sessionRole");
     if (storedSessionRole) {
       setSessionRole(storedSessionRole);
     } else {
@@ -65,7 +68,7 @@ export default function SidebarBase({ role, links }: SidebarBaseProps) {
   useEffect(() => {
     const handleStorageChange = () => {
       try {
-        const storedSessionRole = localStorage.getItem("sessionRole");
+        const storedSessionRole = sessionStorage.getItem("sessionRole");
         if (storedSessionRole) {
           setSessionRole(storedSessionRole);
         } else {
@@ -116,8 +119,10 @@ export default function SidebarBase({ role, links }: SidebarBaseProps) {
   // Xử lý logout
   const handleLogout = async () => {
     try {
-      // Xóa session role khi logout
-      localStorage.removeItem("sessionRole");
+      // Xóa session role và tokens khi logout
+      sessionStorage.removeItem("sessionRole");
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("refreshToken");
       await fetch("/api/auth/logout", { method: "POST" });
       router.push("/login");
     } catch (err) {

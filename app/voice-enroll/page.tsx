@@ -49,9 +49,12 @@ export default function VoiceEnrollPage() {
   ]);
 
   useEffect(() => {
-    // Get userId from localStorage and fetch user info from API
+    // Get userId from accessToken and fetch user info from API
     const initUser = async () => {
-      const userId = localStorage.getItem("userId");
+      // Import authUtils to get userId from token
+      const { authUtils } = await import("@/lib/utils/auth");
+      const userId = authUtils.getCurrentUserId();
+
       if (!userId) {
         router.push("/login");
         return;
@@ -59,7 +62,10 @@ export default function VoiceEnrollPage() {
 
       // Fetch user info from API
       try {
-        const res = await fetch("/api/auth/me", { credentials: "include" });
+        const token = localStorage.getItem("accessToken");
+        const res = await fetch("/api/auth/me", {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
         if (res.ok) {
           const data = await res.json();
           setUser(data.user);
@@ -451,14 +457,14 @@ export default function VoiceEnrollPage() {
   const handleLogout = async () => {
     try {
       await fetch("/api/auth/logout", { method: "POST" });
-      localStorage.removeItem("userId");
-      localStorage.removeItem("userRole");
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("refreshToken");
       router.push("/login");
     } catch (error) {
       console.error("Logout failed:", error);
       // Fallback
-      localStorage.removeItem("userId");
-      localStorage.removeItem("userRole");
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("refreshToken");
       router.push("/login");
     }
   };

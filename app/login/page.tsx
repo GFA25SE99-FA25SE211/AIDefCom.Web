@@ -46,12 +46,12 @@ export default function LoginPage() {
         return;
       }
 
-      // FE chỉ lưu userId và role để bảo mật, không lưu thông tin nhạy cảm
-      if (data.user?.id) {
-        localStorage.setItem("userId", data.user.id);
+      // Lưu accessToken và refreshToken vào Local Storage
+      if (data.accessToken) {
+        localStorage.setItem("accessToken", data.accessToken);
       }
-      if (data.role) {
-        localStorage.setItem("userRole", data.role.toLowerCase());
+      if (data.refreshToken) {
+        localStorage.setItem("refreshToken", data.refreshToken);
       }
       redirectByRole(data.role, router, data.user);
     } catch {
@@ -90,12 +90,12 @@ export default function LoginPage() {
         return;
       }
 
-      // FE chỉ lưu userId và role để bảo mật, không lưu thông tin nhạy cảm
-      if (data.user?.id) {
-        localStorage.setItem("userId", data.user.id);
+      // Lưu accessToken và refreshToken vào Local Storage
+      if (data.accessToken) {
+        localStorage.setItem("accessToken", data.accessToken);
       }
-      if (data.role) {
-        localStorage.setItem("userRole", data.role.toLowerCase());
+      if (data.refreshToken) {
+        localStorage.setItem("refreshToken", data.refreshToken);
       }
 
       redirectByRole(data.role, router, data.user);

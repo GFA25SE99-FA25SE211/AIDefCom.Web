@@ -175,7 +175,7 @@ function GroupsToGradePageContent() {
 
   // Xóa session role khi vào trang danh sách (không phải detail)
   useEffect(() => {
-    localStorage.removeItem("sessionRole");
+    sessionStorage.removeItem("sessionRole");
   }, []);
 
   const [groupsData, setGroupsData] = useState<GroupWithSession[]>([]);

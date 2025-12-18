@@ -20,16 +20,11 @@ export async function POST(req: Request) {
         role: "Chair",
       };
 
-      const res = NextResponse.json({ role, user });
-
-      res.cookies.set("token", "dummy-token-chair", {
-        httpOnly: true,
-        path: "/",
-      });
-
-      res.cookies.set("role", role, {
-        httpOnly: true,
-        path: "/",
+      const res = NextResponse.json({
+        role,
+        user,
+        accessToken: "dummy-token-chair",
+        refreshToken: "dummy-refresh-token-chair",
       });
 
       return res;
@@ -136,9 +131,6 @@ export async function POST(req: Request) {
             user.id = currentUser.id;
             user.fullName =
               currentUser.fullName || currentUser.name || user.fullName;
-            console.log(
-              `✅ User data fetched from database: ${user.id} (${user.fullName})`
-            );
           }
         }
       } catch (error) {
@@ -147,11 +139,15 @@ export async function POST(req: Request) {
       }
     }
 
-    const res = NextResponse.json({ role, user });
+    // Trả về accessToken và refreshToken cùng với role và user
+    const refreshToken = data?.data?.refreshToken;
 
-    // Lưu cookie giống backend
-    res.cookies.set("token", token, { httpOnly: true, path: "/" });
-    res.cookies.set("role", role, { httpOnly: true, path: "/" });
+    const res = NextResponse.json({
+      role,
+      user,
+      accessToken: token,
+      refreshToken: refreshToken,
+    });
 
     return res;
   } catch (err) {

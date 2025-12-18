@@ -75,7 +75,10 @@ export default function ProfilePage() {
   const fetchUserInfo = async () => {
     try {
       setLoading(true);
-      const res = await fetch("/api/auth/me", { credentials: "include" });
+      const token = localStorage.getItem("accessToken");
+      const res = await fetch("/api/auth/me", {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
 
       if (res.ok) {
         const data = await res.json();
@@ -85,8 +88,9 @@ export default function ProfilePage() {
         // Fetch voice status
         fetchVoiceStatus(data.user.id);
       } else {
-        // Fallback: chỉ lấy userId từ localStorage
-        const userId = localStorage.getItem("userId");
+        // Fallback: lấy userId từ accessToken
+        const { authUtils } = await import("@/lib/utils/auth");
+        const userId = authUtils.getCurrentUserId();
         if (userId) {
           // Tạo user tối thiểu với id
           setUser({ id: userId, email: "", fullName: "", phoneNumber: "" });
@@ -97,7 +101,8 @@ export default function ProfilePage() {
       }
     } catch (error) {
       console.error("Failed to fetch user info:", error);
-      const userId = localStorage.getItem("userId");
+      const { authUtils } = await import("@/lib/utils/auth");
+      const userId = authUtils.getCurrentUserId();
       if (userId) {
         setUser({ id: userId, email: "", fullName: "", phoneNumber: "" });
         fetchVoiceStatus(userId);
