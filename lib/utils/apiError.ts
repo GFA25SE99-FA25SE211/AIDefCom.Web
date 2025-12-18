@@ -39,4 +39,47 @@ export const getApiErrorMessage = (
   return message;
 };
 
+// Simple error message function that returns only concise messages
+export const getSimpleErrorMessage = (
+  error: any,
+  fallback: string = "Operation failed"
+): string => {
+  if (!error) return fallback;
+
+  // Check for specific known error patterns and return concise messages
+  const message = error.message || error.error || "";
+  
+  if (message.includes("duplicate") || message.includes("already exists")) {
+    return "Duplicate data detected";
+  }
+  
+  if (message.includes("constraint") || message.includes("foreign key")) {
+    return "Cannot delete - item is in use";
+  }
+  
+  if (message.includes("validation") || message.includes("required")) {
+    return "Invalid data provided";
+  }
+  
+  if (message.includes("unauthorized") || message.includes("401")) {
+    return "Access denied";
+  }
+  
+  if (message.includes("not found") || message.includes("404")) {
+    return "Item not found";
+  }
+  
+  if (message.includes("network") || message.includes("fetch")) {
+    return "Connection failed";
+  }
+
+  if (message.includes("defense sessions")) {
+    return "Cannot delete - has active defense sessions";
+  }
+
+  // Return first sentence only for any other errors
+  const firstSentence = message.split('.')[0] || message.substring(0, 50);
+  return firstSentence || fallback;
+};
+
 

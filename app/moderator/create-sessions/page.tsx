@@ -109,10 +109,7 @@ export default function CreateSessionsPage() {
       setIsDownloadModalOpen(false);
     } catch (error: any) {
       console.error("Download template failed:", error);
-      await swalConfig.error(
-        "Download Failed",
-        error.message || "Unable to download template."
-      );
+      await swalConfig.error("Download Failed", "Template download failed");
     }
   };
 
@@ -134,10 +131,7 @@ export default function CreateSessionsPage() {
       setIsUploadModalOpen(false);
     } catch (error: any) {
       console.error("Upload failed:", error);
-      await swalConfig.error(
-        "Import Failed",
-        error.message || "Unable to upload the file."
-      );
+      await swalConfig.error("Import Failed", "File upload failed");
     } finally {
       event.target.value = "";
     }
@@ -146,10 +140,7 @@ export default function CreateSessionsPage() {
   const handleCreateSession = async (formData: SessionFormData) => {
     try {
       if (!formData.groupId || !formData.councilId) {
-        await swalConfig.error(
-          "Missing Required Fields",
-          "Please select both a group and a council."
-        );
+        await swalConfig.error("Missing Required Fields", "Please select group and council");
         return;
       }
 
@@ -167,10 +158,7 @@ export default function CreateSessionsPage() {
         const sessionDate = new Date(
           existingPastSession.defenseDate
         ).toLocaleDateString("en-GB");
-        await swalConfig.error(
-          "Group Already Defended",
-          `This group already had a defense session on ${sessionDate}. Please choose another group.`
-        );
+        await swalConfig.error("Group Already Defended", "Group already has defense session");
         return;
       }
 
@@ -189,16 +177,7 @@ export default function CreateSessionsPage() {
           selectedDate.getTime() < semesterStart.getTime() ||
           selectedDate.getTime() > semesterEnd.getTime()
         ) {
-          await swalConfig.error(
-            "Defense Date Out of Range",
-            `Group ${
-              currentGroup.groupName || currentGroup.projectCode || "selected"
-            } belongs to the semester running from ${semesterStart.toLocaleDateString(
-              "en-GB"
-            )} to ${semesterEnd.toLocaleDateString(
-              "en-GB"
-            )}. Please choose a defense date inside this window.`
-          );
+          await swalConfig.error("Defense Date Out of Range", "Defense date must be within semester period");
           return;
         }
       }
@@ -238,10 +217,7 @@ export default function CreateSessionsPage() {
         error?.errorData?.details ||
         error?.errorData?.message ||
         error?.message;
-      await swalConfig.error(
-        "Creation Failed",
-        apiDetails || "Unable to create session"
-      );
+      await swalConfig.error("Creation Failed", "Session creation failed");
     }
   };
 

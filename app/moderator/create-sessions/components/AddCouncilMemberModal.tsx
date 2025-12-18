@@ -56,10 +56,7 @@ const AddCouncilMemberModal: React.FC<AddCouncilMemberModalProps> = ({
     if (!lecturerId || !role) return;
     const councilRoleId = effectiveRoleMapping.get(role);
     if (!councilRoleId) {
-      swalConfig.error(
-        "Invalid role",
-        `Role "${role}" not found in mapping. Please contact administrator.`
-      );
+      swalConfig.error("Invalid role", "Role not found");
       return;
     }
     onSubmit({ lecturerId, role, councilRoleId });

@@ -559,10 +559,7 @@ export default function ViewScorePage() {
       }
     } else if (eventType === "error") {
       console.error("STT Error:", msg.message || msg.error);
-      swalConfig.error(
-        "Speech Error",
-        msg.message || msg.error || "Speech processing failed"
-      );
+      swalConfig.error("Speech Error", "Speech processing failed");
     } else if (eventType === "broadcast_transcript") {
       // Transcript từ client khác trong cùng session (thư ký hoặc member khác nói)
       // Bỏ qua nếu broadcast từ chính mình
@@ -583,8 +580,8 @@ export default function ViewScorePage() {
       ) {
         return;
       }
-      const speakerName = msg.speaker_name || msg.speaker || "Thành viên";
-      swalConfig.toast.info(`${speakerName} đang đặt câu hỏi...`);
+      const speakerName = msg.speaker_name || msg.speaker || "Member";
+      swalConfig.toast.info(`${speakerName} is asking a question`);
     } else if (eventType === "broadcast_question_processing") {
       // Người khác kết thúc đặt câu hỏi, đang xử lý - dùng toast nhẹ
       if (
@@ -593,7 +590,7 @@ export default function ViewScorePage() {
       ) {
         return;
       }
-      const speakerName = msg.speaker_name || msg.speaker || "Thành viên";
+      const speakerName = msg.speaker_name || msg.speaker || "Member";
       swalConfig.toast.info(`Processing question from ${speakerName}...`);
     } else if (eventType === "broadcast_question_result") {
       // Kết quả câu hỏi từ người khác
@@ -603,11 +600,11 @@ export default function ViewScorePage() {
       ) {
         return;
       }
-      const speakerName = msg.speaker_name || msg.speaker || "Thành viên";
+      const speakerName = msg.speaker_name || msg.speaker || "Member";
       const questionText = msg.question_text || "";
 
       if (msg.is_duplicate) {
-        swalConfig.toast.info(`Câu hỏi từ ${speakerName} bị trùng`);
+        swalConfig.toast.info(`Question from ${speakerName} is duplicate`);
       } else {
         if (questionText) {
           setQuestionResults((prev) => [
@@ -615,7 +612,7 @@ export default function ViewScorePage() {
             ...prev,
           ]);
         }
-        swalConfig.toast.success(`Câu hỏi từ ${speakerName} đã được ghi nhận`);
+        swalConfig.toast.success(`Question from ${speakerName} recorded`);
       }
     } else if (eventType === "connected") {
       console.log(
@@ -768,15 +765,12 @@ export default function ViewScorePage() {
 
   const handleSave = async () => {
     if (!sessionId) {
-      swalConfig.error("Error", "No defense session found for this group");
+      swalConfig.error("Error", "Defense session not found");
       return;
     }
 
     if (!currentUserId) {
-      swalConfig.error(
-        "Error",
-        "User ID not found. Please refresh the page and try again."
-      );
+      swalConfig.error("Error", "User ID not found");
       return;
     }
 
@@ -954,7 +948,7 @@ export default function ViewScorePage() {
       console.error("Error saving scores:", error);
       // Close loading dialog if it exists
       Swal.close();
-      swalConfig.error("Error", error.message || "Failed to save scores");
+      swalConfig.error("Error", "Failed to save scores");
     } finally {
       setSaving(false);
     }
