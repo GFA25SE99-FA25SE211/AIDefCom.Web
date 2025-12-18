@@ -20,9 +20,11 @@ export default function ChairReportStatus() {
   const fetchReports = async () => {
     try {
       setLoading(true);
-      // Get current userId and userRole from localStorage (bảo mật)
-      const lecturerId = localStorage.getItem("userId");
-      const userRole = localStorage.getItem("userRole") || "";
+      // Get current userId and userRole from accessToken
+      const { authUtils } = await import("@/lib/utils/auth");
+      const userInfo = authUtils.getCurrentUserInfo();
+      const lecturerId = userInfo.userId;
+      const userRole = userInfo.role || "";
 
       if (!lecturerId) {
         setError("User not found. Please login.");

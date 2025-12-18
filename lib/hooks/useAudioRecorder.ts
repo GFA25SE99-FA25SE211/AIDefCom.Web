@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
+import { devLog, devWarn } from "@/lib/utils/logger";
 
 interface UseAudioRecorderProps {
   wsUrl: string;
@@ -69,7 +70,7 @@ export const useAudioRecorder = ({
     }
 
     if (!wsUrl || wsUrl.trim() === "") {
-      console.warn("WS connect skipped: wsUrl is empty or invalid");
+      devWarn("WS connect skipped: wsUrl is empty or invalid");
       return;
     }
 
@@ -77,7 +78,10 @@ export const useAudioRecorder = ({
     try {
       const url = new URL(wsUrl);
       if (url.protocol !== "ws:" && url.protocol !== "wss:") {
-        console.error("WS connect failed: Invalid protocol. Expected ws:// or wss://", wsUrl);
+        console.error(
+          "WS connect failed: Invalid protocol. Expected ws:// or wss://",
+          wsUrl
+        );
         return;
       }
     } catch (e) {
@@ -98,7 +102,7 @@ export const useAudioRecorder = ({
     }
 
     ws.onopen = () => {
-      console.log("WS connected:", wsUrl);
+      devLog("WS connected:", wsUrl);
       setWsConnected(true);
       isConnectingRef.current = false;
     };
@@ -107,19 +111,29 @@ export const useAudioRecorder = ({
         const msg = JSON.parse(evt.data);
         onWsEventRef.current?.(msg);
       } catch {
-        console.log("WS raw:", evt.data);
+        devLog("WS raw:", evt.data);
       }
     };
     ws.onerror = (e) => {
       // WebSocket error event doesn't provide much info, log what we can
       try {
         const readyState = ws.readyState;
-        const readyStateText = readyState === WebSocket.CONNECTING ? 'CONNECTING' :
-                              readyState === WebSocket.OPEN ? 'OPEN' :
-                              readyState === WebSocket.CLOSING ? 'CLOSING' :
-                              readyState === WebSocket.CLOSED ? 'CLOSED' : 'UNKNOWN';
+        const readyStateText =
+          readyState === WebSocket.CONNECTING
+            ? "CONNECTING"
+            : readyState === WebSocket.OPEN
+            ? "OPEN"
+            : readyState === WebSocket.CLOSING
+            ? "CLOSING"
+            : readyState === WebSocket.CLOSED
+            ? "CLOSED"
+            : "UNKNOWN";
         console.error("WS error - URL:", wsUrl);
-        console.error("WS error - ReadyState:", readyState, `(${readyStateText})`);
+        console.error(
+          "WS error - ReadyState:",
+          readyState,
+          `(${readyStateText})`
+        );
       } catch (err) {
         // If we can't access readyState, just log the URL
         console.error("WS error - URL:", wsUrl);
@@ -129,7 +143,7 @@ export const useAudioRecorder = ({
       isConnectingRef.current = false;
     };
     ws.onclose = () => {
-      console.log("WS closed");
+      devLog("WS closed");
       setWsConnected(false);
       isConnectingRef.current = false;
       wsRef.current = null;
@@ -200,7 +214,7 @@ export const useAudioRecorder = ({
     const actualSampleRate = audioContext.sampleRate;
     const TARGET_SAMPLE_RATE = 16000;
 
-    console.log(
+    devLog(
       `🎤 Audio: native=${actualSampleRate}Hz, target=${TARGET_SAMPLE_RATE}Hz, ratio=${(
         actualSampleRate / TARGET_SAMPLE_RATE
       ).toFixed(2)}`
@@ -265,15 +279,15 @@ export const useAudioRecorder = ({
       audioContextRef.current?.close();
       streamRef.current?.getTracks().forEach((t) => t.stop());
     } catch (e) {
-      console.warn("Stop recording error:", e);
+      devWarn("Stop recording error:", e);
     }
     setIsRecording(false);
-    console.log("Microphone stopped (WebSocket still open)");
+    devLog("Microphone stopped (WebSocket still open)");
   }, []);
 
   const toggleAsk = useCallback(() => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      console.warn("WS not open");
+      devWarn("WS not open");
       return;
     }
     if (!isAsking) {
@@ -286,7 +300,7 @@ export const useAudioRecorder = ({
   }, [isAsking]);
 
   const stopSession = useCallback(() => {
-    console.log("Ending session and closing WebSocket...");
+    devLog("Ending session and closing WebSocket...");
 
     if (isRecording) {
       stopRecording();
@@ -296,55 +310,55 @@ export const useAudioRecorder = ({
     try {
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
         wsRef.current.send("stop");
-        console.log("Sent stop command to WebSocket");
+        devLog("Sent stop command to WebSocket");
       }
     } catch (e) {
-      console.warn("Error sending stop command:", e);
+      devWarn("Error sending stop command:", e);
     }
 
     try {
       if (wsRef.current) {
         wsRef.current.close(1000, "Session ended by user");
-        console.log("WebSocket closed");
+        devLog("WebSocket closed");
         wsRef.current = null;
       }
     } catch (e) {
-      console.warn("Error closing WebSocket:", e);
+      devWarn("Error closing WebSocket:", e);
     }
   }, [isRecording, stopRecording]);
 
   const broadcastSessionStart = useCallback(() => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send("session:start");
-      console.log("Sent session:start to broadcast");
+      devLog("Sent session:start to broadcast");
     }
   }, []);
 
   const broadcastSessionEnd = useCallback(() => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send("session:end");
-      console.log("Sent session:end to broadcast");
+      devLog("Sent session:end to broadcast");
     }
   }, []);
 
   const broadcastQuestionStarted = useCallback(() => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send("question:started");
-      console.log("Sent question:started to broadcast");
+      devLog("Sent question:started to broadcast");
     }
   }, []);
 
   const broadcastQuestionProcessing = useCallback(() => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send("question:processing");
-      console.log("Sent question:processing to broadcast");
+      devLog("Sent question:processing to broadcast");
     }
   }, []);
 
   const broadcastMicDisabled = useCallback(() => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send("mic:disabled");
-      console.log("Sent mic:disabled to broadcast");
+      devLog("Sent mic:disabled to broadcast");
     }
   }, []);
 

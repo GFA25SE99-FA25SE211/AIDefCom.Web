@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
+import { devLog } from "@/lib/utils/logger";
 
 export type STTEvent = {
   event:
@@ -37,7 +38,7 @@ export const useSTTWebSocket = ({ url, onEvent }: UseSTTWebSocketProps) => {
     wsRef.current = ws;
 
     ws.onopen = () => {
-      console.log("STT WebSocket Connected");
+      devLog("STT WebSocket Connected");
       setStatus("connected");
 
       // Start keep-alive ping
@@ -49,7 +50,7 @@ export const useSTTWebSocket = ({ url, onEvent }: UseSTTWebSocketProps) => {
 
       ws.onclose = (event) => {
         clearInterval(pingInterval);
-        console.log(
+        devLog(
           `STT WebSocket Disconnected: Code=${event.code}, Reason=${event.reason}`
         );
         setStatus("disconnected");
@@ -65,7 +66,7 @@ export const useSTTWebSocket = ({ url, onEvent }: UseSTTWebSocketProps) => {
       try {
         // console.log("WS Message:", event.data); // Debug log
         const data = JSON.parse(event.data);
-        console.log("Parsed WS Data:", data); // Debug log to see exact event structure
+        devLog("Parsed WS Data:", data); // Debug log to see exact event structure
 
         // Map backend event types to frontend expected types
         if (data.type) {

@@ -35,7 +35,7 @@ export default function HomePage() {
 
   // Xóa session role khi vào trang danh sách (không phải detail)
   useEffect(() => {
-    localStorage.removeItem("sessionRole");
+    sessionStorage.removeItem("sessionRole");
   }, []);
 
   useEffect(() => {
@@ -46,13 +46,14 @@ export default function HomePage() {
       try {
         setLoading(true);
 
-        // Get current user's lecturerId from localStorage
+        // Get current user's lecturerId from accessToken
         let lecturerId: string | null = null;
         try {
-          // Chỉ lấy userId từ localStorage (bảo mật hơn)
-          lecturerId = localStorage.getItem("userId") || null;
+          // Lấy userId từ accessToken thông qua authUtils
+          const { authUtils } = await import("@/lib/utils/auth");
+          lecturerId = authUtils.getCurrentUserId();
         } catch (err) {
-          console.error("Error reading userId from localStorage:", err);
+          console.error("Error getting userId from token:", err);
         }
 
         // Fetch sessions by lecturerId if available, otherwise fetch all
@@ -144,15 +145,7 @@ export default function HomePage() {
           : [];
         const groups = Array.isArray(groupsRes.data) ? groupsRes.data : [];
 
-        console.log("Sessions API Response:", {
-          code: sessionsRes.code,
-          message: sessionsRes.message,
-          dataLength: sessions.length,
-          sampleSession: sessions[0],
-        });
-
         if (sessions.length === 0) {
-          console.warn("No sessions found in API response");
           setSessionsData([]);
           setLoading(false);
           return;

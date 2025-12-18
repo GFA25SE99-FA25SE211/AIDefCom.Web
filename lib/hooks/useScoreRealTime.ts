@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import * as signalR from "@microsoft/signalr";
 import { env } from "@/lib/config";
+import { devLog } from "@/lib/utils/logger";
 
 export interface ScoreUpdate {
   sessionId?: number;
@@ -71,7 +72,7 @@ export const useScoreRealTime = ({
 
       // Handle connection events
       connection.onclose((error) => {
-        console.log("SignalR connection closed", error);
+        devLog("SignalR connection closed", error);
         setIsConnected(false);
         if (error) {
           const err = new Error(`SignalR connection closed: ${error.message}`);
@@ -81,12 +82,12 @@ export const useScoreRealTime = ({
       });
 
       connection.onreconnecting((error) => {
-        console.log("SignalR reconnecting...", error);
+        devLog("SignalR reconnecting...", error);
         setIsConnected(false);
       });
 
       connection.onreconnected((connectionId) => {
-        console.log("SignalR reconnected", connectionId);
+        devLog("SignalR reconnected", connectionId);
         setIsConnected(true);
         setConnectionError(null);
         // Re-subscribe to groups after reconnection
@@ -95,23 +96,23 @@ export const useScoreRealTime = ({
 
       // Listen for score updates
       connection.on("ScoreUpdated", (update: ScoreUpdate) => {
-        console.log("Score update received:", update);
+        devLog("Score update received:", update);
         onScoreUpdate?.(update);
       });
 
       connection.on("ScoreCreated", (update: ScoreUpdate) => {
-        console.log("Score created:", update);
+        devLog("Score created:", update);
         onScoreUpdate?.(update);
       });
 
       connection.on("ScoreDeleted", (update: ScoreUpdate) => {
-        console.log("Score deleted:", update);
+        devLog("Score deleted:", update);
         onScoreUpdate?.(update);
       });
 
       // Start connection
       await connection.start();
-      console.log("SignalR connected to ScoreHub");
+      devLog("SignalR connected to ScoreHub");
       setIsConnected(true);
       setConnectionError(null);
 

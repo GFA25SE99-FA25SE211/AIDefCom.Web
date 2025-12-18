@@ -53,7 +53,7 @@ export default function GroupDetailsPage() {
   // Xóa session role khi rời khỏi trang
   useEffect(() => {
     return () => {
-      localStorage.removeItem("sessionRole");
+      sessionStorage.removeItem("sessionRole");
     };
   }, []);
 
@@ -72,9 +72,11 @@ export default function GroupDetailsPage() {
             memberNotesApi.getByGroupId(id),
           ]);
 
-        // Get current userId and userRole from localStorage (bảo mật)
-        const currentUid = localStorage.getItem("userId") || "";
-        const storedRole = localStorage.getItem("userRole") || "";
+        // Get current userId and userRole from accessToken thông qua authUtils
+        const { authUtils } = await import("@/lib/utils/auth");
+        const userInfo = authUtils.getCurrentUserInfo();
+        const currentUid = userInfo.userId || "";
+        const storedRole = userInfo.role || "";
 
         let isSystemChair = false;
         let currentUserName = "";
@@ -314,8 +316,8 @@ export default function GroupDetailsPage() {
                     const sessionRoleValue =
                       currentUserInSession.role.toLowerCase();
                     setUserRole(sessionRoleValue);
-                    // Lưu session role vào localStorage để sidebar hiển thị
-                    localStorage.setItem("sessionRole", sessionRoleValue);
+                    // Lưu session role vào sessionStorage để sidebar hiển thị
+                    sessionStorage.setItem("sessionRole", sessionRoleValue);
                   }
                 }
 

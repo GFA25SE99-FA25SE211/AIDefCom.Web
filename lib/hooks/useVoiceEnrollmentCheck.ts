@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { voiceApi } from "@/lib/api/voice";
+import { authUtils } from "@/lib/utils/auth";
 
 // Roles that don't require voice enrollment
 const EXEMPT_ROLES = ["administrator", "admin", "moderator"];
@@ -29,21 +30,19 @@ export function useVoiceEnrollmentCheck(
   useEffect(() => {
     const checkVoiceEnrollment = async () => {
       try {
-        // Lấy userId và role từ localStorage
-        const userId = localStorage.getItem("userId");
+        // Lấy userId và role từ accessToken thông qua authUtils
+        const { userId, role: userRole } = authUtils.getCurrentUserInfo();
 
         if (!userId) {
+          setIsChecking(false);
           if (redirectOnFail) {
             router.push("/login");
           }
           return;
         }
 
-        // Lấy role từ localStorage
-        const userRole = localStorage.getItem("userRole") || "";
-
         // Check if user's role is exempt from voice enrollment
-        if (EXEMPT_ROLES.includes(userRole)) {
+        if (userRole && EXEMPT_ROLES.includes(userRole)) {
           setIsEnrolled(true);
           setIsChecking(false);
           return;

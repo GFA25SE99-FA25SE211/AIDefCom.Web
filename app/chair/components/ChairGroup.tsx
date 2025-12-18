@@ -14,7 +14,7 @@ export default function ChairGroups() {
 
   // Xóa session role khi vào trang danh sách (không phải detail)
   useEffect(() => {
-    localStorage.removeItem("sessionRole");
+    sessionStorage.removeItem("sessionRole");
   }, []);
 
   useEffect(() => {
@@ -22,8 +22,9 @@ export default function ChairGroups() {
       try {
         setLoading(true);
 
-        // Get current userId from localStorage (bảo mật)
-        const currentUserId = localStorage.getItem("userId") || "";
+        // Get current userId from accessToken
+        const { authUtils } = await import("@/lib/utils/auth");
+        const currentUserId = authUtils.getCurrentUserId() || "";
 
         if (!currentUserId) {
           setError("User not identified. Please login again.");
