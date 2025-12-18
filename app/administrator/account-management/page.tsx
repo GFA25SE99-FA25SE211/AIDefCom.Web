@@ -27,7 +27,7 @@ import { lecturersApi } from "@/lib/api/lecturers";
 import { semestersApi } from "@/lib/api/semesters";
 import { majorsApi } from "@/lib/api/majors";
 import { swalConfig } from "@/lib/utils/sweetAlert";
-import { getApiErrorMessage } from "@/lib/utils/apiError";
+import { getSimpleErrorMessage } from "@/lib/utils/apiError";
 import { authUtils } from "@/lib/utils/auth";
 import type { SemesterDto, MajorDto } from "@/lib/models";
 
@@ -171,10 +171,7 @@ export default function AccountManagementPage() {
       } catch (error: any) {
         console.error("Error fetching users:", error);
         // Show user-friendly error message
-        swalConfig.error(
-          "Load Failed",
-          error.message || "Unable to load users"
-        );
+        swalConfig.error("Load Failed", "Unable to load users");
         setUsers([]);
       } finally {
         setLoading(false);
@@ -357,15 +354,12 @@ export default function AccountManagementPage() {
       const usersResponse = await authApi.getAllUsers();
       setUsers(mapUsersFromApi(usersResponse.data || []));
       setIsCreateModalOpen(false);
-      swalConfig.success("Success!", "Account created successfully!");
+      swalConfig.success("Success", "Account created");
     } catch (error: any) {
       console.error("Error creating account:", error);
 
-      const errorMessage = getApiErrorMessage(
-        error,
-        "Failed to create account"
-      );
-      swalConfig.error("Error Creating Account", errorMessage);
+      const errorMessage = getSimpleErrorMessage(error, "Failed to create account");
+      swalConfig.error("Create Failed", errorMessage);
     }
   };
 
@@ -405,21 +399,18 @@ export default function AccountManagementPage() {
       setUsers(mapUsersFromApi(response.data || []));
       setIsEditModalOpen(false);
       setEditingUser(null);
-      swalConfig.success("Success!", "Account updated successfully!");
+      swalConfig.success("Success", "Account updated");
     } catch (error: any) {
       console.error("Error updating account:", error);
-      const errorMessage = getApiErrorMessage(
-        error,
-        "Failed to update account"
-      );
-      swalConfig.error("Error Updating Account", errorMessage);
+      const errorMessage = getSimpleErrorMessage(error, "Failed to update account");
+      swalConfig.error("Update Failed", errorMessage);
     }
   };
 
   const handleDeleteAccount = async (id: number | string) => {
     const user = users.find((u) => u.id === id);
     if (!user) {
-      swalConfig.error("Error", "User not found!");
+      swalConfig.error("Error", "User not found");
       return;
     }
 
@@ -468,10 +459,7 @@ export default function AccountManagementPage() {
         isDeletingSelf,
         isUserAdmin,
       });
-      await swalConfig.error(
-        "Cannot Delete",
-        "You cannot delete your own admin account!"
-      );
+      await swalConfig.error("Cannot Delete", "Cannot delete your own admin account");
       return;
     }
 
@@ -490,33 +478,12 @@ export default function AccountManagementPage() {
 
         // Remove the user from the local state
         setUsers((prevUsers) => prevUsers.filter((u) => u.id !== id));
-        swalConfig.success("Deleted!", "Account deleted successfully!");
+        swalConfig.success("Success", "Account deleted");
       } catch (error: any) {
         console.error("Error deleting account:", error);
 
-        // Provide more detailed error information
-        let errorMessage = "Failed to delete account";
-        if (error?.message) {
-          errorMessage = error.message;
-        } else if (typeof error === "string") {
-          errorMessage = error;
-        } else {
-          errorMessage = "Unknown error occurred while deleting account";
-        }
-
-        // Check if it's a network error
-        if (
-          errorMessage.includes("Failed to fetch") ||
-          errorMessage.includes("Network error")
-        ) {
-          errorMessage =
-            "Cannot connect to server. Please check if the backend API is running at http://localhost:5015";
-        }
-
-        swalConfig.error(
-          "Error Deleting Account",
-          `${errorMessage}\n\nUser: ${user.name} (${user.email})`
-        );
+        const errorMessage = getSimpleErrorMessage(error, "Failed to delete account");
+        swalConfig.error("Delete Failed", errorMessage);
       } finally {
         setDeletingUserId(null);
       }
@@ -526,21 +493,15 @@ export default function AccountManagementPage() {
   const handleDownloadStudentTemplate = async () => {
     try {
       setIsDownloadingStudentTemplate(true);
-      swalConfig.loading("Đang tải template...", "Vui lòng chờ trong giây lát");
+      swalConfig.loading("Downloading", "Please wait");
 
       await studentsApi.downloadStudentGroupTemplate();
 
       setIsDownloadModalOpen(false);
-      await swalConfig.success(
-        "Template Downloaded",
-        "Student template has been downloaded successfully."
-      );
+      await swalConfig.success("Success", "Student template downloaded");
     } catch (error: any) {
       console.error("Error downloading student-group template:", error);
-      swalConfig.error(
-        "Download Failed",
-        error.message || "Template download failed"
-      );
+      swalConfig.error("Download Failed", "Template download failed");
     } finally {
       setIsDownloadingStudentTemplate(false);
     }
@@ -549,21 +510,15 @@ export default function AccountManagementPage() {
   const handleDownloadLecturerTemplate = async () => {
     try {
       setIsDownloadingLecturerTemplate(true);
-      swalConfig.loading("Đang tải template...", "Vui lòng chờ trong giây lát");
+      swalConfig.loading("Downloading", "Please wait");
 
       await lecturersApi.downloadTemplate();
 
       setIsDownloadModalOpen(false);
-      await swalConfig.success(
-        "Template Downloaded",
-        "Lecturer template has been downloaded successfully."
-      );
+      await swalConfig.success("Success", "Lecturer template downloaded");
     } catch (error: any) {
       console.error("Error downloading lecturer template:", error);
-      swalConfig.error(
-        "Download Failed",
-        error.message || "Template download failed"
-      );
+      swalConfig.error("Download Failed", "Template download failed");
     } finally {
       setIsDownloadingLecturerTemplate(false);
     }
@@ -577,10 +532,7 @@ export default function AccountManagementPage() {
 
   const handleStudentUploadClick = () => {
     if (!semesters.length || !majors.length) {
-      swalConfig.error(
-        "Data Not Ready",
-        "Semester or major data is unavailable. Please try again later."
-      );
+      swalConfig.error("Data Not Ready", "Semester or major data unavailable");
       return;
     }
     setStudentUploadParams((prev) => ({
@@ -601,27 +553,21 @@ export default function AccountManagementPage() {
     if (!file) return;
 
     if (!studentUploadParams.semesterId || !studentUploadParams.majorId) {
-      swalConfig.error(
-        "Missing Information",
-        "Please provide Semester ID and Major ID before uploading."
-      );
+      swalConfig.error("Missing Information", "Please select semester and major");
       event.target.value = "";
       return;
     }
 
     try {
       setIsImportingFile(true);
-      swalConfig.loading("Importing Students...", "Processing file...");
+      swalConfig.loading("Importing Students", "Processing file");
 
       // Validate semester and major IDs
       const semesterId = Number(studentUploadParams.semesterId);
       const majorId = Number(studentUploadParams.majorId);
 
       if (!semesterId || !majorId || isNaN(semesterId) || isNaN(majorId)) {
-        swalConfig.error(
-          "Invalid Selection",
-          "Please select valid Semester and Major before uploading."
-        );
+        swalConfig.error("Invalid Selection", "Please select valid semester and major");
         event.target.value = "";
         return;
       }
@@ -629,10 +575,7 @@ export default function AccountManagementPage() {
       // Validate file type
       const fileExtension = file.name.split(".").pop()?.toLowerCase();
       if (fileExtension !== "xlsx" && fileExtension !== "xls") {
-        swalConfig.error(
-          "Invalid File Type",
-          "Please upload an Excel file (.xlsx or .xls)"
-        );
+        swalConfig.error("Invalid File Type", "Please upload Excel file (.xlsx or .xls)");
         event.target.value = "";
         return;
       }
@@ -647,27 +590,12 @@ export default function AccountManagementPage() {
       const usersResponse = await authApi.getAllUsers();
       setUsers(mapUsersFromApi(usersResponse.data || []));
 
-      swalConfig.success(
-        "Upload Complete",
-        "Student-group data uploaded successfully!"
-      );
+      swalConfig.success("Success", "Student data uploaded");
       closeUploadModal();
     } catch (error: any) {
       console.error("Error uploading student-group file:", error);
 
-      // Extract detailed error message
-      let errorMessage = error.message || "Upload failed";
-
-      // If error has errorData, try to get more details
-      if (error.errorData) {
-        if (error.errorData.details) {
-          errorMessage += `\n\n${error.errorData.details}`;
-        }
-        if (error.errorData.data && typeof error.errorData.data === "string") {
-          errorMessage += `\n\n${error.errorData.data}`;
-        }
-      }
-
+      const errorMessage = getSimpleErrorMessage(error, "Upload failed");
       swalConfig.error("Upload Failed", errorMessage);
     } finally {
       setIsImportingFile(false);
@@ -683,14 +611,14 @@ export default function AccountManagementPage() {
 
     try {
       setIsImportingFile(true);
-      swalConfig.loading("Importing Lecturers...", "Processing file...");
+      swalConfig.loading("Importing Lecturers", "Processing file");
 
       await lecturersApi.importLecturers(file);
-      swalConfig.success("Upload Complete", "Lecturer data uploaded!");
+      swalConfig.success("Success", "Lecturer data uploaded");
       closeUploadModal();
     } catch (error: any) {
       console.error("Error uploading lecturer file:", error);
-      swalConfig.error("Upload Failed", error.message || "Upload failed");
+      swalConfig.error("Upload Failed", "Upload failed");
     } finally {
       setIsImportingFile(false);
       event.target.value = "";
@@ -909,10 +837,7 @@ export default function AccountManagementPage() {
                         onClick={() => {
                           // Kiểm tra nếu là admin đang xóa chính mình, hiển thị alert
                           if (isCurrentUserAdminSelf(user)) {
-                            swalConfig.error(
-                              "Không thể xóa",
-                              "Bạn không thể tự xóa chính tài khoản Administrator của mình!"
-                            );
+                            swalConfig.error("Cannot Delete", "Cannot delete your own admin account");
                             return;
                           }
                           handleDeleteAccount(user.id);

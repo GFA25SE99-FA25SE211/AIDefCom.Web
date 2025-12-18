@@ -164,10 +164,7 @@ export default function GradeGroupPage() {
       }
     } else if (eventType === "error") {
       console.error("STT Error:", msg.message || msg.error);
-      swalConfig.error(
-        "Speech Error",
-        msg.message || msg.error || "Speech processing failed"
-      );
+      swalConfig.error("Speech Error", "Speech processing failed");
     } else if (eventType === "broadcast_transcript") {
       // Transcript từ client khác trong cùng session (thư ký hoặc member khác nói)
       // Bỏ qua nếu broadcast từ chính mình
@@ -822,35 +819,23 @@ export default function GradeGroupPage() {
   const handleSave = async () => {
     // Triple check - prevent save if no rubrics (check for undefined, null, or empty)
     if (!hasRubrics) {
-      await swalConfig.error(
-        "Error",
-        "No grading criteria available. Please contact the administrator to add grading criteria."
-      );
+      await swalConfig.error("Error", "No grading criteria available");
       return;
     }
 
     if (!sessionId) {
-      await swalConfig.error(
-        "Error",
-        "No defense session found for this group"
-      );
+      await swalConfig.error("Error", "Defense session not found");
       return;
     }
 
     if (!currentUserId) {
-      await swalConfig.error(
-        "Error",
-        "User ID not found. Please refresh the page and try again."
-      );
+      await swalConfig.error("Error", "User ID not found");
       return;
     }
 
     // Additional safety check - verify rubrics before proceeding
     if (!hasRubrics) {
-      await swalConfig.error(
-        "Error",
-        "Cannot save scores without grading criteria."
-      );
+      await swalConfig.error("Error", "Cannot save scores without grading criteria");
       return;
     }
 
@@ -1046,7 +1031,7 @@ export default function GradeGroupPage() {
       console.error("Error saving scores:", error);
       // Close loading dialog if it exists
       Swal.close();
-      swalConfig.error("Error", error.message || "Failed to save scores");
+      swalConfig.error("Error", "Failed to save scores");
     } finally {
       setSaving(false);
     }
@@ -1191,10 +1176,7 @@ export default function GradeGroupPage() {
                     e.preventDefault();
                     e.stopPropagation();
                     if (hasNoRubrics) {
-                      swalConfig.error(
-                        "Error",
-                        "No grading criteria available. Please contact the administrator to add grading criteria."
-                      );
+                      swalConfig.error("Error", "No grading criteria available");
                     }
                     return;
                   }
@@ -1438,7 +1420,7 @@ export default function GradeGroupPage() {
                                     }`}
                                     title={
                                       rubrics.length === 0
-                                        ? "Vui lòng thêm tiêu chí đánh giá"
+                                        ? "Please add grading criteria"
                                         : `Set all scores to ${score}`
                                     }
                                   >

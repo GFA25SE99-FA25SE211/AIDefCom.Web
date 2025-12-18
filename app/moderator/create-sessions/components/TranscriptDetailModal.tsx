@@ -33,16 +33,12 @@ interface TranscriptDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
   transcript: TranscriptData | null;
-  onApprove: (id: number) => void;
-  onReject: (id: number) => void;
 }
 
 const TranscriptDetailModal: React.FC<TranscriptDetailModalProps> = ({
   isOpen,
   onClose,
   transcript,
-  onApprove,
-  onReject,
 }) => {
   if (!isOpen || !transcript) return null;
 
@@ -82,33 +78,13 @@ const TranscriptDetailModal: React.FC<TranscriptDetailModalProps> = ({
   };
 
   const footer = (
-    <>
-      {transcript.status === "Pending" && (
-        <>
-          <button
-            type="button"
-            className="px-3 py-2 rounded-md border text-sm"
-            onClick={() => onReject(transcript.id)}
-          >
-            Reject
-          </button>
-          <button
-            type="button"
-            className="px-3 py-2 rounded-md bg-green-600 text-white text-sm"
-            onClick={() => onApprove(transcript.id)}
-          >
-            Approve
-          </button>
-        </>
-      )}
-      <button
-        type="button"
-        className="px-3 py-2 rounded-md border text-sm"
-        onClick={onClose}
-      >
-        Close
-      </button>
-    </>
+    <button
+      type="button"
+      className="px-3 py-2 rounded-md border text-sm"
+      onClick={onClose}
+    >
+      Close
+    </button>
   );
 
   return (

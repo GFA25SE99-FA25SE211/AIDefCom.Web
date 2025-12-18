@@ -15,7 +15,7 @@ import { memberNotesApi } from "@/lib/api/member-notes";
 import { reportsApi } from "@/lib/api/reports";
 import { defenseSessionsApi } from "@/lib/api/defense-sessions";
 import { swalConfig } from "@/lib/utils/sweetAlert";
-import { getApiErrorMessage } from "@/lib/utils/apiError";
+import { getSimpleErrorMessage } from "@/lib/utils/apiError";
 import type {
   MajorDto,
   SemesterDto,
@@ -668,7 +668,7 @@ export default function AdminDataManagementPage() {
       console.error("Error creating task:", error);
       await swalConfig.error(
         "Error Creating Task",
-        getApiErrorMessage(error, "Failed to create task")
+        getSimpleErrorMessage(error, "Failed to create task")
       );
     }
   };
@@ -736,7 +736,7 @@ export default function AdminDataManagementPage() {
       console.error("Error updating task:", error);
       console.error("Full error object:", JSON.stringify(error, null, 2));
 
-      const errorMessage = getApiErrorMessage(error, "Failed to update task");
+      const errorMessage = getSimpleErrorMessage(error, "Failed to update task");
       await swalConfig.error("Error Updating Task", errorMessage);
     }
   };
@@ -760,7 +760,7 @@ export default function AdminDataManagementPage() {
         console.error("Error deleting task:", error);
         await swalConfig.error(
           "Error Deleting Task",
-          getApiErrorMessage(error, "Failed to delete task")
+          getSimpleErrorMessage(error, "Failed to delete task")
         );
       }
     }
@@ -896,7 +896,7 @@ export default function AdminDataManagementPage() {
         console.error("Error deleting semester:", error);
         await swalConfig.error(
           "Error Deleting Semester",
-          getApiErrorMessage(error, "Failed to delete semester")
+          getSimpleErrorMessage(error, "Failed to delete semester")
         );
       }
     }
@@ -919,7 +919,7 @@ export default function AdminDataManagementPage() {
       console.error("Error creating major:", error);
       await swalConfig.error(
         "Error Creating Major",
-        getApiErrorMessage(error, "Failed to create major")
+        getSimpleErrorMessage(error, "Failed to create major")
       );
     }
   };
@@ -941,7 +941,7 @@ export default function AdminDataManagementPage() {
       console.error("Error updating major:", error);
       await swalConfig.error(
         "Error Updating Major",
-        getApiErrorMessage(error, "Failed to update major")
+        getSimpleErrorMessage(error, "Failed to update major")
       );
     }
   };
@@ -989,7 +989,7 @@ export default function AdminDataManagementPage() {
       console.error("Error creating rubric:", error);
       await swalConfig.error(
         "Error Creating Rubric",
-        getApiErrorMessage(error, "Failed to create rubric")
+        getSimpleErrorMessage(error, "Failed to create rubric")
       );
     }
   };
@@ -1011,7 +1011,7 @@ export default function AdminDataManagementPage() {
       console.error("Error updating rubric:", error);
       await swalConfig.error(
         "Error Updating Rubric",
-        getApiErrorMessage(error, "Failed to update rubric")
+        getSimpleErrorMessage(error, "Failed to update rubric")
       );
     }
   };
@@ -1144,10 +1144,10 @@ export default function AdminDataManagementPage() {
         "Group has been updated successfully!"
       );
     } catch (error: any) {
-      await swalConfig.error(
-        "Error Editing Group",
-        getApiErrorMessage(error, "Failed to edit group")
-      );
+        await swalConfig.error(
+          "Edit Failed",
+          getSimpleErrorMessage(error, "Failed to edit group")
+        );
     }
   };
 
@@ -1169,8 +1169,8 @@ export default function AdminDataManagementPage() {
       } catch (error: any) {
         console.error("Error deleting rubric:", error);
         await swalConfig.error(
-          "Error Deleting Rubric",
-          getApiErrorMessage(error, "Failed to delete rubric")
+          "Delete Failed",
+          getSimpleErrorMessage(error, "Failed to delete rubric")
         );
       }
     }
@@ -1189,7 +1189,7 @@ export default function AdminDataManagementPage() {
     } catch (error: any) {
       await swalConfig.error(
         "Error Editing Note",
-        getApiErrorMessage(error, "Failed to edit note")
+        getSimpleErrorMessage(error, "Failed to edit note")
       );
     }
   };
@@ -1214,7 +1214,7 @@ export default function AdminDataManagementPage() {
         console.error("Error deleting note:", error);
         await swalConfig.error(
           "Error Deleting Note",
-          getApiErrorMessage(error, "Failed to delete note")
+          getSimpleErrorMessage(error, "Failed to delete note")
         );
       }
     }
@@ -1261,7 +1261,7 @@ export default function AdminDataManagementPage() {
     } catch (error: any) {
       await swalConfig.error(
         "Error Editing Report",
-        getApiErrorMessage(error, "Failed to edit report")
+        getSimpleErrorMessage(error, "Failed to edit report")
       );
     }
   };
@@ -1323,7 +1323,7 @@ export default function AdminDataManagementPage() {
         console.error("Error deleting assignment:", error);
         await swalConfig.error(
           "Error Deleting Assignment",
-          getApiErrorMessage(error, "Failed to delete assignment")
+          getSimpleErrorMessage(error, "Failed to delete assignment")
         );
       }
     }
@@ -1348,7 +1348,7 @@ export default function AdminDataManagementPage() {
         console.error("Error deleting group:", error);
         await swalConfig.error(
           "Error Deleting Group",
-          getApiErrorMessage(error, "Failed to delete group")
+          getSimpleErrorMessage(error, "Failed to delete group")
         );
       }
     }
