@@ -403,7 +403,6 @@ async function redirectByRole(role: string, router: any, user?: any) {
 
   switch (r) {
     case "admin":
-    case "administrator":
       router.push("/administrator");
       break;
     case "lecturer":
