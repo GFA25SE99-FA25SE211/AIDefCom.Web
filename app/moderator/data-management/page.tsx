@@ -18,7 +18,7 @@ import {
   Eye,
 } from "lucide-react";
 import { swalConfig } from "@/lib/utils/sweetAlert";
-import { getApiErrorMessage } from "@/lib/utils/apiError";
+import { getSimpleErrorMessage } from "@/lib/utils/apiError";
 import { councilsApi } from "@/lib/api/councils";
 import { groupsApi } from "@/lib/api/groups";
 import { studentsApi } from "@/lib/api/students";
@@ -529,7 +529,7 @@ export default function DataManagementPage() {
     } catch (error: any) {
       await swalConfig.error(
         "Error Creating Council",
-        getApiErrorMessage(error, "Failed to create council")
+        getSimpleErrorMessage(error, "Failed to create council")
       );
     }
   };
@@ -561,7 +561,7 @@ export default function DataManagementPage() {
       console.error("Download template error:", error);
       await swalConfig.error(
         "Download Failed",
-        getApiErrorMessage(error, "Unable to download council template.")
+        getSimpleErrorMessage(error, "Unable to download council template.")
       );
     } finally {
       setIsDownloadingCouncilTemplate(false);
@@ -609,7 +609,7 @@ export default function DataManagementPage() {
       console.error("Import council error:", error);
       await swalConfig.error(
         "Import Failed",
-        getApiErrorMessage(error, "Unable to import councils.")
+        getSimpleErrorMessage(error, "Unable to import councils.")
       );
       event.target.value = "";
     } finally {
@@ -654,7 +654,7 @@ export default function DataManagementPage() {
     } catch (error: any) {
       await swalConfig.error(
         "Error Creating Group",
-        getApiErrorMessage(error, "Failed to create group")
+        getSimpleErrorMessage(error, "Failed to create group")
       );
     }
   };
@@ -714,7 +714,7 @@ export default function DataManagementPage() {
     } catch (error: any) {
       await swalConfig.error(
         "Error Adding Student",
-        getApiErrorMessage(error, "Failed to add student")
+        getSimpleErrorMessage(error, "Failed to add student")
       );
     }
   };
@@ -747,7 +747,7 @@ export default function DataManagementPage() {
     } catch (error: any) {
       await swalConfig.error(
         "Error Creating Session",
-        getApiErrorMessage(error, "Failed to create defense session")
+        getSimpleErrorMessage(error, "Failed to create defense session")
       );
     }
   };
@@ -771,7 +771,7 @@ export default function DataManagementPage() {
       console.error("Download template error:", error);
       await swalConfig.error(
         "Download Failed",
-        getApiErrorMessage(error, "Unable to download student template.")
+        getSimpleErrorMessage(error, "Unable to download student template.")
       );
     } finally {
       setIsDownloadingStudentTemplate(false);
@@ -804,7 +804,7 @@ export default function DataManagementPage() {
       console.error("Import student error:", error);
       await swalConfig.error(
         "Import Failed",
-        getApiErrorMessage(error, "Unable to import students.")
+        getSimpleErrorMessage(error, "Unable to import students.")
       );
       event.target.value = "";
     } finally {
@@ -843,7 +843,7 @@ export default function DataManagementPage() {
     } catch (error: any) {
       await swalConfig.error(
         "Error Updating Council",
-        getApiErrorMessage(error, "Failed to update council")
+        getSimpleErrorMessage(error, "Failed to update council")
       );
     }
   };
@@ -900,7 +900,7 @@ export default function DataManagementPage() {
     } catch (error: any) {
       await swalConfig.error(
         "Error Updating Group",
-        getApiErrorMessage(error, "Failed to update group")
+        getSimpleErrorMessage(error, "Failed to update group")
       );
     }
   };
@@ -942,7 +942,7 @@ export default function DataManagementPage() {
     } catch (error: any) {
       await swalConfig.error(
         "Error Updating Student",
-        getApiErrorMessage(error, "Failed to update student")
+        getSimpleErrorMessage(error, "Failed to update student")
       );
     }
   };
@@ -1068,7 +1068,7 @@ export default function DataManagementPage() {
     } catch (error: any) {
       await swalConfig.error(
         "Error Updating Session",
-        getApiErrorMessage(error, "Failed to update session")
+        getSimpleErrorMessage(error, "Failed to update session")
       );
     }
   };
@@ -1091,8 +1091,8 @@ export default function DataManagementPage() {
       } catch (error: any) {
         console.error("Error deleting council:", error);
         await swalConfig.error(
-          "Error Deleting Council",
-          getApiErrorMessage(error, "Failed to delete council")
+          "Delete Failed",
+          getSimpleErrorMessage(error, "Failed to delete council")
         );
       }
     }
@@ -1117,8 +1117,8 @@ export default function DataManagementPage() {
     } catch (error: any) {
       console.error("Error deleting group:", error);
       await swalConfig.error(
-        "Error Deleting Group",
-        getApiErrorMessage(error, "Failed to delete group")
+        "Delete Failed",
+        getSimpleErrorMessage(error, "Failed to delete group")
       );
     }
   };
@@ -1156,7 +1156,7 @@ export default function DataManagementPage() {
       console.error("Error deleting student:", error);
       await swalConfig.error(
         "Error Deleting Student",
-        getApiErrorMessage(error, "Failed to delete student")
+        getSimpleErrorMessage(error, "Failed to delete student")
       );
     }
   };
@@ -1181,7 +1181,7 @@ export default function DataManagementPage() {
       console.error("Error deleting session:", error);
       await swalConfig.error(
         "Error Deleting Session",
-        getApiErrorMessage(error, "Failed to delete session")
+        getSimpleErrorMessage(error, "Failed to delete session")
       );
     }
   };
@@ -1209,7 +1209,7 @@ export default function DataManagementPage() {
       console.error("Error deleting transcript:", error);
       await swalConfig.error(
         "Error Deleting Transcript",
-        getApiErrorMessage(error, "Failed to delete transcript")
+        getSimpleErrorMessage(error, "Failed to delete transcript")
       );
     }
   };
@@ -1237,81 +1237,12 @@ export default function DataManagementPage() {
       console.error("Error deleting report:", error);
       await swalConfig.error(
         "Error Deleting Report",
-        getApiErrorMessage(error, "Failed to delete report")
+        getSimpleErrorMessage(error, "Failed to delete report")
       );
     }
   };
 
-  const handleApproveTranscript = async (id: number) => {
-    try {
-      await transcriptsApi.update(id, {
-        isApproved: true,
-      });
-      const response = await transcriptsApi.getAll();
-      const transcriptsData = (response.data || []).map((t: any) => ({
-        id: t.id,
-        sessionId: t.sessionId,
-        createdAt: t.createdAt || new Date().toISOString().split("T")[0],
-        status: t.isApproved ? ("Approved" as const) : ("Pending" as const),
-        isApproved: t.isApproved || false,
-        groupName: "Group",
-        date: new Date().toLocaleDateString("en-US", {
-          year: "numeric",
-          month: "long",
-          day: "numeric",
-        }),
-        time: "TBD",
-        location: "TBD",
-        transcriptText: t.transcriptText || "",
-        audioFile: t.audioFilePath || "",
-      }));
-      setTranscripts(transcriptsData);
-      setSelectedTranscript(null);
-      await swalConfig.success(
-        "Success",
-        "Transcript has been approved successfully!"
-      );
-    } catch (error: any) {
-      await swalConfig.error(
-        "Error Approving Transcript",
-        getApiErrorMessage(error, "Failed to approve transcript")
-      );
-    }
-  };
 
-  const handleRejectTranscript = async (id: number) => {
-    try {
-      await transcriptsApi.update(id, {
-        isApproved: false,
-      });
-      const response = await transcriptsApi.getAll();
-      const transcriptsData = (response.data || []).map((t: any) => ({
-        id: t.id,
-        sessionId: t.sessionId,
-        createdAt: t.createdAt || new Date().toISOString().split("T")[0],
-        status: "Rejected" as const,
-        isApproved: false,
-        groupName: "Group",
-        date: new Date().toLocaleDateString("en-US", {
-          year: "numeric",
-          month: "long",
-          day: "numeric",
-        }),
-        time: "TBD",
-        location: "TBD",
-        transcriptText: t.transcriptText || "",
-        audioFile: t.audioFilePath || "",
-      }));
-      setTranscripts(transcriptsData);
-      setSelectedTranscript(null);
-      await swalConfig.success("Rejected", "Transcript rejected successfully!");
-    } catch (error: any) {
-      await swalConfig.error(
-        "Error Rejecting Transcript",
-        getApiErrorMessage(error, "Failed to reject transcript")
-      );
-    }
-  };
 
   const handleDownloadReport = async (filePath: string) => {
     try {
@@ -1350,7 +1281,7 @@ export default function DataManagementPage() {
       console.error("Download report error:", error);
       await swalConfig.error(
         "Download Failed",
-        getApiErrorMessage(error, "Unable to download report.")
+        getSimpleErrorMessage(error, "Unable to download report.")
       );
     } finally {
       setIsDownloadingReport(false);
@@ -2415,8 +2346,6 @@ export default function DataManagementPage() {
         isOpen={!!selectedTranscript}
         onClose={() => setSelectedTranscript(null)}
         transcript={selectedTranscript}
-        onApprove={handleApproveTranscript}
-        onReject={handleRejectTranscript}
       />
       <ReportDetailModal
         isOpen={!!selectedReport}

@@ -110,7 +110,7 @@ const CreateCouncilForm: React.FC<CreateCouncilFormProps> = ({
     e.preventDefault();
 
     if (!majorId) {
-      swalConfig.error("Missing major", "Please select a major for this council.");
+      swalConfig.error("Missing major", "Please select a major");
       return;
     }
 
@@ -119,10 +119,7 @@ const CreateCouncilForm: React.FC<CreateCouncilFormProps> = ({
     );
 
     if (validMembers.length === 0) {
-      swalConfig.error(
-        "No members",
-        "Please add at least one council member with an assigned role."
-      );
+      swalConfig.error("No members", "Please add at least one council member");
       return;
     }
 

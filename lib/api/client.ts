@@ -88,25 +88,21 @@ class ApiClient {
           rawResponse: errorText.substring(0, 500), // Include raw response for debugging
         });
 
-        // Provide more descriptive error messages based on status code
+        // Provide concise error messages based on status code
         let userFriendlyMessage = errorMessage;
         if (response.status === 404) {
-          userFriendlyMessage = `Resource not found: ${errorMessage}`;
+          userFriendlyMessage = "Item not found";
         } else if (response.status === 401) {
-          userFriendlyMessage = `Authentication required: ${errorMessage}`;
+          userFriendlyMessage = "Access denied";
         } else if (response.status === 403) {
-          userFriendlyMessage = `Access forbidden: ${errorMessage}`;
+          userFriendlyMessage = "Access forbidden";
         } else if (response.status === 500) {
-          userFriendlyMessage = `Server error: ${errorMessage}`;
-        } else if (response.status >= 400 && response.status < 500) {
-          userFriendlyMessage = `Client error (${response.status}): ${errorMessage}`;
-        } else if (response.status >= 500) {
-          userFriendlyMessage = `Server error (${response.status}): ${errorMessage}`;
+          userFriendlyMessage = "Server error";
+        } else if (response.status >= 400) {
+          userFriendlyMessage = errorMessage.substring(0, 50) || "Request failed";
         }
 
-        if (errorData.details) {
-          userFriendlyMessage += ` Details: ${errorData.details}`;
-        }
+        // Don't append details to keep messages concise
 
         const enrichedError = new Error(userFriendlyMessage);
         (enrichedError as any).status = response.status;
@@ -247,27 +243,17 @@ Please check:
           errorText ||
           `HTTP error! status: ${response.status}`;
 
-        // Add details if available
-        if (errorData.details) {
-          errorMessage += `\n\nDetails: ${errorData.details}`;
-        }
-
-        // Add data field if it contains error info
-        if (errorData.data && typeof errorData.data === "string") {
-          errorMessage += `\n\nAdditional info: ${errorData.data}`;
-        }
-
-        // Common database errors - provide helpful messages
+        // Simplify database errors to be more concise
         if (errorMessage.includes("saving the entity changes")) {
-          errorMessage =
-            "Database error: " +
-            errorMessage +
-            "\n\nPossible causes:\n" +
-            "- Invalid Semester ID or Major ID\n" +
-            "- Duplicate data (student/group already exists)\n" +
-            "- Missing required fields in Excel file\n" +
-            "- Foreign key constraint violation";
+          errorMessage = "Database error - check your data";
+        } else if (errorMessage.includes("constraint")) {
+          errorMessage = "Data conflict detected";
+        } else if (errorMessage.includes("duplicate")) {
+          errorMessage = "Duplicate data found";
         }
+
+        // Keep error messages short - only use first 50 characters
+        errorMessage = errorMessage.substring(0, 50);
 
         console.error(`API FormData Error [${endpoint}]:`, {
           status: response.status,

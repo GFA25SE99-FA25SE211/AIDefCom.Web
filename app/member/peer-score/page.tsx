@@ -603,7 +603,7 @@ export default function PeerScoresPage() {
                 <p className="text-gray-500 text-sm">
                   Hiện tại chưa có điểm số nào từ các thành viên hội đồng.
                   <br />
-                  Vui lòng quay lại sau khi quá trình chấm điểm hoàn tất.
+                  Please return after the grading process is complete.
                 </p>
               </div>
             </div>

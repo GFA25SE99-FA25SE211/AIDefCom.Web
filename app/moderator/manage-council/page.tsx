@@ -192,10 +192,7 @@ export default function ManageCouncilPage() {
       setCouncils(councilsWithMembers);
     } catch (error) {
       console.error("Error fetching councils:", error);
-      await swalConfig.error(
-        "Error Loading Data",
-        "Failed to load council information. Please refresh the page."
-      );
+      await swalConfig.error("Load Failed", "Failed to load council information");
     } finally {
       setLoading(false);
     }
@@ -316,10 +313,7 @@ export default function ManageCouncilPage() {
       );
     } catch (error: any) {
       console.error("Error creating council:", error);
-      await swalConfig.error(
-        "Creation Failed",
-        error.message || "Unable to create council"
-      );
+      await swalConfig.error("Creation Failed", "Council creation failed");
     }
   };
 
@@ -412,10 +406,7 @@ export default function ManageCouncilPage() {
       );
     } catch (error: any) {
       console.error("Error adding member:", error);
-      await swalConfig.error(
-        "Add Failed",
-        error.message || "Unable to add member"
-      );
+      await swalConfig.error("Add Failed", "Member addition failed");
     }
   };
 
@@ -466,10 +457,7 @@ export default function ManageCouncilPage() {
       );
     } catch (error: any) {
       console.error("Error updating member:", error);
-      await swalConfig.error(
-        "Update Failed",
-        error.message || "Unable to update member"
-      );
+      await swalConfig.error("Update Failed", "Member update failed");
     }
   };
 
@@ -497,10 +485,7 @@ export default function ManageCouncilPage() {
       }
     } catch (error: any) {
       console.error("Error deleting member:", error);
-      await swalConfig.error(
-        "Delete Failed",
-        error.message || "Unable to remove member"
-      );
+      await swalConfig.error("Delete Failed", "Member removal failed");
     }
   };
 
