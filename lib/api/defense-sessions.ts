@@ -95,19 +95,30 @@ export const defenseSessionsApi = {
   },
 
   // Check if session exists for a group on a specific date/time (duplicate check)
-  checkSessionExists: async (groupId: string, date: string, startTime: string): Promise<boolean> => {
+  checkSessionExists: async (
+    groupId: string,
+    date: string,
+    startTime: string
+  ): Promise<boolean> => {
     try {
       const sessions = await defenseSessionsApi.getByGroupId(groupId);
-      return (sessions.data || []).some(
-        (session) => {
-          const sessionDate = session.defenseDate ? new Date(session.defenseDate).toISOString().split('T')[0] : '';
-          const sessionTime = session.startTime || '';
-          return sessionDate === date && sessionTime === startTime;
-        }
-      );
+      return (sessions.data || []).some((session) => {
+        const sessionDate = session.defenseDate
+          ? new Date(session.defenseDate).toISOString().split("T")[0]
+          : "";
+        const sessionTime = session.startTime || "";
+        return sessionDate === date && sessionTime === startTime;
+      });
     } catch (error) {
-      console.error('Error checking session:', error);
+      console.error("Error checking session:", error);
       return false;
     }
+  },
+
+  // Update total score for a defense session (Chair only)
+  updateTotalScore: async (sessionId: number, totalScore: number) => {
+    return apiClient.put(`/api/defense-sessions/${sessionId}/total-score`, {
+      totalScore,
+    });
   },
 };

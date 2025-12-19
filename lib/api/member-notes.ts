@@ -1,13 +1,13 @@
-import { apiClient } from './client';
+import { apiClient } from "./client";
 import type {
   MemberNoteDto,
   MemberNoteCreateDto,
   MemberNoteUpdateDto,
-} from '@/lib/models';
+} from "@/lib/models";
 
 export const memberNotesApi = {
   getAll: async () => {
-    return apiClient.get<MemberNoteDto[]>('/api/member-notes');
+    return apiClient.get<MemberNoteDto[]>("/api/member-notes");
   },
 
   getById: async (id: number) => {
@@ -18,12 +18,18 @@ export const memberNotesApi = {
     return apiClient.get<MemberNoteDto[]>(`/api/member-notes/group/${groupId}`);
   },
 
+  getBySessionId: async (sessionId: number) => {
+    return apiClient.get<MemberNoteDto[]>(
+      `/api/member-notes/session/${sessionId}`
+    );
+  },
+
   getByUserId: async (userId: string) => {
     return apiClient.get<MemberNoteDto[]>(`/api/member-notes/user/${userId}`);
   },
 
   create: async (data: MemberNoteCreateDto) => {
-    return apiClient.post<MemberNoteDto>('/api/member-notes', data);
+    return apiClient.post<MemberNoteDto>("/api/member-notes", data);
   },
 
   update: async (id: number, data: MemberNoteUpdateDto) => {
@@ -34,4 +40,3 @@ export const memberNotesApi = {
     return apiClient.delete(`/api/member-notes/${id}`);
   },
 };
-
