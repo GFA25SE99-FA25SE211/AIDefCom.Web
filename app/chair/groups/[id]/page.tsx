@@ -49,6 +49,13 @@ export default function GroupDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Total Score State (Chair only)
+  const [totalScoreInput, setTotalScoreInput] = useState<string>("");
+  const [savingTotalScore, setSavingTotalScore] = useState(false);
+  const [displayedTotalScore, setDisplayedTotalScore] = useState<number | null>(
+    null
+  );
+
   // Mic and session states (giống member)
   const [sessionStarted, setSessionStarted] = useState(false); // Thư ký đã bắt đầu phiên chưa
   const [questionResults, setQuestionResults] = useState<any[]>([]);
@@ -238,6 +245,40 @@ export default function GroupDetailsPage() {
     }
   };
 
+  // Handle submit total score (Chair only)
+  const handleSubmitTotalScore = async () => {
+    if (!defenseSession?.id || !totalScoreInput) return;
+
+    const score = parseFloat(totalScoreInput);
+    if (isNaN(score) || score < 0 || score > 10) {
+      swalConfig.error(
+        "Invalid Score",
+        "Please enter a valid score between 0 and 10."
+      );
+      return;
+    }
+
+    try {
+      setSavingTotalScore(true);
+      await defenseSessionsApi.updateTotalScore(defenseSession.id, score);
+      swalConfig.success(
+        "Score Updated",
+        `Total score has been updated to ${score}.`
+      );
+      // Update displayed score and clear input
+      setDisplayedTotalScore(score);
+      setTotalScoreInput("");
+    } catch (err: any) {
+      console.error("Failed to update total score:", err);
+      swalConfig.error(
+        "Update Failed",
+        err.message || "Failed to update total score. Please try again."
+      );
+    } finally {
+      setSavingTotalScore(false);
+    }
+  };
+
   // Xóa session role khi rời khỏi trang
   useEffect(() => {
     return () => {
@@ -252,13 +293,11 @@ export default function GroupDetailsPage() {
       try {
         setLoading(true);
         // 1. Fetch group first to get majorId
-        const [groupRes, studentsRes, sessionsRes, memberNotesRes] =
-          await Promise.all([
-            groupsApi.getById(id),
-            studentsApi.getByGroupId(id),
-            defenseSessionsApi.getByGroupId(id),
-            memberNotesApi.getByGroupId(id),
-          ]);
+        const [groupRes, studentsRes, sessionsRes] = await Promise.all([
+          groupsApi.getById(id),
+          studentsApi.getByGroupId(id),
+          defenseSessionsApi.getByGroupId(id),
+        ]);
 
         // Get current userId and userRole from accessToken
         const { authUtils } = await import("@/lib/utils/auth");
@@ -299,15 +338,31 @@ export default function GroupDetailsPage() {
           setStudents(studentsRes.data);
         }
 
-        // Set member notes directly from API response
-        if (memberNotesRes.data) {
-          setMemberNotes(memberNotesRes.data);
-        }
-
-        // 2. If session exists, fetch lecturers
+        // 2. If session exists, fetch lecturers and member notes
         if (sessionsRes.data && sessionsRes.data.length > 0) {
           const session = sessionsRes.data[0];
           setDefenseSession(session);
+
+          // Set displayed total score from session (if exists)
+          if (
+            (session as any).totalScore !== null &&
+            (session as any).totalScore !== undefined
+          ) {
+            setDisplayedTotalScore((session as any).totalScore);
+          }
+
+          // Fetch member notes by sessionId
+          try {
+            const memberNotesRes = await memberNotesApi.getBySessionId(
+              session.id
+            );
+            if (memberNotesRes.data) {
+              setMemberNotes(memberNotesRes.data);
+            }
+          } catch (notesErr) {
+            console.error("Failed to fetch member notes:", notesErr);
+            setMemberNotes([]);
+          }
 
           try {
             const lecturersRes = await defenseSessionsApi.getUsersBySessionId(
@@ -595,174 +650,239 @@ export default function GroupDetailsPage() {
             </div>
 
             {/* Members Card */}
-            <div className="card-base p-6">
-              <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  strokeWidth={1.5}
-                  stroke="currentColor"
-                  className="w-5 h-5 text-blue-600"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z"
-                  />
-                </svg>
-                Group Students
-              </h2>
-              {students.length > 0 ? (
-                <div className="space-y-4">
-                  {students.map((student) => (
-                    <div
-                      key={student.id}
-                      className="flex items-center gap-4 p-3 rounded-lg bg-gray-50 border border-gray-100"
-                    >
-                      <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold">
-                        {student.userName
-                          ? student.userName.charAt(0).toUpperCase()
-                          : "S"}
-                      </div>
-                      <div>
-                        <p className="font-medium text-gray-900">
-                          {student.userName || "Unknown Name"}
-                        </p>
-                        <p className="text-sm text-gray-500">{student.email}</p>
-                      </div>
-                      {student.studentCode && (
-                        <div className="ml-auto">
-                          <span className="badge badge-info text-xs">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              <div className="bg-gradient-to-r from-blue-600 to-cyan-600 px-6 py-4">
+                <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth={2}
+                    stroke="currentColor"
+                    className="w-5 h-5"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z"
+                    />
+                  </svg>
+                  Group Students
+                  <span className="ml-auto bg-white/20 px-2 py-0.5 rounded-full text-xs">
+                    {students.length} members
+                  </span>
+                </h2>
+              </div>
+              <div className="p-6">
+                {students.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {students.map((student) => (
+                      <div
+                        key={student.id}
+                        className="flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-blue-50 to-cyan-50 border border-blue-100 hover:shadow-md transition-shadow"
+                      >
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center text-white font-bold shadow-sm">
+                          {student.userName
+                            ? student.userName.charAt(0).toUpperCase()
+                            : "S"}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-gray-900 truncate">
+                            {student.userName || "Unknown Name"}
+                          </p>
+                          <p className="text-xs text-gray-500 truncate">
+                            {student.email}
+                          </p>
+                        </div>
+                        {student.studentCode && (
+                          <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded-lg">
                             {student.studentCode}
                           </span>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-gray-500 text-sm italic">
-                  No members found in this group.
-                </p>
-              )}
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-gray-500 text-sm italic text-center py-4">
+                    No members found in this group.
+                  </p>
+                )}
+              </div>
             </div>
 
             {/* Individual Scores Card */}
-            <div className="card-base p-6">
-              <h2 className="text-lg font-semibold text-gray-800 mb-6">
-                Individual Scores from Committee Members
-              </h2>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-4">
+                <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth={2}
+                    stroke="currentColor"
+                    className="w-5 h-5"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z"
+                    />
+                  </svg>
+                  Individual Scores
+                </h2>
+              </div>
+              <div className="p-6">
+                {/* Student Tabs */}
+                {students.length > 0 ? (
+                  <>
+                    <div className="flex flex-wrap gap-2 mb-6">
+                      {students.map((student) => (
+                        <button
+                          key={student.id}
+                          onClick={() => setSelectedStudentId(student.id)}
+                          className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                            selectedStudentId === student.id
+                              ? "bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-md"
+                              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                          }`}
+                        >
+                          {student.userName || student.email}
+                        </button>
+                      ))}
+                    </div>
 
-              {/* Student Tabs */}
-              {students.length > 0 ? (
-                <>
-                  <div className="flex flex-wrap gap-2 mb-6 border-b border-gray-100 pb-1">
-                    {students.map((student) => (
-                      <button
-                        key={student.id}
-                        onClick={() => setSelectedStudentId(student.id)}
-                        className={`px-6 py-2 rounded-t-lg text-sm font-medium transition-colors relative top-[1px] ${
-                          selectedStudentId === student.id
-                            ? "bg-white text-blue-600 border border-gray-200 border-b-white shadow-sm"
-                            : "bg-gray-50 text-gray-500 hover:text-gray-700 hover:bg-gray-100"
-                        }`}
-                      >
-                        {student.userName || student.email}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Scores Table */}
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left">
-                      <thead className="text-xs text-gray-500 uppercase bg-gray-50 border-b border-gray-100">
-                        <tr>
-                          <th className="px-4 py-3 font-medium">Criteria</th>
-                          <th className="px-4 py-3 font-medium text-center">
-                            Score
-                          </th>
-                          <th className="px-4 py-3 font-medium text-right">
-                            Evaluator
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100">
-                        {studentScores.length > 0 ? (
-                          studentScores.map((score) => (
-                            <tr key={score.id} className="hover:bg-gray-50">
-                              <td className="px-4 py-3 font-medium text-gray-900">
-                                {score.rubricName || "Unknown Criteria"}
-                              </td>
-                              <td className="px-4 py-3 text-center font-semibold text-gray-900">
-                                {score.value}
-                              </td>
-                              <td className="px-4 py-3 text-right text-gray-600">
-                                {score.evaluatorName || "Unknown Evaluator"}
+                    {/* Scores Table */}
+                    <div className="overflow-x-auto rounded-xl border border-gray-200">
+                      <table className="w-full text-sm text-left">
+                        <thead className="text-xs text-white uppercase bg-gradient-to-r from-gray-700 to-gray-800">
+                          <tr>
+                            <th className="px-5 py-3 font-semibold">
+                              Criteria
+                            </th>
+                            <th className="px-5 py-3 font-semibold text-center">
+                              Score
+                            </th>
+                            <th className="px-5 py-3 font-semibold text-right">
+                              Evaluator
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {studentScores.length > 0 ? (
+                            studentScores.map((score, idx) => (
+                              <tr
+                                key={score.id}
+                                className={
+                                  idx % 2 === 0 ? "bg-white" : "bg-gray-50"
+                                }
+                              >
+                                <td className="px-5 py-4 font-medium text-gray-900">
+                                  {score.rubricName || "Unknown Criteria"}
+                                </td>
+                                <td className="px-5 py-4 text-center">
+                                  <span className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-indigo-100 text-indigo-700 font-bold">
+                                    {score.value}
+                                  </span>
+                                </td>
+                                <td className="px-5 py-4 text-right text-gray-600">
+                                  {score.evaluatorName || "Unknown Evaluator"}
+                                </td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td
+                                colSpan={3}
+                                className="px-5 py-8 text-center text-gray-500 italic"
+                              >
+                                No scores available for this student.
                               </td>
                             </tr>
-                          ))
-                        ) : (
-                          <tr>
-                            <td
-                              colSpan={3}
-                              className="px-4 py-8 text-center text-gray-500 italic"
-                            >
-                              No scores available for this student.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </>
-              ) : (
-                <p className="text-sm text-gray-500 italic">
-                  No students found in this group.
-                </p>
-              )}
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-sm text-gray-500 italic text-center py-4">
+                    No students found in this group.
+                  </p>
+                )}
+              </div>
             </div>
 
             {/* Member Notes Card */}
-            <div className="card-base p-6">
-              <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  strokeWidth={1.5}
-                  stroke="currentColor"
-                  className="w-5 h-5 text-orange-500"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"
-                  />
-                </svg>
-                Committee Member Note
-              </h2>
-              {memberNotes.length > 0 ? (
-                <div className="space-y-3">
-                  {memberNotes.map((note) => (
-                    <div
-                      key={note.id}
-                      className="p-4 bg-gray-50 rounded-lg border border-gray-100"
-                    >
-                      <p className="text-sm font-semibold text-blue-600 mb-1">
-                        {note.userName || "Unknown User"}
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        {note.noteContent}
-                      </p>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              <div className="bg-gradient-to-r from-orange-500 to-amber-500 px-6 py-4">
+                <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth={2}
+                    stroke="currentColor"
+                    className="w-5 h-5"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"
+                    />
+                  </svg>
+                  Committee Member Notes
+                  {memberNotes.length > 0 && (
+                    <span className="ml-auto bg-white/20 px-2 py-0.5 rounded-full text-xs">
+                      {memberNotes.length} notes
+                    </span>
+                  )}
+                </h2>
+              </div>
+              <div className="p-6">
+                {memberNotes.length > 0 ? (
+                  <div className="space-y-3">
+                    {memberNotes.map((note) => (
+                      <div
+                        key={note.id}
+                        className="p-4 bg-gradient-to-r from-orange-50 to-amber-50 rounded-xl border border-orange-100"
+                      >
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center text-white text-xs font-bold">
+                            {(note.userName || "U").charAt(0).toUpperCase()}
+                          </div>
+                          <p className="text-sm font-semibold text-orange-700">
+                            {note.userName || "Unknown User"}
+                          </p>
+                        </div>
+                        <p className="text-sm text-gray-700 pl-9">
+                          {note.noteContent}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-orange-100 flex items-center justify-center">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        strokeWidth={1.5}
+                        stroke="currentColor"
+                        className="w-6 h-6 text-orange-400"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"
+                        />
+                      </svg>
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-gray-500 italic">
-                  No notes found for this group.
-                </p>
-              )}
+                    <p className="text-sm text-gray-500">
+                      No notes found for this session.
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -795,13 +915,25 @@ export default function GroupDetailsPage() {
                           📅{" "}
                           {new Date(
                             defenseSession.defenseDate
-                          ).toLocaleDateString()}
+                          ).toLocaleDateString("vi-VN", {
+                            day: "2-digit",
+                            month: "2-digit",
+                            year: "numeric",
+                          })}
                         </span>
                       </div>
                       <div className="flex items-center gap-2 text-sm text-gray-700 mt-1">
                         <span>
-                          ⏰ {defenseSession.startTime} -{" "}
-                          {defenseSession.endTime}
+                          ⏰{" "}
+                          {defenseSession.startTime
+                            ?.split(":")
+                            .slice(0, 2)
+                            .join(":")}{" "}
+                          -{" "}
+                          {defenseSession.endTime
+                            ?.split(":")
+                            .slice(0, 2)
+                            .join(":")}
                         </span>
                       </div>
                       <div className="flex items-center gap-2 text-sm text-gray-700 mt-1">
@@ -860,29 +992,134 @@ export default function GroupDetailsPage() {
           </div>
 
           {/* Status Card */}
-          <div className="card-base p-6">
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">
-              Status & Scoring
-            </h2>
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600">Total Score</span>
-                <span className="font-bold text-gray-900 text-lg">
-                  {group.totalScore !== null && group.totalScore !== undefined
-                    ? group.totalScore
-                    : "N/A"}
-                </span>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-4">
+              <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={2}
+                  stroke="currentColor"
+                  className="w-5 h-5"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z"
+                  />
+                </svg>
+                Status & Scoring
+              </h2>
+            </div>
+            <div className="p-6 space-y-5">
+              {/* Total Score Display */}
+              <div className="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl p-5 border border-emerald-100">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-emerald-700 font-medium mb-1">
+                      Total Score
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      Final grade for this defense
+                    </p>
+                  </div>
+                  <div className="w-16 h-16 rounded-full bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center shadow-lg">
+                    <span className="text-2xl font-bold text-white">
+                      {displayedTotalScore !== null
+                        ? displayedTotalScore
+                        : group.totalScore !== null &&
+                          group.totalScore !== undefined
+                        ? group.totalScore
+                        : "—"}
+                    </span>
+                  </div>
+                </div>
               </div>
-              <div className="h-px bg-gray-100 my-2"></div>
-              <div>
-                <span className="text-gray-600 text-sm">Semester</span>
-                <p className="font-medium text-gray-900">
-                  {group.semesterName}
-                </p>
-              </div>
-              <div>
-                <span className="text-gray-600 text-sm">Major</span>
-                <p className="font-medium text-gray-900">{group.majorName}</p>
+
+              {/* Chair: Input Total Score */}
+              {isChair && defenseSession && (
+                <div className="bg-purple-50 border border-purple-100 rounded-xl p-4">
+                  <p className="text-xs font-semibold text-purple-700 mb-3 flex items-center gap-1">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      strokeWidth={2}
+                      stroke="currentColor"
+                      className="w-4 h-4"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125"
+                      />
+                    </svg>
+                    Update Score (0-10)
+                  </p>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      min="0"
+                      max="10"
+                      step="0.1"
+                      value={totalScoreInput}
+                      onChange={(e) => setTotalScoreInput(e.target.value)}
+                      placeholder="Enter score..."
+                      className="flex-1 px-4 py-2.5 border border-purple-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent transition bg-white"
+                    />
+                    <button
+                      onClick={handleSubmitTotalScore}
+                      disabled={savingTotalScore || !totalScoreInput}
+                      className="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-sm font-semibold rounded-xl hover:from-purple-700 hover:to-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-sm"
+                    >
+                      {savingTotalScore ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            strokeWidth={2}
+                            stroke="currentColor"
+                            className="w-4 h-4"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M4.5 12.75l6 6 9-13.5"
+                            />
+                          </svg>
+                          Submit
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Info Section */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-4 bg-gray-50 rounded-xl">
+                  <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">
+                    Semester
+                  </p>
+                  <p className="font-semibold text-gray-900">
+                    {group.semesterName}
+                  </p>
+                </div>
+                <div className="p-4 bg-gray-50 rounded-xl">
+                  <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">
+                    Major
+                  </p>
+                  <p className="font-semibold text-gray-900">
+                    {group.majorName}
+                  </p>
+                </div>
               </div>
             </div>
           </div>
