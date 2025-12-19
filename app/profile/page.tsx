@@ -269,6 +269,11 @@ export default function ProfilePage() {
   const displayName = user.fullName || user.userName || user.email || "User";
   const displayRole = user.role || (user.roles && user.roles[0]) || "Member";
 
+  // Check if user is Admin or Moderator - they don't need voice enrollment
+  const isAdminOrModerator =
+    displayRole.toLowerCase() === "admin" ||
+    displayRole.toLowerCase() === "moderator";
+
   const isVoiceEnrolled = voiceStatus?.enrollment_status === "enrolled";
 
   return (
@@ -444,109 +449,111 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            {/* Voice Enrollment Card */}
-            <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
-              <div className="px-6 py-4 border-b bg-gray-50/50">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="font-semibold text-gray-800">
-                      Voice Enrollment
-                    </h3>
-                    <p className="text-sm text-gray-500">
-                      Manage your voice recognition data
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div
-                      className={`w-14 h-14 rounded-xl flex items-center justify-center ${
-                        voiceLoading
-                          ? "bg-gray-100"
-                          : isVoiceEnrolled
-                          ? "bg-green-100"
-                          : "bg-amber-100"
-                      }`}
-                    >
-                      {voiceLoading ? (
-                        <div className="w-6 h-6 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
-                      ) : isVoiceEnrolled ? (
-                        <CheckCircle2 className="w-7 h-7 text-green-600" />
-                      ) : (
-                        <AlertCircle className="w-7 h-7 text-amber-600" />
-                      )}
-                    </div>
+            {/* Voice Enrollment Card - Hidden for Admin and Moderator */}
+            {!isAdminOrModerator && (
+              <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
+                <div className="px-6 py-4 border-b bg-gray-50/50">
+                  <div className="flex items-center justify-between">
                     <div>
-                      <p className="font-medium text-gray-800">
-                        {voiceLoading
-                          ? "Checking status..."
-                          : isVoiceEnrolled
-                          ? "Voice Enrolled"
-                          : "Not Enrolled"}
-                      </p>
+                      <h3 className="font-semibold text-gray-800">
+                        Voice Enrollment
+                      </h3>
                       <p className="text-sm text-gray-500">
-                        {voiceLoading
-                          ? "Please wait..."
-                          : isVoiceEnrolled
-                          ? `${
-                              voiceStatus?.enrollment_count || 3
-                            }/3 samples recorded`
-                          : voiceStatus?.enrollment_status === "partial"
-                          ? `${
-                              voiceStatus?.enrollment_count || 0
-                            }/3 samples recorded`
-                          : "Voice enrollment required"}
+                        Manage your voice recognition data
                       </p>
                     </div>
                   </div>
-
-                  <div className="flex gap-3">
-                    {!isVoiceEnrolled &&
-                      voiceStatus?.enrollment_status !== "enrolled" && (
-                        <Link
-                          href="/voice-enroll"
-                          className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white hover:bg-purple-700 rounded-lg transition font-medium text-sm"
-                        >
-                          <Mic className="w-4 h-4" />
-                          Enroll Now
-                        </Link>
-                      )}
-                    {(isVoiceEnrolled ||
-                      voiceStatus?.enrollment_status === "partial") && (
-                      <button
-                        onClick={handleResetVoice}
-                        disabled={resettingVoice || voiceLoading}
-                        className="flex items-center gap-2 px-4 py-2 text-red-600 hover:bg-red-50 border border-red-200 rounded-lg transition font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {resettingVoice ? (
-                          <>
-                            <div className="w-4 h-4 border-2 border-red-300 border-t-red-600 rounded-full animate-spin" />
-                            Resetting...
-                          </>
-                        ) : (
-                          <>
-                            <RefreshCw className="w-4 h-4" />
-                            Reset Data
-                          </>
-                        )}
-                      </button>
-                    )}
-                  </div>
                 </div>
 
-                {isVoiceEnrolled && (
-                  <div className="mt-4 p-4 bg-green-50 rounded-xl border border-green-100">
-                    <p className="text-sm text-green-700">
-                      ✓ Your voice has been successfully enrolled. The system
-                      can now recognize your voice during defense sessions.
-                    </p>
+                <div className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div
+                        className={`w-14 h-14 rounded-xl flex items-center justify-center ${
+                          voiceLoading
+                            ? "bg-gray-100"
+                            : isVoiceEnrolled
+                            ? "bg-green-100"
+                            : "bg-amber-100"
+                        }`}
+                      >
+                        {voiceLoading ? (
+                          <div className="w-6 h-6 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+                        ) : isVoiceEnrolled ? (
+                          <CheckCircle2 className="w-7 h-7 text-green-600" />
+                        ) : (
+                          <AlertCircle className="w-7 h-7 text-amber-600" />
+                        )}
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-800">
+                          {voiceLoading
+                            ? "Checking status..."
+                            : isVoiceEnrolled
+                            ? "Voice Enrolled"
+                            : "Not Enrolled"}
+                        </p>
+                        <p className="text-sm text-gray-500">
+                          {voiceLoading
+                            ? "Please wait..."
+                            : isVoiceEnrolled
+                            ? `${
+                                voiceStatus?.enrollment_count || 3
+                              }/3 samples recorded`
+                            : voiceStatus?.enrollment_status === "partial"
+                            ? `${
+                                voiceStatus?.enrollment_count || 0
+                              }/3 samples recorded`
+                            : "Voice enrollment required"}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-3">
+                      {!isVoiceEnrolled &&
+                        voiceStatus?.enrollment_status !== "enrolled" && (
+                          <Link
+                            href="/voice-enroll"
+                            className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white hover:bg-purple-700 rounded-lg transition font-medium text-sm"
+                          >
+                            <Mic className="w-4 h-4" />
+                            Enroll Now
+                          </Link>
+                        )}
+                      {(isVoiceEnrolled ||
+                        voiceStatus?.enrollment_status === "partial") && (
+                        <button
+                          onClick={handleResetVoice}
+                          disabled={resettingVoice || voiceLoading}
+                          className="flex items-center gap-2 px-4 py-2 text-red-600 hover:bg-red-50 border border-red-200 rounded-lg transition font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {resettingVoice ? (
+                            <>
+                              <div className="w-4 h-4 border-2 border-red-300 border-t-red-600 rounded-full animate-spin" />
+                              Resetting...
+                            </>
+                          ) : (
+                            <>
+                              <RefreshCw className="w-4 h-4" />
+                              Reset Data
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </div>
                   </div>
-                )}
+
+                  {isVoiceEnrolled && (
+                    <div className="mt-4 p-4 bg-green-50 rounded-xl border border-green-100">
+                      <p className="text-sm text-green-700">
+                        ✓ Your voice has been successfully enrolled. The system
+                        can now recognize your voice during defense sessions.
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Security Card */}
             <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">

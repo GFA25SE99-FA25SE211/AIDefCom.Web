@@ -1,9 +1,9 @@
 "use client";
 
-import { div } from "framer-motion/client";
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { BACKEND_API_URL } from "@/lib/config/api-urls";
+import { swalConfig } from "@/lib/utils/sweetAlert";
 
 interface Report {
   id: number;
@@ -19,6 +19,10 @@ export default function SecretaryReportDashboard() {
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [uploadingReportId, setUploadingReportId] = useState<number | null>(
+    null
+  );
+  const fileInputRefs = useRef<{ [key: number]: HTMLInputElement | null }>({});
 
   useEffect(() => {
     fetchReports();
@@ -49,11 +53,9 @@ export default function SecretaryReportDashboard() {
 
   // Calculate stats from actual data
   const totalReports = reports.length;
-  const submittedReports = reports.filter(
-    (r) => r.status === "Approved"
-  ).length;
-  const rejectedReports = reports.filter((r) => r.status === "Rejected").length;
-  const pendingReports = reports.filter(
+  const approvedCount = reports.filter((r) => r.status === "Approved").length;
+  const rejectedCount = reports.filter((r) => r.status === "Rejected").length;
+  const pendingCount = reports.filter(
     (r) => r.status !== "Approved" && r.status !== "Rejected"
   ).length;
 
@@ -77,28 +79,148 @@ export default function SecretaryReportDashboard() {
       }
 
       const renewData = await renewResponse.json();
-
-      // Lấy URL mới từ response (giả sử nằm trong data)
       const downloadUrl = renewData.data || renewData.url || filePath;
 
       const response = await fetch(downloadUrl);
       if (!response.ok) {
         throw new Error("Failed to download file");
       }
-      const blob = await response.blob();
+
+      // Extract original filename and extension from filePath
+      const originalFileName =
+        filePath.split("/").pop()?.split("?")[0] || "report";
+      // Get file extension from original file
+      const fileExtMatch = originalFileName.match(/\.[^.]+$/);
+      const fileExt = fileExtMatch ? fileExtMatch[0].toLowerCase() : ".docx";
+
+      // Determine correct MIME type based on extension
+      const mimeTypes: { [key: string]: string } = {
+        ".docx":
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ".doc": "application/msword",
+        ".pdf": "application/pdf",
+        ".xlsx":
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ".xls": "application/vnd.ms-excel",
+        ".pptx":
+          "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        ".ppt": "application/vnd.ms-powerpoint",
+      };
+      const mimeType = mimeTypes[fileExt] || "application/octet-stream";
+
+      // Get the raw data and create blob with correct MIME type
+      const arrayBuffer = await response.arrayBuffer();
+      const blob = new Blob([arrayBuffer], { type: mimeType });
+
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      const extractedName =
-        fileName || filePath.split("/").pop() || "report.docx";
-      link.download = extractedName;
+
+      // Use original filename from URL or generate one with proper extension
+      const finalName = decodeURIComponent(originalFileName);
+
+      link.download = finalName;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
     } catch (error) {
       console.error("Download failed:", error);
-      alert("Could not download the file. Please try again.");
+      swalConfig.error(
+        "Download Failed",
+        "Could not download the file. Please try again."
+      );
+    }
+  };
+
+  // Handle upload new file for rejected report
+  const handleUploadClick = (reportId: number) => {
+    const inputRef = fileInputRefs.current[reportId];
+    if (inputRef) {
+      inputRef.click();
+    }
+  };
+
+  const handleFileChange = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+    report: Report
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setUploadingReportId(report.id);
+
+      // Step 1: Upload file to get new filePath
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const uploadResponse = await fetch(
+        `${BACKEND_API_URL}/api/defense-reports/upload-pdf`,
+        {
+          method: "POST",
+          body: formData,
+          // Don't set Content-Type header - browser will set it automatically with boundary
+        }
+      );
+
+      const uploadData = await uploadResponse.json();
+
+      if (!uploadResponse.ok) {
+        throw new Error(uploadData.message || "Failed to upload file");
+      }
+
+      const newFilePath =
+        uploadData.data?.fileUrl ||
+        uploadData.data?.downloadUrl ||
+        uploadData.data?.filePath ||
+        "";
+
+      if (!newFilePath) {
+        throw new Error("No file URL returned from upload");
+      }
+
+      // Step 2: Update report with new filePath and change status to Pending
+      const updateResponse = await fetch(
+        `${BACKEND_API_URL}/api/reports/${report.id}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            accept: "*/*",
+          },
+          body: JSON.stringify({
+            sessionId: report.sessionId,
+            filePath: newFilePath,
+            summaryText: report.summaryText || "",
+            status: "Pending",
+          }),
+        }
+      );
+
+      if (!updateResponse.ok) {
+        throw new Error("Failed to update report status");
+      }
+
+      swalConfig.success(
+        "Upload Successful",
+        "File uploaded and report status changed to Pending for Chair review."
+      );
+
+      // Refresh reports list
+      await fetchReports();
+    } catch (error: any) {
+      console.error("Upload failed:", error);
+      swalConfig.error(
+        "Upload Failed",
+        error.message || "Could not upload the file. Please try again."
+      );
+    } finally {
+      setUploadingReportId(null);
+      // Reset file input
+      if (fileInputRefs.current[report.id]) {
+        fileInputRefs.current[report.id]!.value = "";
+      }
     }
   };
 
@@ -177,7 +299,7 @@ export default function SecretaryReportDashboard() {
         <div className="stat-card stat-card-green">
           <div className="stat-info">
             <p className="label">Approved</p>
-            <p className="value">{submittedReports}</p>
+            <p className="value">{approvedCount}</p>
           </div>
           <div className="stat-icon">✔</div>
         </div>
@@ -185,7 +307,7 @@ export default function SecretaryReportDashboard() {
         <div className="stat-card stat-card-orange">
           <div className="stat-info">
             <p className="label">Rejected</p>
-            <p className="value">{rejectedReports}</p>
+            <p className="value">{rejectedCount}</p>
           </div>
           <div className="stat-icon">✖</div>
         </div>
@@ -193,244 +315,292 @@ export default function SecretaryReportDashboard() {
         <div className="stat-card stat-card-blue">
           <div className="stat-info">
             <p className="label">Pending</p>
-            <p className="value">{pendingReports}</p>
+            <p className="value">{pendingCount}</p>
           </div>
           <div className="stat-icon">⏱</div>
         </div>
       </div>
 
-      {/* Table Section */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        {/* Table Header */}
-        <div className="bg-gradient-to-r from-blue-600 to-blue-700 border-b border-blue-800 px-6 py-4 flex justify-between items-center">
-          <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="currentColor"
-              className="w-5 h-5 text-white"
-            >
-              <path
-                fillRule="evenodd"
-                d="M5.625 1.5H9a3.75 3.75 0 013.75 3.75v1.875c0 1.036.84 1.875 1.875 1.875H16.5a3.75 3.75 0 013.75 3.75v7.875c0 1.035-.84 1.875-1.875 1.875H5.625a1.875 1.875 0 01-1.875-1.875V3.375c0-1.036.84-1.875 1.875-1.875zm6.905 9.97a.75.75 0 00-1.06 0l-3 3a.75.75 0 101.06 1.06l1.72-1.72V18a.75.75 0 001.5 0v-4.19l1.72 1.72a.75.75 0 101.06-1.06l-3-3z"
-                clipRule="evenodd"
-              />
-              <path d="M14.25 5.25a5.23 5.23 0 00-1.279-3.434 9.768 9.768 0 016.963 6.963A5.23 5.23 0 0016.5 7.5h-1.875a.375.375 0 01-.375-.375V5.25z" />
-            </svg>
-            Reports List
-          </h2>
-          <button
-            onClick={fetchReports}
-            className="px-4 py-2 bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-lg transition-colors text-sm font-medium text-white flex items-center gap-2"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 20 20"
-              fill="currentColor"
-              className="w-4 h-4"
-            >
-              <path
-                fillRule="evenodd"
-                d="M15.312 11.424a5.5 5.5 0 01-9.201 2.466l-.312-.311h2.433a.75.75 0 000-1.5H3.989a.75.75 0 00-.75.75v4.242a.75.75 0 001.5 0v-2.43l.31.31a7 7 0 0011.712-3.138.75.75 0 00-1.449-.39zm1.23-3.723a.75.75 0 00.219-.53V2.929a.75.75 0 00-1.5 0V5.36l-.31-.31A7 7 0 003.239 8.188a.75.75 0 101.448.389A5.5 5.5 0 0113.89 6.11l.311.31h-2.432a.75.75 0 000 1.5h4.243a.75.75 0 00.53-.219z"
-                clipRule="evenodd"
-              />
-            </svg>
-            Refresh
-          </button>
+      {/* Reports Grouped by Status */}
+      {reports.length === 0 ? (
+        <div className="card-base text-center py-10 text-gray-500">
+          No reports found.
         </div>
-
-        {/* Table Content */}
-        <div className="p-6">
-          {reports.length === 0 ? (
-            <div className="text-center py-16">
-              <div className="inline-block p-6 bg-gray-100 rounded-full mb-4">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  strokeWidth={1.5}
-                  stroke="currentColor"
-                  className="w-16 h-16 text-gray-400"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"
-                  />
-                </svg>
-              </div>
-              <h3 className="text-xl font-semibold text-gray-700 mb-2">
-                No Reports Found
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Pending Reports Column */}
+          <div className="bg-white rounded-xl shadow-sm border border-blue-100 overflow-hidden">
+            <div className="bg-gradient-to-r from-blue-500 to-blue-600 px-4 py-3">
+              <h3 className="text-white font-semibold flex items-center justify-center gap-2">
+                <span className="text-lg">⏳</span> Pending
               </h3>
-              <p className="text-gray-500">
-                There are no reports available at the moment.
-              </p>
             </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b-2 border-gray-200">
-                    <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      ID
-                    </th>
-                    <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      Session
-                    </th>
-                    <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      Generated Date
-                    </th>
-                    <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      Summary
-                    </th>
-                    <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-
-                <tbody className="divide-y divide-gray-100">
-                  {reports.map((report) => (
-                    <tr
-                      key={report.id}
-                      className="hover:bg-gray-50 transition-colors duration-150"
-                    >
-                      <td className="px-4 py-4 text-center">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                          #{report.id}
-                        </span>
-                      </td>
-                      <td className="px-4 py-4 text-center">
-                        <span className="text-sm font-medium text-gray-900">
-                          Session {report.sessionId}
-                        </span>
-                      </td>
-                      <td className="px-4 py-4 text-center">
-                        <div className="text-sm text-gray-900">
-                          {new Date(report.generatedDate).toLocaleDateString(
-                            "vi-VN",
-                            {
-                              year: "numeric",
-                              month: "2-digit",
-                              day: "2-digit",
-                            }
-                          )}
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          {new Date(report.generatedDate).toLocaleTimeString(
-                            "vi-VN",
-                            {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            }
-                          )}
-                        </div>
-                      </td>
-
-                      <td className="px-4 py-4 text-center">
-                        <span
-                          className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
-                            report.status === "Approved"
-                              ? "bg-green-100 text-green-800"
-                              : "bg-yellow-100 text-yellow-800"
-                          }`}
+            <div className="p-4 space-y-3 max-h-[500px] overflow-y-auto">
+              {reports
+                .filter((r) => !r.status || r.status === "Pending")
+                .map((r) => (
+                  <div
+                    key={r.id}
+                    className="bg-blue-50 border border-blue-100 rounded-lg p-4"
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div>
+                        <p className="text-sm font-semibold text-gray-800">
+                          Session {r.sessionId}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {r.generatedDate
+                            ? new Date(r.generatedDate).toLocaleDateString(
+                                "en-GB"
+                              )
+                            : "No date"}
+                        </p>
+                      </div>
+                      {r.filePath && (
+                        <button
+                          onClick={() =>
+                            handleDownload(
+                              r.filePath,
+                              `meeting-minutes-${r.sessionId}.docx`
+                            )
+                          }
+                          className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-100 rounded transition"
+                          title="Download"
                         >
-                          {report.status === "Approved" ? (
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              viewBox="0 0 20 20"
-                              fill="currentColor"
-                              className="w-4 h-4 mr-1"
-                            >
-                              <path
-                                fillRule="evenodd"
-                                d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z"
-                                clipRule="evenodd"
-                              />
-                            </svg>
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            strokeWidth={2}
+                            stroke="currentColor"
+                            className="w-4 h-4"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V4"
+                            />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                    <p
+                      className="text-xs text-gray-600 mb-2 line-clamp-2"
+                      title={r.summaryText}
+                    >
+                      {r.summaryText || "No summary"}
+                    </p>
+                    {/* Status Badge Only - No Actions */}
+                    <span className="inline-flex items-center px-2 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded-full">
+                      ⏳ Pending
+                    </span>
+                  </div>
+                ))}
+              {pendingCount === 0 && (
+                <p className="text-center text-gray-400 text-sm py-4">
+                  No pending reports
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Approved Reports Column */}
+          <div className="bg-white rounded-xl shadow-sm border border-green-100 overflow-hidden">
+            <div className="bg-gradient-to-r from-green-500 to-green-600 px-4 py-3">
+              <h3 className="text-white font-semibold flex items-center justify-center gap-2">
+                <span className="text-lg">✅</span> Approved
+              </h3>
+            </div>
+            <div className="p-4 space-y-3 max-h-[500px] overflow-y-auto">
+              {reports
+                .filter((r) => r.status === "Approved")
+                .map((r) => (
+                  <div
+                    key={r.id}
+                    className="bg-green-50 border border-green-100 rounded-lg p-4"
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div>
+                        <p className="text-sm font-semibold text-gray-800">
+                          Session {r.sessionId}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {r.generatedDate
+                            ? new Date(r.generatedDate).toLocaleDateString(
+                                "en-GB"
+                              )
+                            : "No date"}
+                        </p>
+                      </div>
+                      {r.filePath && (
+                        <button
+                          onClick={() =>
+                            handleDownload(
+                              r.filePath,
+                              `meeting-minutes-${r.sessionId}.docx`
+                            )
+                          }
+                          className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-100 rounded transition"
+                          title="Download"
+                        >
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            strokeWidth={2}
+                            stroke="currentColor"
+                            className="w-4 h-4"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V4"
+                            />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                    <p
+                      className="text-xs text-gray-600 mb-2 line-clamp-2"
+                      title={r.summaryText}
+                    >
+                      {r.summaryText || "No summary"}
+                    </p>
+                    {/* Status Badge Only - No Actions */}
+                    <span className="inline-flex items-center px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full">
+                      ✅ Approved
+                    </span>
+                  </div>
+                ))}
+              {approvedCount === 0 && (
+                <p className="text-center text-gray-400 text-sm py-4">
+                  No approved reports
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Rejected Reports Column */}
+          <div className="bg-white rounded-xl shadow-sm border border-orange-100 overflow-hidden">
+            <div className="bg-gradient-to-r from-orange-500 to-orange-600 px-4 py-3">
+              <h3 className="text-white font-semibold flex items-center justify-center gap-2">
+                <span className="text-lg">❌</span> Rejected
+              </h3>
+            </div>
+            <div className="p-4 space-y-3 max-h-[500px] overflow-y-auto">
+              {reports
+                .filter((r) => r.status === "Rejected")
+                .map((r) => (
+                  <div
+                    key={r.id}
+                    className="bg-orange-50 border border-orange-100 rounded-lg p-4"
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div>
+                        <p className="text-sm font-semibold text-gray-800">
+                          Session {r.sessionId}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {r.generatedDate
+                            ? new Date(r.generatedDate).toLocaleDateString(
+                                "en-GB"
+                              )
+                            : "No date"}
+                        </p>
+                      </div>
+                      {r.filePath && (
+                        <button
+                          onClick={() =>
+                            handleDownload(
+                              r.filePath,
+                              `meeting-minutes-${r.sessionId}.docx`
+                            )
+                          }
+                          className="p-1.5 text-gray-400 hover:text-orange-600 hover:bg-orange-100 rounded transition"
+                          title="Download"
+                        >
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            strokeWidth={2}
+                            stroke="currentColor"
+                            className="w-4 h-4"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V4"
+                            />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                    <p
+                      className="text-xs text-gray-600 mb-2 line-clamp-2"
+                      title={r.summaryText}
+                    >
+                      {r.summaryText || "No summary"}
+                    </p>
+                    {/* Status Badge */}
+                    <div className="flex items-center justify-between">
+                      <span className="inline-flex items-center px-2 py-1 bg-orange-100 text-orange-700 text-xs font-medium rounded-full">
+                        ❌ Rejected
+                      </span>
+                      {/* Upload New File Button */}
+                      <div>
+                        <input
+                          type="file"
+                          ref={(el) => {
+                            fileInputRefs.current[r.id] = el;
+                          }}
+                          onChange={(e) => handleFileChange(e, r)}
+                          accept=".doc,.docx,.pdf"
+                          className="hidden"
+                        />
+                        <button
+                          onClick={() => handleUploadClick(r.id)}
+                          disabled={uploadingReportId === r.id}
+                          className="inline-flex items-center gap-1 px-2 py-1 bg-purple-500 hover:bg-purple-600 text-white text-xs font-medium rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {uploadingReportId === r.id ? (
+                            <>
+                              <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                              Uploading...
+                            </>
                           ) : (
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              viewBox="0 0 20 20"
-                              fill="currentColor"
-                              className="w-4 h-4 mr-1"
-                            >
-                              <path
-                                fillRule="evenodd"
-                                d="M10 18a8 8 0 100-16 8 8 0 000 16zm.75-13a.75.75 0 00-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 000-1.5h-3.25V5z"
-                                clipRule="evenodd"
-                              />
-                            </svg>
-                          )}
-                          {report.status}
-                        </span>
-                      </td>
-
-                      <td className="px-4 py-4 text-center">
-                        <div className="max-w-xs mx-auto">
-                          <p className="text-sm text-gray-700 line-clamp-2">
-                            {report.summaryText || "No summary available"}
-                          </p>
-                        </div>
-                      </td>
-
-                      <td className="px-4 py-4 text-center">
-                        <div className="flex gap-2 justify-center">
-                          {report.filePath && (
-                            <button
-                              onClick={() =>
-                                handleDownload(
-                                  report.filePath,
-                                  `meeting-minutes-${report.sessionId}.docx`
-                                )
-                              }
-                              className="inline-flex items-center gap-1 px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
-                            >
+                            <>
                               <svg
                                 xmlns="http://www.w3.org/2000/svg"
-                                viewBox="0 0 20 20"
-                                fill="currentColor"
-                                className="w-4 h-4"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                strokeWidth={2}
+                                stroke="currentColor"
+                                className="w-3 h-3"
                               >
-                                <path d="M10.75 2.75a.75.75 0 00-1.5 0v8.614L6.295 8.235a.75.75 0 10-1.09 1.03l4.25 4.5a.75.75 0 001.09 0l4.25-4.5a.75.75 0 00-1.09-1.03l-2.955 3.129V2.75z" />
-                                <path d="M3.5 12.75a.75.75 0 00-1.5 0v2.5A2.75 2.75 0 004.75 18h10.5A2.75 2.75 0 0018 15.25v-2.5a.75.75 0 00-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5z" />
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"
+                                />
                               </svg>
-                              Download
-                            </button>
+                              Upload New
+                            </>
                           )}
-
-                          <Link
-                            href={`/secretary/transcript/${report.sessionId}`}
-                            className="inline-flex items-center gap-1 px-3 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors"
-                          >
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              viewBox="0 0 20 20"
-                              fill="currentColor"
-                              className="w-4 h-4"
-                            >
-                              <path d="M10 12.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5z" />
-                              <path
-                                fillRule="evenodd"
-                                d="M.664 10.59a1.651 1.651 0 010-1.186A10.004 10.004 0 0110 3c4.257 0 7.893 2.66 9.336 6.41.147.381.146.804 0 1.186A10.004 10.004 0 0110 17c-4.257 0-7.893-2.66-9.336-6.41zM14 10a4 4 0 11-8 0 4 4 0 018 0z"
-                                clipRule="evenodd"
-                              />
-                            </svg>
-                            View
-                          </Link>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              {rejectedCount === 0 && (
+                <p className="text-center text-gray-400 text-sm py-4">
+                  No rejected reports
+                </p>
+              )}
             </div>
-          )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Footer */}
       <p className="text-center text-sm text-gray-500 mt-8">

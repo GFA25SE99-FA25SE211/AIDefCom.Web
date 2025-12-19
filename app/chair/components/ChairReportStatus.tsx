@@ -165,22 +165,47 @@ export default function ChairReportStatus() {
       }
 
       const renewData = await renewResponse.json();
-
-      // Lấy URL mới từ response (giả sử nằm trong data)
       const downloadUrl = renewData.data || renewData.url || filePath;
 
       const response = await fetch(downloadUrl);
       if (!response.ok) {
         throw new Error("Failed to download file");
       }
-      const blob = await response.blob();
+
+      // Extract original filename and extension from filePath
+      const originalFileName =
+        filePath.split("/").pop()?.split("?")[0] || "report";
+      // Get file extension from original file
+      const fileExtMatch = originalFileName.match(/\.[^.]+$/);
+      const fileExt = fileExtMatch ? fileExtMatch[0].toLowerCase() : ".docx";
+
+      // Determine correct MIME type based on extension
+      const mimeTypes: { [key: string]: string } = {
+        ".docx":
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ".doc": "application/msword",
+        ".pdf": "application/pdf",
+        ".xlsx":
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ".xls": "application/vnd.ms-excel",
+        ".pptx":
+          "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        ".ppt": "application/vnd.ms-powerpoint",
+      };
+      const mimeType = mimeTypes[fileExt] || "application/octet-stream";
+
+      // Get the raw data and create blob with correct MIME type
+      const arrayBuffer = await response.arrayBuffer();
+      const blob = new Blob([arrayBuffer], { type: mimeType });
+
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      // Extract filename from URL or use provided fileName
-      const extractedName =
-        fileName || filePath.split("/").pop() || "report.docx";
-      link.download = extractedName;
+
+      // Use original filename from URL or generate one with proper extension
+      const finalName = decodeURIComponent(originalFileName);
+
+      link.download = finalName;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -249,83 +274,51 @@ export default function ChairReportStatus() {
         </div>
       </div>
 
-      {/* Table Section */}
-      <div className="mt-8 card-base">
-        {loading ? (
-          <div className="text-center py-10 text-gray-500">
-            Loading reports...
-          </div>
-        ) : error ? (
-          <div className="text-center py-10 text-red-500">{error}</div>
-        ) : reports.length === 0 ? (
-          <div className="text-center py-10 text-gray-500">
-            No reports found.
-          </div>
-        ) : (
-          <table className="table-base mt-4">
-            <thead>
-              <tr>
-                <th style={{ textAlign: "center" }}>ID</th>
-                <th style={{ textAlign: "center" }}>Session ID</th>
-                <th>Summary</th>
-                <th>Report</th>
-                <th style={{ textAlign: "center" }}>Generated Date</th>
-                <th style={{ textAlign: "center" }}>Status</th>
-                <th style={{ textAlign: "center" }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {reports.map((r) => (
-                <tr key={r.id}>
-                  <td style={{ textAlign: "center" }}>{r.id}</td>
-                  <td style={{ textAlign: "center" }}>{r.sessionId}</td>
-                  <td
-                    className="max-w-xs truncate"
-                    title={r.summaryText || r.summary}
+      {/* Reports Grouped by Status */}
+      {loading ? (
+        <div className="mt-8 card-base text-center py-10 text-gray-500">
+          Loading reports...
+        </div>
+      ) : error ? (
+        <div className="mt-8 card-base text-center py-10 text-red-500">
+          {error}
+        </div>
+      ) : reports.length === 0 ? (
+        <div className="mt-8 card-base text-center py-10 text-gray-500">
+          No reports found.
+        </div>
+      ) : (
+        <div className="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Pending Reports Column */}
+          <div className="bg-white rounded-xl shadow-sm border border-blue-100 overflow-hidden">
+            <div className="bg-gradient-to-r from-blue-500 to-blue-600 px-4 py-3">
+              <h3 className="text-white font-semibold flex items-center justify-center gap-2">
+                <span className="text-lg">⏳</span> Pending
+              </h3>
+            </div>
+            <div className="p-4 space-y-3 max-h-[500px] overflow-y-auto">
+              {reports
+                .filter((r) => !r.status || r.status === "Pending")
+                .map((r) => (
+                  <div
+                    key={r.id}
+                    className="bg-blue-50 border border-blue-100 rounded-lg p-4"
                   >
-                    {r.summaryText || r.summary || "No summary"}
-                  </td>
-                  <td className="text-purple-600 font-medium">
-                    {r.sessionId && sessionGroupMap.get(r.sessionId)
-                      ? `Report of Group ${sessionGroupMap.get(r.sessionId)}`
-                      : r.filePath
-                      ? "Report Available"
-                      : "No file"}
-                  </td>
-                  <td style={{ textAlign: "center" }}>
-                    {r.generatedDate
-                      ? new Date(r.generatedDate).toLocaleDateString()
-                      : "-"}
-                  </td>
-                  <td style={{ textAlign: "center" }}>
-                    {isChair ? (
-                      <select
-                        className={`text-sm font-semibold px-4 py-2 rounded-lg border-2 shadow-sm cursor-pointer transition-all duration-200 focus:ring-2 focus:ring-offset-1 ${
-                          r.status === "Approved"
-                            ? "bg-green-50 text-green-700 border-green-300 focus:ring-green-400"
-                            : r.status === "Rejected"
-                            ? "bg-red-50 text-red-700 border-red-300 focus:ring-red-400"
-                            : "bg-amber-50 text-amber-700 border-amber-300 focus:ring-amber-400"
-                        }`}
-                        value={r.status || "Pending"}
-                        onChange={(e) =>
-                          handleStatusChange(r.id, e.target.value)
-                        }
-                        disabled={actionLoading === r.id}
-                      >
-                        <option value="Pending">⏳ Pending</option>
-                        <option value="Approved">✅ Approved</option>
-                        <option value="Rejected">❌ Rejected</option>
-                      </select>
-                    ) : (
-                      <span className={statusClass(r.status)}>
-                        {r.status || "Pending"}
-                      </span>
-                    )}
-                  </td>
-                  <td style={{ textAlign: "center" }}>
-                    <div className="flex gap-2 justify-center">
-                      {/* Download Button */}
+                    <div className="flex items-start justify-between mb-2">
+                      <div>
+                        <p className="text-sm font-semibold text-gray-800">
+                          {r.sessionId && sessionGroupMap.get(r.sessionId)
+                            ? `Group ${sessionGroupMap.get(r.sessionId)}`
+                            : `Session ${r.sessionId}`}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {r.generatedDate
+                            ? new Date(r.generatedDate).toLocaleDateString(
+                                "en-GB"
+                              )
+                            : "No date"}
+                        </p>
+                      </div>
                       {r.filePath && (
                         <button
                           onClick={() =>
@@ -334,7 +327,7 @@ export default function ChairReportStatus() {
                               `meeting-minutes-${r.sessionId}.docx`
                             )
                           }
-                          className="p-2 text-gray-500 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-all duration-200"
+                          className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-100 rounded transition"
                           title="Download"
                         >
                           <svg
@@ -343,7 +336,7 @@ export default function ChairReportStatus() {
                             viewBox="0 0 24 24"
                             strokeWidth={2}
                             stroke="currentColor"
-                            className="w-5 h-5"
+                            className="w-4 h-4"
                           >
                             <path
                               strokeLinecap="round"
@@ -354,13 +347,198 @@ export default function ChairReportStatus() {
                         </button>
                       )}
                     </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+                    <p
+                      className="text-xs text-gray-600 mb-3 line-clamp-2"
+                      title={r.summaryText || r.summary}
+                    >
+                      {r.summaryText || r.summary || "No summary"}
+                    </p>
+                    {/* Action Buttons - Only for Pending */}
+                    {isChair && (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleApprove(r.id)}
+                          disabled={actionLoading === r.id}
+                          className="flex-1 px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white text-xs font-medium rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {actionLoading === r.id ? "..." : "✅ Approve"}
+                        </button>
+                        <button
+                          onClick={() => handleReject(r.id)}
+                          disabled={actionLoading === r.id}
+                          className="flex-1 px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white text-xs font-medium rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {actionLoading === r.id ? "..." : "❌ Reject"}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              {pendingCount === 0 && (
+                <p className="text-center text-gray-400 text-sm py-4">
+                  No pending reports
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Approved Reports Column */}
+          <div className="bg-white rounded-xl shadow-sm border border-green-100 overflow-hidden">
+            <div className="bg-gradient-to-r from-green-500 to-green-600 px-4 py-3">
+              <h3 className="text-white font-semibold flex items-center justify-center gap-2">
+                <span className="text-lg">✅</span> Approved
+              </h3>
+            </div>
+            <div className="p-4 space-y-3 max-h-[500px] overflow-y-auto">
+              {reports
+                .filter((r) => r.status === "Approved")
+                .map((r) => (
+                  <div
+                    key={r.id}
+                    className="bg-green-50 border border-green-100 rounded-lg p-4"
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div>
+                        <p className="text-sm font-semibold text-gray-800">
+                          {r.sessionId && sessionGroupMap.get(r.sessionId)
+                            ? `Group ${sessionGroupMap.get(r.sessionId)}`
+                            : `Session ${r.sessionId}`}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {r.generatedDate
+                            ? new Date(r.generatedDate).toLocaleDateString(
+                                "en-GB"
+                              )
+                            : "No date"}
+                        </p>
+                      </div>
+                      {r.filePath && (
+                        <button
+                          onClick={() =>
+                            handleDownload(
+                              r.filePath!,
+                              `meeting-minutes-${r.sessionId}.docx`
+                            )
+                          }
+                          className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-100 rounded transition"
+                          title="Download"
+                        >
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            strokeWidth={2}
+                            stroke="currentColor"
+                            className="w-4 h-4"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V4"
+                            />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                    <p
+                      className="text-xs text-gray-600 mb-2 line-clamp-2"
+                      title={r.summaryText || r.summary}
+                    >
+                      {r.summaryText || r.summary || "No summary"}
+                    </p>
+                    {/* Status Badge Only - No Actions */}
+                    <span className="inline-flex items-center px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full">
+                      ✅ Approved
+                    </span>
+                  </div>
+                ))}
+              {approvedCount === 0 && (
+                <p className="text-center text-gray-400 text-sm py-4">
+                  No approved reports
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Rejected Reports Column */}
+          <div className="bg-white rounded-xl shadow-sm border border-orange-100 overflow-hidden">
+            <div className="bg-gradient-to-r from-orange-500 to-orange-600 px-4 py-3">
+              <h3 className="text-white font-semibold flex items-center justify-center gap-2">
+                <span className="text-lg">❌</span> Rejected
+              </h3>
+            </div>
+            <div className="p-4 space-y-3 max-h-[500px] overflow-y-auto">
+              {reports
+                .filter((r) => r.status === "Rejected")
+                .map((r) => (
+                  <div
+                    key={r.id}
+                    className="bg-orange-50 border border-orange-100 rounded-lg p-4"
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div>
+                        <p className="text-sm font-semibold text-gray-800">
+                          {r.sessionId && sessionGroupMap.get(r.sessionId)
+                            ? `Group ${sessionGroupMap.get(r.sessionId)}`
+                            : `Session ${r.sessionId}`}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {r.generatedDate
+                            ? new Date(r.generatedDate).toLocaleDateString(
+                                "en-GB"
+                              )
+                            : "No date"}
+                        </p>
+                      </div>
+                      {r.filePath && (
+                        <button
+                          onClick={() =>
+                            handleDownload(
+                              r.filePath!,
+                              `meeting-minutes-${r.sessionId}.docx`
+                            )
+                          }
+                          className="p-1.5 text-gray-400 hover:text-orange-600 hover:bg-orange-100 rounded transition"
+                          title="Download"
+                        >
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            strokeWidth={2}
+                            stroke="currentColor"
+                            className="w-4 h-4"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V4"
+                            />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                    <p
+                      className="text-xs text-gray-600 mb-2 line-clamp-2"
+                      title={r.summaryText || r.summary}
+                    >
+                      {r.summaryText || r.summary || "No summary"}
+                    </p>
+                    {/* Status Badge Only - No Actions */}
+                    <span className="inline-flex items-center px-2 py-1 bg-orange-100 text-orange-700 text-xs font-medium rounded-full">
+                      ❌ Rejected
+                    </span>
+                  </div>
+                ))}
+              {rejectedCount === 0 && (
+                <p className="text-center text-gray-400 text-sm py-4">
+                  No rejected reports
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Footer */}
       <p className="text-xs text-center text-gray-400 mt-10">
