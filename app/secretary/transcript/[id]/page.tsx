@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, use } from "react";
 import Link from "next/link";
 import { useAudioRecorder } from "@/lib/hooks/useAudioRecorder";
 import { useVoiceEnrollmentCheck } from "@/lib/hooks/useVoiceEnrollmentCheck";
+import { useSessionRoleCheck } from "@/lib/hooks/useSessionRoleCheck";
 import { swalConfig, closeSwal } from "@/lib/utils/sweetAlert";
 // import { useSTTWebSocket, STTEvent } from "@/lib/hooks/useSTTWebSocket";
 import { defenseSessionsApi } from "@/lib/api/defense-sessions";
@@ -40,6 +41,12 @@ export default function TranscriptPage({
 
   // Voice enrollment check - must be enrolled to access this page
   const { isChecking: checkingVoice } = useVoiceEnrollmentCheck();
+
+  // Session role check - user must be "secretary" in this session
+  const {
+    isChecking: checkingSessionRole,
+    isAuthorized: isSecretaryInSession,
+  } = useSessionRoleCheck(id, "secretary", true);
 
   const [transcript, setTranscript] = useState<STTEvent[]>([]);
   const [notes, setNotes] = useState("");
@@ -1155,6 +1162,30 @@ export default function TranscriptPage({
   }, [hasUnsavedChanges, session]); // Remove transcript from deps to avoid re-triggering on every transcript change
 
   if (!isClient) return null;
+
+  // Show loading while checking session role
+  if (checkingSessionRole) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto mb-2"></div>
+          <p className="text-sm text-gray-500">Checking session access...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // If not authorized, the hook will redirect, but show message just in case
+  if (!isSecretaryInSession) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="text-center">
+          <p className="text-gray-500">Redirecting to your assigned page...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (loading)
     return (
       <div className="p-8 text-center text-gray-500">
@@ -1230,8 +1261,17 @@ export default function TranscriptPage({
               {/* Add entry button */}
               <button
                 onClick={handleAddEntry}
-                className="p-1.5 text-gray-500 hover:text-purple-600 hover:bg-purple-50 rounded transition-colors"
-                title="Add line"
+                disabled={session?.status === "Completed"}
+                className={`p-1.5 rounded transition-colors ${
+                  session?.status === "Completed"
+                    ? "text-gray-300 cursor-not-allowed"
+                    : "text-gray-500 hover:text-purple-600 hover:bg-purple-50"
+                }`}
+                title={
+                  session?.status === "Completed"
+                    ? "Session completed"
+                    : "Add line"
+                }
               >
                 <Plus className="w-4 h-4" />
               </button>
@@ -1239,12 +1279,21 @@ export default function TranscriptPage({
               {!isAsking && (
                 <button
                   onClick={handleToggleRecording}
+                  disabled={session?.status === "Completed"}
                   className={`p-2 rounded-lg transition-colors ${
-                    isRecording
+                    session?.status === "Completed"
+                      ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                      : isRecording
                       ? "bg-red-500 hover:bg-red-600 text-white"
                       : "bg-purple-600 hover:bg-purple-700 text-white"
                   }`}
-                  title={isRecording ? "Stop recording" : "Start recording"}
+                  title={
+                    session?.status === "Completed"
+                      ? "Session completed"
+                      : isRecording
+                      ? "Stop recording"
+                      : "Start recording"
+                  }
                 >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -1325,65 +1374,130 @@ export default function TranscriptPage({
                         </div>
                       </div>
                     ) : (
-                      // View mode - VTT style format
-                      <div className="relative bg-white rounded-lg px-3 py-2 border border-gray-100 hover:border-gray-200 transition-colors font-mono">
-                        {/* VTT Timestamp line */}
+                      // View mode - Redesigned with role-based colors
+                      <div
+                        className="relative bg-white rounded-lg px-4 py-3 border border-gray-100 hover:border-gray-200 hover:shadow-sm transition-all"
+                        style={{
+                          fontFamily: "'Times New Roman', Times, serif",
+                        }}
+                      >
+                        {/* VTT Timestamp - cleaner format */}
                         {(item.start_time_vtt || item.end_time_vtt) && (
-                          <div className="text-[10px] text-gray-400 mb-1">
-                            {item.start_time_vtt || "00:00:00.000"} --&gt;{" "}
-                            {item.end_time_vtt || "00:00:00.000"}
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 rounded text-[11px] text-gray-500 font-mono">
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                viewBox="0 0 20 20"
+                                fill="currentColor"
+                                className="w-3 h-3"
+                              >
+                                <path
+                                  fillRule="evenodd"
+                                  d="M10 18a8 8 0 100-16 8 8 0 000 16zm.75-13a.75.75 0 00-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 000-1.5h-3.25V5z"
+                                  clipRule="evenodd"
+                                />
+                              </svg>
+                              {
+                                (item.start_time_vtt || "00:00:00").split(
+                                  "."
+                                )[0]
+                              }{" "}
+                              →{" "}
+                              {(item.end_time_vtt || "00:00:00").split(".")[0]}
+                            </span>
                           </div>
                         )}
-                        {/* Speaker name with edit indicator - show edited value if exists */}
+                        {/* Speaker name with role-based coloring */}
                         {(() => {
                           const displaySpeaker =
                             item.edited_speaker || item.speaker || "Unknown";
-                          const isUnknown = [
-                            "khách",
-                            "unknown",
-                            "identifying",
-                            "guest",
-                          ].includes(displaySpeaker.toLowerCase());
+                          const speakerLower = displaySpeaker.toLowerCase();
                           const isEdited =
                             !!item.edited_speaker || !!item.edited_text;
+
+                          // Role-based color mapping
+                          let roleColor = "text-gray-600 bg-gray-100"; // default
+                          let roleLabel = "";
+
+                          if (
+                            speakerLower.includes("student") ||
+                            speakerLower.includes("sinh viên")
+                          ) {
+                            roleColor = "text-blue-700 bg-blue-50";
+                            roleLabel = "Student";
+                          } else if (
+                            speakerLower.includes("chair") ||
+                            speakerLower.includes("chủ tịch")
+                          ) {
+                            roleColor = "text-purple-700 bg-purple-50";
+                            roleLabel = "Chair";
+                          } else if (
+                            speakerLower.includes("secretary") ||
+                            speakerLower.includes("thư ký")
+                          ) {
+                            roleColor = "text-emerald-700 bg-emerald-50";
+                            roleLabel = "Secretary";
+                          } else if (
+                            speakerLower.includes("member") ||
+                            speakerLower.includes("thành viên")
+                          ) {
+                            roleColor = "text-amber-700 bg-amber-50";
+                            roleLabel = "Member";
+                          } else if (
+                            [
+                              "khách",
+                              "unknown",
+                              "identifying",
+                              "guest",
+                            ].includes(speakerLower)
+                          ) {
+                            roleColor = "text-red-600 bg-red-50";
+                            roleLabel = "Unknown";
+                          }
+
                           return (
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex items-center gap-2 mb-1">
                               <span
-                                className={`text-xs font-medium ${
-                                  isUnknown ? "text-red-500" : "text-purple-600"
-                                }`}
+                                className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${roleColor}`}
                               >
                                 {displaySpeaker}
                               </span>
                               {isEdited && (
-                                <span className="text-[10px] text-orange-500 font-sans">
-                                  (edited)
+                                <span className="text-[10px] text-orange-500 italic">
+                                  ✎ edited
                                 </span>
                               )}
                             </div>
                           );
                         })()}
-                        {/* Text content - show edited value if exists */}
-                        <p className="text-gray-800 text-sm mt-0.5 pr-12 font-sans">
+                        {/* Text content - Times New Roman */}
+                        <p
+                          className="text-gray-800 text-[15px] leading-relaxed pr-12"
+                          style={{
+                            fontFamily: "'Times New Roman', Times, serif",
+                          }}
+                        >
                           {item.edited_text || item.text}
                         </p>
-                        {/* Edit/Delete - show on hover */}
-                        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-0.5">
-                          <button
-                            onClick={() => handleStartEdit(index)}
-                            className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
-                            title="Edit"
-                          >
-                            <Pencil className="w-3 h-3" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteEntry(index)}
-                            className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        </div>
+                        {/* Edit/Delete - show on hover, hide if session completed */}
+                        {session?.status !== "Completed" && (
+                          <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                            <button
+                              onClick={() => handleStartEdit(index)}
+                              className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-100 rounded-md transition-colors"
+                              title="Edit"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteEntry(index)}
+                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-100 rounded-md transition-colors"
+                              title="Delete"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1419,12 +1533,24 @@ export default function TranscriptPage({
         <div className="bg-white rounded-lg shadow-sm border p-4 flex flex-col h-[500px]">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-lg font-semibold text-gray-800">Notes</h2>
+            {session?.status === "Completed" && (
+              <span className="text-xs text-gray-400">
+                Session completed - read only
+              </span>
+            )}
           </div>
           <textarea
-            className="flex-1 w-full p-4 bg-white border rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm shadow-inner"
+            className={`flex-1 w-full p-4 border rounded-md resize-none focus:outline-none text-sm shadow-inner ${
+              session?.status === "Completed"
+                ? "bg-gray-100 text-gray-500 cursor-not-allowed"
+                : "bg-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            }`}
+            style={{ fontFamily: "'Times New Roman', Times, serif" }}
             placeholder="- Quick notes...&#10;- Example: The group presented clearly, Demo was stable."
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
+            disabled={session?.status === "Completed"}
+            readOnly={session?.status === "Completed"}
           />
         </div>
       </div>
@@ -1488,19 +1614,42 @@ export default function TranscriptPage({
       )}
 
       <div className="flex justify-end gap-3 mb-8">
-        <button
-          onClick={() => window.history.back()}
-          className="px-4 py-2 text-gray-600 bg-white border rounded-md hover:bg-gray-50 text-sm font-medium shadow-sm"
-        >
-          Cancel
-        </button>
-        <button
-          onClick={handleSaveTranscript}
-          disabled={saving || transcript.length === 0}
-          className="px-4 py-2 text-white bg-purple-600 rounded-md hover:bg-purple-700 text-sm font-medium shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {saving ? "Saving..." : "Complete Session"}
-        </button>
+        {session?.status === "Completed" ? (
+          <button
+            disabled
+            className="px-6 py-2 text-white bg-green-500 rounded-md text-sm font-medium shadow-sm cursor-not-allowed flex items-center gap-2"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              className="w-4 h-4"
+            >
+              <path
+                fillRule="evenodd"
+                d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12zm13.36-1.814a.75.75 0 10-1.22-.872l-3.236 4.53L9.53 12.22a.75.75 0 00-1.06 1.06l2.25 2.25a.75.75 0 001.14-.094l3.75-5.25z"
+                clipRule="evenodd"
+              />
+            </svg>
+            Session Completed
+          </button>
+        ) : (
+          <>
+            <button
+              onClick={() => window.history.back()}
+              className="px-4 py-2 text-gray-600 bg-white border rounded-md hover:bg-gray-50 text-sm font-medium shadow-sm"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSaveTranscript}
+              disabled={saving || transcript.length === 0}
+              className="px-4 py-2 text-white bg-purple-600 rounded-md hover:bg-purple-700 text-sm font-medium shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {saving ? "Saving..." : "Complete Session"}
+            </button>
+          </>
+        )}
       </div>
 
       {/* Meeting Minutes Form */}

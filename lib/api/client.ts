@@ -4,6 +4,8 @@ import { env } from "@/lib/config";
 
 class ApiClient {
   private baseUrl: string;
+  private isRefreshing: boolean = false;
+  private refreshPromise: Promise<boolean> | null = null;
 
   constructor(baseUrl?: string) {
     this.baseUrl = baseUrl || env.apiUrl;
@@ -15,9 +17,105 @@ class ApiClient {
     return localStorage.getItem("accessToken");
   }
 
+  private async getRefreshToken(): Promise<string | null> {
+    if (typeof window === "undefined") return null;
+    return localStorage.getItem("refreshToken");
+  }
+
+  private async getUserId(): Promise<string | null> {
+    if (typeof window === "undefined") return null;
+    try {
+      const token = localStorage.getItem("accessToken");
+      if (!token) return null;
+      // Decode JWT to get userId
+      const payload = JSON.parse(atob(token.split(".")[1]));
+      return (
+        payload[
+          "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"
+        ] ||
+        payload.sub ||
+        payload.userId ||
+        null
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  // Refresh the access token using refresh token
+  private async refreshAccessToken(): Promise<boolean> {
+    // Prevent multiple simultaneous refresh calls
+    if (this.isRefreshing && this.refreshPromise) {
+      return this.refreshPromise;
+    }
+
+    this.isRefreshing = true;
+    this.refreshPromise = this.doRefreshToken();
+
+    try {
+      const result = await this.refreshPromise;
+      return result;
+    } finally {
+      this.isRefreshing = false;
+      this.refreshPromise = null;
+    }
+  }
+
+  private async doRefreshToken(): Promise<boolean> {
+    try {
+      const refreshToken = await this.getRefreshToken();
+      const userId = await this.getUserId();
+
+      if (!refreshToken || !userId) {
+        console.warn("No refresh token or userId available");
+        return false;
+      }
+
+      const response = await fetch(`${this.baseUrl}/api/auth/refresh-token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, refreshToken }),
+      });
+
+      if (!response.ok) {
+        console.error("Refresh token failed:", response.status);
+        // Clear tokens and redirect to login
+        this.clearTokensAndRedirect();
+        return false;
+      }
+
+      const data = await response.json();
+
+      if (data?.data?.accessToken) {
+        localStorage.setItem("accessToken", data.data.accessToken);
+        if (data.data.refreshToken) {
+          localStorage.setItem("refreshToken", data.data.refreshToken);
+        }
+        console.log("Token refreshed successfully");
+        return true;
+      }
+
+      return false;
+    } catch (error) {
+      console.error("Error refreshing token:", error);
+      this.clearTokensAndRedirect();
+      return false;
+    }
+  }
+
+  private clearTokensAndRedirect(): void {
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("refreshToken");
+      // Redirect to login page
+      window.location.href = "/login";
+    }
+  }
+
   private async request<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
+    isRetry: boolean = false
   ): Promise<ApiResponse<T>> {
     const token = await this.getToken();
     const url = `${this.baseUrl}${endpoint}`;
@@ -38,6 +136,18 @@ class ApiClient {
         ...options,
         headers,
       });
+
+      // Handle 401 - Try to refresh token and retry (only once)
+      if (response.status === 401 && !isRetry) {
+        console.log("Access token expired, attempting to refresh...");
+        const refreshed = await this.refreshAccessToken();
+
+        if (refreshed) {
+          // Retry the original request with new token
+          return this.request<T>(endpoint, options, true);
+        }
+        // If refresh failed, clearTokensAndRedirect was called in refreshAccessToken
+      }
 
       if (!response.ok) {
         // Try to get error details from response
@@ -93,13 +203,15 @@ class ApiClient {
         if (response.status === 404) {
           userFriendlyMessage = "Item not found";
         } else if (response.status === 401) {
-          userFriendlyMessage = "Access denied";
+          userFriendlyMessage = "Session expired. Please login again";
         } else if (response.status === 403) {
-          userFriendlyMessage = "Access forbidden";
+          userFriendlyMessage =
+            "You do not have permission to perform this action";
         } else if (response.status === 500) {
           userFriendlyMessage = "Server error";
         } else if (response.status >= 400) {
-          userFriendlyMessage = errorMessage.substring(0, 50) || "Request failed";
+          userFriendlyMessage =
+            errorMessage.substring(0, 50) || "Request failed";
         }
 
         // Don't append details to keep messages concise
