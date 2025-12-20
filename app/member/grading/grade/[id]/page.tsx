@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, Suspense, useRef } from "react";
+import React, { useState, useEffect, Suspense, useRef, useCallback } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -23,6 +23,7 @@ import { committeeAssignmentsApi } from "@/lib/api/committee-assignments";
 import { swalConfig, closeSwal } from "@/lib/utils/sweetAlert";
 import { useAudioRecorder } from "@/lib/hooks/useAudioRecorder";
 import { useVoiceEnrollmentCheck } from "@/lib/hooks/useVoiceEnrollmentCheck";
+import { useScoreRealTime } from "@/lib/hooks/useScoreRealTime";
 import { authUtils } from "@/lib/utils/auth";
 import Swal from "sweetalert2";
 import type { GroupDto, StudentDto, ScoreCreateDto } from "@/lib/models";
@@ -121,6 +122,128 @@ export default function GradeGroupPage() {
 
   // Get sessionId from URL if available
   const urlSessionId = searchParams?.get("sessionId");
+
+  // Real-time score updates via SignalR
+  const handleScoreUpdate = useCallback(
+    (update: any) => {
+      console.log("📊 Real-time score update received:", update);
+      
+      // Refresh scores when real-time update is received
+      if (update.sessionId === sessionId || update.studentId) {
+        // Reload scores for the affected student or session
+        const refreshScores = async () => {
+          try {
+            if (update.studentId && groupData) {
+              // Reload scores for specific student
+              const scoresRes = await scoresApi.getByStudentId(update.studentId);
+              const updatedScores = scoresRes.data || [];
+              
+              // Update student scores in state
+              setStudentScores((prev) =>
+                prev.map((student) => {
+                  if (student.id === update.studentId) {
+                    // Update scores array based on rubric order
+                    const newScores = rubrics.map((rubric) => {
+                      const score = updatedScores.find(
+                        (s: any) =>
+                          s.rubricId === rubric.id &&
+                          s.evaluatorId === currentUserId
+                      );
+                      return score ? score.value : 0;
+                    });
+                    
+                    const newComments = rubrics.map((rubric) => {
+                      const score = updatedScores.find(
+                        (s: any) =>
+                          s.rubricId === rubric.id &&
+                          s.evaluatorId === currentUserId
+                      );
+                      return score?.comment || "";
+                    });
+                    
+                    const newScoreIds = rubrics.map((rubric) => {
+                      const score = updatedScores.find(
+                        (s: any) =>
+                          s.rubricId === rubric.id &&
+                          s.evaluatorId === currentUserId
+                      );
+                      return score?.id || 0;
+                    });
+                    
+                    return {
+                      ...student,
+                      scores: newScores,
+                      criterionComments: newComments,
+                      existingScoreIds: newScoreIds,
+                    };
+                  }
+                  return student;
+                })
+              );
+            } else if (update.sessionId === sessionId) {
+              // Reload all scores for the session
+              if (groupData && sessionId) {
+                const scoresRes = await scoresApi.getBySessionId(sessionId);
+                const allScores = scoresRes.data || [];
+                
+                // Update all students' scores
+                setStudentScores((prev) =>
+                  prev.map((student) => {
+                    const studentScores = allScores.filter(
+                      (s: any) =>
+                        s.studentId === student.id &&
+                        s.evaluatorId === currentUserId
+                    );
+                    
+                    const newScores = rubrics.map((rubric) => {
+                      const score = studentScores.find(
+                        (s: any) => s.rubricId === rubric.id
+                      );
+                      return score ? score.value : 0;
+                    });
+                    
+                    const newComments = rubrics.map((rubric) => {
+                      const score = studentScores.find(
+                        (s: any) => s.rubricId === rubric.id
+                      );
+                      return score?.comment || "";
+                    });
+                    
+                    const newScoreIds = rubrics.map((rubric) => {
+                      const score = studentScores.find(
+                        (s: any) => s.rubricId === rubric.id
+                      );
+                      return score?.id || 0;
+                    });
+                    
+                    return {
+                      ...student,
+                      scores: newScores,
+                      criterionComments: newComments,
+                      existingScoreIds: newScoreIds,
+                    };
+                  })
+                );
+              }
+            }
+          } catch (error) {
+            console.error("Error refreshing scores after real-time update:", error);
+          }
+        };
+        
+        refreshScores();
+      }
+    },
+    [sessionId, currentUserId, groupData, rubrics]
+  );
+
+  // Initialize SignalR connection for real-time score updates
+  const { isConnected: scoreRealtimeConnected } = useScoreRealTime({
+    onScoreUpdate: handleScoreUpdate,
+    sessionIds: sessionId ? [sessionId] : [],
+    studentIds: groupData?.students.map((s) => s.id) || [],
+    evaluatorIds: currentUserId ? [currentUserId] : [],
+  });
 
   // Mic and session states
   const [sessionStarted, setSessionStarted] = useState(false); // Thư ký đã bắt đầu phiên chưa

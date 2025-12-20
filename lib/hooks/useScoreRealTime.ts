@@ -52,11 +52,25 @@ export const useScoreRealTime = ({
 
     try {
       const token = await getToken();
-      const hubUrl = `${env.apiUrl}/hubs/score`;
+      if (!token) {
+        console.warn("No token available for SignalR connection");
+        return;
+      }
 
+      // Use HTTP/HTTPS URL - SignalR will handle WebSocket negotiation automatically
+      // Add token as query parameter (backend expects access_token)
+      const hubUrl = `${env.apiUrl}/hubs/score?access_token=${encodeURIComponent(token)}`;
+
+      // Build connection with multiple transport fallbacks
       const connection = new signalR.HubConnectionBuilder()
         .withUrl(hubUrl, {
+          // Token is already in URL, but keep accessTokenFactory as fallback
           accessTokenFactory: async () => token || "",
+          // Try WebSockets first, then fallback to ServerSentEvents and LongPolling
+          transport: signalR.HttpTransportType.WebSockets | 
+                     signalR.HttpTransportType.ServerSentEvents |
+                     signalR.HttpTransportType.LongPolling,
+          skipNegotiation: false, // Let SignalR negotiate the best transport
         })
         .withAutomaticReconnect({
           nextRetryDelayInMilliseconds: (retryContext) => {
@@ -67,7 +81,7 @@ export const useScoreRealTime = ({
             return 30000;
           },
         })
-        .configureLogging(signalR.LogLevel.Information)
+        .configureLogging(signalR.LogLevel.Warning) // Reduce logging to warnings only
         .build();
 
       // Handle connection events
@@ -110,22 +124,47 @@ export const useScoreRealTime = ({
         onScoreUpdate?.(update);
       });
 
-      // Start connection
-      await connection.start();
-      devLog("SignalR connected to ScoreHub");
-      setIsConnected(true);
-      setConnectionError(null);
+      // Start connection with timeout
+      try {
+        await Promise.race([
+          connection.start(),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("Connection timeout")), 15000)
+          ),
+        ]);
+        
+        devLog("SignalR connected to ScoreHub");
+        setIsConnected(true);
+        setConnectionError(null);
 
-      // Subscribe to groups
-      await subscribeToGroups(connection);
+        // Subscribe to groups
+        await subscribeToGroups(connection);
 
-      connectionRef.current = connection;
+        connectionRef.current = connection;
+      } catch (startError: any) {
+        // Log connection error but don't throw - let automatic reconnect handle it
+        const errorMessage = startError?.message || String(startError);
+        if (errorMessage.includes("WebSocket") || errorMessage.includes("connection")) {
+          devLog("SignalR connection failed, will retry automatically:", errorMessage);
+          // Don't throw - let automatic reconnect handle retries
+          // The connection will be retried by automatic reconnect
+          return;
+        }
+        throw startError;
+      }
     } catch (error) {
-      console.error("Error connecting to SignalR:", error);
+      // Only log unexpected errors, not connection failures that are handled gracefully
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (!errorMessage.includes("WebSocket") && !errorMessage.includes("connection")) {
+        console.error("Error connecting to SignalR:", error);
+      }
       const err = error instanceof Error ? error : new Error(String(error));
       setConnectionError(err);
       setIsConnected(false);
-      onError?.(err);
+      // Don't call onError for connection failures - they're expected in some environments
+      if (!errorMessage.includes("WebSocket") && !errorMessage.includes("connection")) {
+        onError?.(err);
+      }
     }
   }, [
     getToken,

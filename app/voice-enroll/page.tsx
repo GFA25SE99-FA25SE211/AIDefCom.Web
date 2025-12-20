@@ -104,7 +104,19 @@ export default function VoiceEnrollPage() {
           "Completed!",
           "You have successfully registered your voice."
         );
-        router.push("/home");
+        // Redirect based on user role
+        const { authUtils } = await import("@/lib/utils/auth");
+        const userInfo = authUtils.getCurrentUserInfo();
+        const role = userInfo.role?.toLowerCase() || "member";
+        if (role === "admin" || role === "administrator") {
+          router.push("/administrator");
+        } else if (role === "moderator") {
+          router.push("/moderator");
+        } else if (role === "lecturer") {
+          router.push("/member");
+        } else {
+          router.push("/member");
+        }
       } else if (enrolledCount > 0) {
         // User has partial enrollment, restore their progress
         setCurrentSampleIndex(enrolledCount);
@@ -297,7 +309,7 @@ export default function VoiceEnrollPage() {
               router.push("/administrator");
               break;
             case "lecturer":
-              router.push("/home");
+              router.push("/member");
               break;
             case "chair":
               router.push("/chair");
@@ -309,7 +321,7 @@ export default function VoiceEnrollPage() {
               router.push("/moderator");
               break;
             default:
-              router.push("/member");
+              router.push("/home");
           }
         } else {
           swalConfig.success(

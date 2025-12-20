@@ -30,6 +30,30 @@ export default function RootLayout({
       .then((res) => res.json())
       .then((data) => setGoogleClientId(data.googleClientId))
       .catch((err) => console.error("Failed to load config:", err));
+
+    // Suppress expected errors (403, 404) from being logged by Next.js
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      const error = event.reason;
+      const isExpectedError =
+        error?.isExpectedError ||
+        error?.name === "SilentError" ||
+        error?.status === 403 ||
+        error?.status === 404 ||
+        error?.message?.includes("Access forbidden") ||
+        error?.message?.includes("Item not found");
+
+      if (isExpectedError) {
+        // Prevent Next.js from logging expected errors
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+
+    window.addEventListener("unhandledrejection", handleUnhandledRejection);
+
+    return () => {
+      window.removeEventListener("unhandledrejection", handleUnhandledRejection);
+    };
   }, []);
 
   return (

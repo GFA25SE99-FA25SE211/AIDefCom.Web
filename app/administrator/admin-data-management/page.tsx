@@ -1144,10 +1144,10 @@ export default function AdminDataManagementPage() {
         "Group has been updated successfully!"
       );
     } catch (error: any) {
-        await swalConfig.error(
+      await swalConfig.error(
           "Edit Failed",
           getSimpleErrorMessage(error, "Failed to edit group")
-        );
+      );
     }
   };
 
