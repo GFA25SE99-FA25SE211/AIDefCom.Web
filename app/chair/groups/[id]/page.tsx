@@ -31,6 +31,12 @@ export default function GroupDetailsPage() {
   // Voice enrollment check - must be enrolled to access this page
   const { isChecking: checkingVoice } = useVoiceEnrollmentCheck();
 
+  // Session role check states
+  const [sessionRoleChecked, setSessionRoleChecked] = useState(false);
+  const [actualSessionRole, setActualSessionRole] = useState<string | null>(
+    null
+  );
+
   const [group, setGroup] = useState<GroupDto | null>(null);
   const [students, setStudents] = useState<StudentDto[]>([]);
   const [defenseSession, setDefenseSession] =
@@ -391,12 +397,32 @@ export default function GroupDetailsPage() {
                   const sessionRoleValue =
                     currentUserInSession.role.toLowerCase();
                   sessionStorage.setItem("sessionRole", sessionRoleValue);
+                  setActualSessionRole(sessionRoleValue);
 
                   if (!isSystemChair && sessionRoleValue === "chair") {
                     setIsChair(true);
                   }
+
+                  // If user is not Chair in this session, redirect to correct page
+                  if (sessionRoleValue !== "chair" && !isSystemChair) {
+                    const sId = session.id;
+                    const gId = id;
+                    if (sessionRoleValue === "secretary") {
+                      router.push(`/secretary/transcript/${sId}`);
+                    } else if (sessionRoleValue === "member") {
+                      router.push(`/member/grading/view/${gId}`);
+                    } else {
+                      router.push(`/home/view/${gId}`);
+                    }
+                    return;
+                  }
+                } else {
+                  // User not found in session - redirect to home
+                  router.push(`/home/view/${id}`);
+                  return;
                 }
               }
+              setSessionRoleChecked(true);
             }
           } catch (lecErr) {
             console.error("Failed to fetch lecturers:", lecErr);

@@ -1,3 +1,5 @@
+"use client";
+
 import type { ReactNode } from "react";
 import HomeSidebar from "./components/Sidebar";
 import VoiceGuard from "@/components/auth/VoiceGuard";
@@ -5,7 +7,7 @@ import RoleGuard from "@/components/auth/RoleGuard";
 
 export default function HomeLayout({ children }: { children: ReactNode }) {
   return (
-    <RoleGuard allowedRoles={["lecturer", "member", "chair", "secretary"]}>
+    <RoleGuard allowedRoles={["lecturer"]}>
       <VoiceGuard>
         <div className="flex min-h-screen bg-[#F3F6FB]">
           {/* Sidebar cố định */}

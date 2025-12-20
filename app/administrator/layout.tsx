@@ -1,3 +1,5 @@
+"use client";
+
 import type { ReactNode } from "react";
 import AdminSidebar from "./dashboard/components/AdminSidebar";
 import RoleGuard from "@/components/auth/RoleGuard";

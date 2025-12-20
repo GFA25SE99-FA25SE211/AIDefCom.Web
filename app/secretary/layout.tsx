@@ -7,7 +7,7 @@ import RoleGuard from "@/components/auth/RoleGuard";
 
 export default function SecretaryLayout({ children }: { children: ReactNode }) {
   return (
-    <RoleGuard allowedRoles={["secretary"]}>
+    <RoleGuard allowedRoles={["secretary", "lecturer"]}>
       <VoiceGuard>
         <div className="flex min-h-screen bg-[#F3F6FB]">
           <SecretarySidebar />
