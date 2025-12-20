@@ -420,28 +420,37 @@ export default function PeerScoresPage() {
   fetchPeerScoresRef.current = fetchPeerScores;
 
   // Real-time score updates - subscribe to all sessions
-  const { isConnected } = useScoreRealTime({
+  const { isConnected, connectionError } = useScoreRealTime({
     onScoreUpdate: (update) => {
-      console.log("Real-time score update received:", update);
+      console.log("📊 Real-time score update received:", update);
 
-      // Dispatch custom event for notifications
-      const event = new CustomEvent("scoreUpdate", {
-        detail: {
-          message: update.sessionId
-            ? `Score updated for session ${update.sessionId}`
-            : "Score updated",
-          type: "success",
-        },
-      });
-      window.dispatchEvent(event);
+      // Check if this update is relevant to any of our sessions
+      const isRelevant = 
+        !update.sessionId || 
+        sessionIds.includes(update.sessionId) ||
+        sessionIds.length === 0;
 
-      // Refresh data when score is updated
-      if (fetchPeerScoresRef.current) {
-        fetchPeerScoresRef.current();
+      if (isRelevant) {
+        // Dispatch custom event for notifications
+        const event = new CustomEvent("scoreUpdate", {
+          detail: {
+            message: update.sessionId
+              ? `Score updated for session ${update.sessionId}`
+              : "Score updated",
+            type: "success",
+          },
+        });
+        window.dispatchEvent(event);
+
+        // Refresh data when score is updated
+        if (fetchPeerScoresRef.current) {
+          console.log("🔄 Refreshing peer scores after real-time update...");
+          fetchPeerScoresRef.current();
+        }
       }
     },
     onError: (error) => {
-      console.error("Real-time connection error:", error);
+      console.error("❌ Real-time connection error:", error);
 
       // Dispatch error event for notifications
       const event = new CustomEvent("scoreUpdate", {
@@ -485,6 +494,30 @@ export default function PeerScoresPage() {
             <p className="text-gray-500 text-sm">
               View consolidated scores from all committee members (read-only)
             </p>
+          </div>
+
+          {/* Right side - Connection status */}
+          <div className="flex items-center gap-3 mt-4 md:mt-0">
+            <div className="flex items-center gap-2">
+              <div
+                className={`w-2 h-2 rounded-full ${
+                  isConnected ? "bg-green-500" : "bg-gray-400"
+                }`}
+                title={
+                  isConnected
+                    ? "Real-time updates connected"
+                    : "Real-time updates disconnected"
+                }
+              />
+              <span className="text-xs text-gray-500">
+                {isConnected ? "Live" : "Offline"}
+              </span>
+            </div>
+            {connectionError && (
+              <span className="text-xs text-red-500" title={connectionError.message}>
+                Connection error
+              </span>
+            )}
           </div>
         </header>
 
