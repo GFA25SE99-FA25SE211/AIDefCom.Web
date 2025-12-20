@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, useEffect, useRef } from "react";
 import { BACKEND_API_URL } from "@/lib/config/api-urls";
 import { swalConfig } from "@/lib/utils/sweetAlert";
+import { reportsApi } from "@/lib/api/reports";
 
 interface Report {
   id: number;
@@ -31,18 +32,10 @@ export default function SecretaryReportDashboard() {
   const fetchReports = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${BACKEND_API_URL}/api/reports`, {
-        headers: {
-          Accept: "*/*",
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch reports");
-      }
-
-      const data = await response.json();
-      setReports(data.data || []);
+      setError(null);
+      // Use reportsApi instead of raw fetch to include Authorization header
+      const response = await reportsApi.getAll();
+      setReports((response.data as Report[]) || []);
     } catch (err: any) {
       console.error("Error fetching reports:", err);
       setError(err.message || "Failed to load reports");
