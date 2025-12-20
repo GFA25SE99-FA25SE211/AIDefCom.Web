@@ -78,13 +78,13 @@ const TranscriptDetailModal: React.FC<TranscriptDetailModalProps> = ({
   };
 
   const footer = (
-    <button
-      type="button"
-      className="px-3 py-2 rounded-md border text-sm"
-      onClick={onClose}
-    >
-      Close
-    </button>
+      <button
+        type="button"
+        className="px-3 py-2 rounded-md border text-sm"
+        onClick={onClose}
+      >
+        Close
+      </button>
   );
 
   return (
