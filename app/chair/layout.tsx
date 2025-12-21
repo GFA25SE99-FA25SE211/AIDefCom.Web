@@ -8,7 +8,7 @@ import RoleGuard from "@/components/auth/RoleGuard";
 
 export default function ChairLayout({ children }: { children: ReactNode }) {
   return (
-    <RoleGuard allowedRoles={["chair", "lecturer"]}>
+    <RoleGuard allowedRoles={["chair", "lecturer"]} silentRedirect>
       <VoiceGuard>
         <div className="flex min-h-screen bg-[#F3F6FB]">
           <ChairSidebar />
