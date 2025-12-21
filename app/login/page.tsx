@@ -403,10 +403,14 @@ async function redirectByRole(role: string, router: any, user?: any) {
 
   switch (r) {
     case "admin":
+    case "administrator":
       router.push("/administrator");
       break;
+    case "moderator":
+      router.push("/moderator");
+      break;
     case "lecturer":
-      router.push("/home");
+      router.push("/member");
       break;
     case "chair":
       router.push("/chair");
@@ -414,10 +418,9 @@ async function redirectByRole(role: string, router: any, user?: any) {
     case "secretary":
       router.push("/secretary");
       break;
-    case "moderator":
-      router.push("/moderator");
-      break;
     default:
-      router.push("/member");
+      // Default: try /home first, fallback to /member
+      router.push("/home");
+      break;
   }
 }

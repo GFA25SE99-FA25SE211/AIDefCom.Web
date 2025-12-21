@@ -70,14 +70,54 @@ export default function PeerScoresPage() {
 
       // Helper function to handle API errors gracefully
       const safeApiCall = async <T,>(
-        apiCall: () => Promise<{ data: T }>,
-        fallback: T = [] as T
+        apiCall: () => Promise<{ data: T; code?: number | string }>,
+        fallback: T = [] as T,
+        suppressExpectedErrors: boolean = false
       ) => {
         try {
           const result = await apiCall();
+          
+          // Check if response indicates an expected error (403, 404)
+          // ApiClient now returns response object instead of throwing for 403/404
+          const responseCode = result.code;
+          const isExpectedError = 
+            responseCode === 403 || 
+            responseCode === 404 ||
+            (typeof responseCode === "string" && (responseCode === "403" || responseCode === "404"));
+          
+          // For expected errors, return fallback silently
+          if (isExpectedError && suppressExpectedErrors) {
+            return fallback;
+          }
+          
+          // If response has error code but not suppressed, still return fallback
+          if (isExpectedError) {
+            return fallback;
+          }
+          
           return result.data || fallback;
         } catch (error: any) {
-          console.error("API call failed:", error);
+          // Check if it's an expected error (403, 404) that should be handled silently
+          const isExpectedError = 
+            error?.isExpectedError ||
+            error?.name === "SilentError" ||
+            error?.status === 403 || 
+            error?.status === 404 ||
+            error?.message?.includes("Access forbidden") ||
+            error?.message?.includes("Item not found");
+          
+          // For expected errors with suppressExpectedErrors flag, return silently without any logging
+          // Also suppress if it's marked as SilentError from ApiClient
+          if (isExpectedError && (suppressExpectedErrors || error?.name === "SilentError")) {
+            // Completely suppress - don't log, don't throw, just return fallback
+            return fallback;
+          }
+          
+          // Only log unexpected errors
+          if (!isExpectedError) {
+            console.error("API call failed:", error);
+          }
+          
           // Check if it's a network error
           if (
             error?.isNetworkError ||
@@ -86,18 +126,29 @@ export default function PeerScoresPage() {
           ) {
             console.warn("Network error detected, using fallback data");
           }
+          
+          // Return fallback for all errors
           return fallback;
         }
       };
 
-      const [groups, sessions, assignments, users, allScores] =
-        await Promise.all([
-          safeApiCall(() => groupsApi.getAll(), []),
-          safeApiCall(() => defenseSessionsApi.getAll(), []),
-          safeApiCall(() => committeeAssignmentsApi.getAll(), []),
-          safeApiCall(() => authApi.getAllUsers(), []),
-          safeApiCall(() => scoresApi.getAll(), []),
-        ]);
+      // Use Promise.allSettled to prevent unhandled promise rejections from being logged
+      const results = await Promise.allSettled([
+        safeApiCall(() => groupsApi.getAll(), []),
+        safeApiCall(() => defenseSessionsApi.getAll(), []),
+        safeApiCall(() => committeeAssignmentsApi.getAll(), []),
+        // Suppress expected errors for getAllUsers (403 is common for non-admin users)
+        safeApiCall(() => authApi.getAllUsers(), [], true),
+        safeApiCall(() => scoresApi.getAll(), []),
+      ]);
+
+      // Extract values from settled promises
+      const [groupsResult, sessionsResult, assignmentsResult, usersResult, allScoresResult] = results;
+      const groups = groupsResult.status === 'fulfilled' ? groupsResult.value : [];
+      const sessions = sessionsResult.status === 'fulfilled' ? sessionsResult.value : [];
+      const assignments = assignmentsResult.status === 'fulfilled' ? assignmentsResult.value : [];
+      const users = usersResult.status === 'fulfilled' ? usersResult.value : [];
+      const allScores = allScoresResult.status === 'fulfilled' ? allScoresResult.value : [];
 
       // Debug logging
       console.log("🔍 Debug Peer Scores Data:");
@@ -369,28 +420,37 @@ export default function PeerScoresPage() {
   fetchPeerScoresRef.current = fetchPeerScores;
 
   // Real-time score updates - subscribe to all sessions
-  const { isConnected } = useScoreRealTime({
+  const { isConnected, connectionError } = useScoreRealTime({
     onScoreUpdate: (update) => {
-      console.log("Real-time score update received:", update);
+      console.log("📊 Real-time score update received:", update);
 
-      // Dispatch custom event for notifications
-      const event = new CustomEvent("scoreUpdate", {
-        detail: {
-          message: update.sessionId
-            ? `Score updated for session ${update.sessionId}`
-            : "Score updated",
-          type: "success",
-        },
-      });
-      window.dispatchEvent(event);
+      // Check if this update is relevant to any of our sessions
+      const isRelevant = 
+        !update.sessionId || 
+        sessionIds.includes(update.sessionId) ||
+        sessionIds.length === 0;
 
-      // Refresh data when score is updated
-      if (fetchPeerScoresRef.current) {
-        fetchPeerScoresRef.current();
+      if (isRelevant) {
+        // Dispatch custom event for notifications
+        const event = new CustomEvent("scoreUpdate", {
+          detail: {
+            message: update.sessionId
+              ? `Score updated for session ${update.sessionId}`
+              : "Score updated",
+            type: "success",
+          },
+        });
+        window.dispatchEvent(event);
+
+        // Refresh data when score is updated
+        if (fetchPeerScoresRef.current) {
+          console.log("🔄 Refreshing peer scores after real-time update...");
+          fetchPeerScoresRef.current();
+        }
       }
     },
     onError: (error) => {
-      console.error("Real-time connection error:", error);
+      console.error("❌ Real-time connection error:", error);
 
       // Dispatch error event for notifications
       const event = new CustomEvent("scoreUpdate", {
@@ -434,6 +494,30 @@ export default function PeerScoresPage() {
             <p className="text-gray-500 text-sm">
               View consolidated scores from all committee members (read-only)
             </p>
+          </div>
+
+          {/* Right side - Connection status */}
+          <div className="flex items-center gap-3 mt-4 md:mt-0">
+            <div className="flex items-center gap-2">
+              <div
+                className={`w-2 h-2 rounded-full ${
+                  isConnected ? "bg-green-500" : "bg-gray-400"
+                }`}
+                title={
+                  isConnected
+                    ? "Real-time updates connected"
+                    : "Real-time updates disconnected"
+                }
+              />
+              <span className="text-xs text-gray-500">
+                {isConnected ? "Live" : "Offline"}
+              </span>
+            </div>
+            {connectionError && (
+              <span className="text-xs text-red-500" title={connectionError.message}>
+                Connection error
+              </span>
+            )}
           </div>
         </header>
 

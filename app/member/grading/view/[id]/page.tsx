@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, Suspense, useRef } from "react";
+import React, { useState, useEffect, Suspense, useRef, useCallback } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -23,9 +23,10 @@ import { committeeAssignmentsApi } from "@/lib/api/committee-assignments";
 import { swalConfig, closeSwal } from "@/lib/utils/sweetAlert";
 import { useAudioRecorder } from "@/lib/hooks/useAudioRecorder";
 import { useVoiceEnrollmentCheck } from "@/lib/hooks/useVoiceEnrollmentCheck";
+import { useScoreRealTime } from "@/lib/hooks/useScoreRealTime";
 import { authUtils } from "@/lib/utils/auth";
 import Swal from "sweetalert2";
-import type { GroupDto, StudentDto, ScoreCreateDto } from "@/lib/models";
+import type { GroupDto, StudentDto, ScoreCreateDto, MemberNoteDto } from "@/lib/models";
 import { getWebSocketUrl } from "@/lib/config/api-urls";
 
 // --- (Code Icons giữ nguyên) ---
@@ -112,9 +113,132 @@ export default function ViewScorePage() {
   const [rubrics, setRubrics] = useState<any[]>([]);
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string>("");
+  const [memberNotes, setMemberNotes] = useState<MemberNoteDto[]>([]);
 
   // Get sessionId from URL if available
   const urlSessionId = searchParams?.get("sessionId");
+
+  // Real-time score updates via SignalR
+  const handleScoreUpdate = useCallback(
+    (update: any) => {
+      console.log("📊 Real-time score update received:", update);
+      
+      // Refresh scores when real-time update is received
+      if (update.sessionId === sessionId || update.studentId) {
+        // Reload scores for the affected student or session
+        const refreshScores = async () => {
+          try {
+            if (update.studentId && groupData) {
+              // Reload scores for specific student
+              const scoresRes = await scoresApi.getByStudentId(update.studentId);
+              const updatedScores = scoresRes.data || [];
+              
+              // Update student scores in state
+              setStudentScores((prev) =>
+                prev.map((student) => {
+                  if (student.id === update.studentId) {
+                    // Update scores array based on rubric order
+                    const newScores = rubrics.map((rubric) => {
+                      const score = updatedScores.find(
+                        (s: any) =>
+                          s.rubricId === rubric.id &&
+                          s.evaluatorId === currentUserId
+                      );
+                      return score ? score.value : 0;
+                    });
+                    
+                    const newComments = rubrics.map((rubric) => {
+                      const score = updatedScores.find(
+                        (s: any) =>
+                          s.rubricId === rubric.id &&
+                          s.evaluatorId === currentUserId
+                      );
+                      return score?.comment || "";
+                    });
+                    
+                    const newScoreIds = rubrics.map((rubric) => {
+                      const score = updatedScores.find(
+                        (s: any) =>
+                          s.rubricId === rubric.id &&
+                          s.evaluatorId === currentUserId
+                      );
+                      return score?.id || 0;
+                    });
+                    
+                    return {
+                      ...student,
+                      scores: newScores,
+                      criterionComments: newComments,
+                      existingScoreIds: newScoreIds,
+                    };
+                  }
+                  return student;
+                })
+              );
+            } else if (update.sessionId === sessionId) {
+              // Reload all scores for the session
+              if (groupData && sessionId) {
+                const scoresRes = await scoresApi.getBySessionId(sessionId);
+                const allScores = scoresRes.data || [];
+                
+                // Update all students' scores
+                setStudentScores((prev) =>
+                  prev.map((student) => {
+                    const studentScores = allScores.filter(
+                      (s: any) =>
+                        s.studentId === student.id &&
+                        s.evaluatorId === currentUserId
+                    );
+                    
+                    const newScores = rubrics.map((rubric) => {
+                      const score = studentScores.find(
+                        (s: any) => s.rubricId === rubric.id
+                      );
+                      return score ? score.value : 0;
+                    });
+                    
+                    const newComments = rubrics.map((rubric) => {
+                      const score = studentScores.find(
+                        (s: any) => s.rubricId === rubric.id
+                      );
+                      return score?.comment || "";
+                    });
+                    
+                    const newScoreIds = rubrics.map((rubric) => {
+                      const score = studentScores.find(
+                        (s: any) => s.rubricId === rubric.id
+                      );
+                      return score?.id || 0;
+                    });
+                    
+                    return {
+                      ...student,
+                      scores: newScores,
+                      criterionComments: newComments,
+                      existingScoreIds: newScoreIds,
+                    };
+                  })
+                );
+              }
+            }
+          } catch (error) {
+            console.error("Error refreshing scores after real-time update:", error);
+          }
+        };
+        
+        refreshScores();
+      }
+    },
+    [sessionId, currentUserId, groupData, rubrics]
+  );
+
+  // Initialize SignalR connection for real-time score updates
+  const { isConnected: scoreRealtimeConnected } = useScoreRealTime({
+    onScoreUpdate: handleScoreUpdate,
+    sessionIds: sessionId ? [sessionId] : [],
+    studentIds: groupData?.students.map((s) => s.id) || [],
+    evaluatorIds: currentUserId ? [currentUserId] : [],
+  });
 
   // Mic and session states
   const [sessionStarted, setSessionStarted] = useState(false); // Thư ký đã bắt đầu phiên chưa
@@ -487,6 +611,22 @@ export default function ViewScorePage() {
           };
           setGroupData(groupData);
           setStudentScores(groupData.students);
+
+          // Load member notes for this session
+          if (groupSession?.id) {
+            try {
+              const notesRes = await memberNotesApi.getBySessionId(groupSession.id);
+              const notes = notesRes.data || [];
+              setMemberNotes(notes);
+              
+              // Map notes to students by committeeAssignmentId or userName
+              // Note: We'll display notes separately, not in student.note field
+              console.log("Loaded member notes:", notes);
+            } catch (error) {
+              console.error("Error loading member notes:", error);
+              setMemberNotes([]);
+            }
+          }
         } else {
           const defaultData = allGroupsData[groupId] || allGroupsData["1"];
           const rubricCountFallback = rubricsList.length;
@@ -749,11 +889,7 @@ export default function ViewScorePage() {
     setStudentScores(newScores);
   };
 
-  const handleNoteChange = (studentIndex: number, value: string) => {
-    const newScores = [...studentScores];
-    newScores[studentIndex].note = value;
-    setStudentScores(newScores);
-  };
+  // Notes are read-only, no need for handleNoteChange
 
   const toggleNoteVisibility = (studentId: string) => {
     // SỬA ĐỔI: Dùng type 'NotesVisibility'
@@ -916,21 +1052,7 @@ export default function ViewScorePage() {
           }
         }
 
-        // Save notes separately if needed
-        if (student.note && groupData) {
-          try {
-            await memberNotesApi.create({
-              userId: currentUserId,
-              groupId: groupId,
-              content: student.note,
-            });
-          } catch (error) {
-            console.error(
-              `Error saving note for student ${student.id}:`,
-              error
-            );
-          }
-        }
+        // Notes are read-only, no need to save them
       }
 
       Swal.close();
@@ -1329,17 +1451,37 @@ export default function ViewScorePage() {
                             <tr>
                               <td colSpan={rubrics.length + 3} className="py-3">
                                 <div className="bg-gray-50 border rounded-md p-3">
-                                  <textarea
-                                    className="w-full p-3 rounded-md bg-white border text-sm"
-                                    placeholder={`Add notes for ${student.name}...`}
-                                    value={student.note}
-                                    onChange={(e) =>
-                                      handleNoteChange(
-                                        studentIndex,
-                                        e.target.value
-                                      )
-                                    }
-                                  />
+                                  <div className="mb-3">
+                                    <h4 className="text-sm font-semibold text-gray-700 mb-2">
+                                      Member Notes
+                                    </h4>
+                                    {memberNotes.length > 0 ? (
+                                      <div className="space-y-2">
+                                        {memberNotes.map((note) => (
+                                          <div
+                                            key={note.id}
+                                            className="bg-white border rounded-md p-3 text-sm"
+                                          >
+                                            <div className="flex items-start justify-between mb-1">
+                                              <span className="font-medium text-gray-700">
+                                                {note.userName || "Unknown Member"}
+                                              </span>
+                                              <span className="text-xs text-gray-500">
+                                                {new Date(note.createdAt).toLocaleString()}
+                                              </span>
+                                            </div>
+                                            <p className="text-gray-600 mt-1 whitespace-pre-wrap">
+                                              {note.noteContent || "No content"}
+                                            </p>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <p className="text-sm text-gray-500 italic">
+                                        No notes available for this session.
+                                      </p>
+                                    )}
+                                  </div>
                                   <div className="text-right mt-2">
                                     <button
                                       className="text-sm text-gray-600 hover:underline"

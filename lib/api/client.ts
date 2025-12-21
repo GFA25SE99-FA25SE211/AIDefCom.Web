@@ -190,14 +190,10 @@ class ApiClient {
           errorData.Message ||
           errorText.substring(0, 200) ||
           `HTTP error! status: ${response.status}`;
-        console.error(`API Error [${endpoint}]:`, {
-          status: response.status,
-          statusText: response.statusText,
-          error: errorData,
-          url,
-          rawResponse: errorText.substring(0, 500), // Include raw response for debugging
-        });
 
+        // Check if this is an expected error (403, 404) that should be handled silently
+        const isExpectedError = response.status === 403 || response.status === 404;
+        
         // Provide concise error messages based on status code
         let userFriendlyMessage = errorMessage;
         if (response.status === 404) {
@@ -214,11 +210,30 @@ class ApiClient {
             errorMessage.substring(0, 50) || "Request failed";
         }
 
-        // Don't append details to keep messages concise
+        // For expected errors (403, 404), return a response object instead of throwing
+        // This prevents Next.js from logging the error
+        if (isExpectedError) {
+          return {
+            code: response.status,
+            message: userFriendlyMessage,
+            data: null as T,
+          } as ApiResponse<T>;
+        }
 
+        // Only log unexpected errors (not 403/404 which are common permission/resource errors)
+        console.error(`API Error [${endpoint}]:`, {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorData,
+          url,
+          rawResponse: errorText.substring(0, 500),
+        });
+
+        // For unexpected errors, throw normally
         const enrichedError = new Error(userFriendlyMessage);
         (enrichedError as any).status = response.status;
         (enrichedError as any).errorData = errorData;
+        (enrichedError as any).isExpectedError = false;
         throw enrichedError;
       }
 
