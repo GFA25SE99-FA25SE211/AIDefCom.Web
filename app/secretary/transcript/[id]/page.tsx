@@ -9,6 +9,7 @@ import { swalConfig, closeSwal } from "@/lib/utils/sweetAlert";
 // import { useSTTWebSocket, STTEvent } from "@/lib/hooks/useSTTWebSocket";
 import { defenseSessionsApi } from "@/lib/api/defense-sessions";
 import { transcriptsApi } from "@/lib/api/transcripts";
+import { authApi } from "@/lib/api/auth";
 import { DefenseSessionDto, TranscriptDto } from "@/lib/models";
 import MeetingMinutesForm from "../../components/MeetingMinutesForm";
 import { Pencil, Check, X, Trash2, Plus } from "lucide-react";
@@ -89,6 +90,11 @@ export default function TranscriptPage({
   const transcriptLoadedRef = useRef<boolean>(false);
   // Track recording start time for VTT timestamp calculation
   const sessionStartTimeRef = useRef<number | null>(null);
+  
+  // Cache session users: Map<user_id, {fullName, role}> for "Name (Role)" format
+  const sessionUsersMapRef = useRef<Map<string, { fullName: string; role: string }>>(new Map());
+  // Cache user info from API (for users not in session users list)
+  const userInfoCacheRef = useRef<Map<string, { fullName: string }>>(new Map());
 
   // Helper function to format milliseconds to VTT time format (HH:MM:SS.mmm)
   const formatVttTime = (ms: number): string => {
@@ -102,6 +108,42 @@ export default function TranscriptPage({
       .padStart(2, "0")}:${seconds.toString().padStart(2, "0")}.${milliseconds
       .toString()
       .padStart(3, "0")}`;
+  };
+
+  // Helper function to get speaker display name as "Name (Role)" format
+  const getSpeakerDisplayName = async (userId: string | null | undefined, fallbackSpeaker?: string): Promise<string> => {
+    if (!userId) return fallbackSpeaker || "Unknown";
+    
+    // First check session users cache (has role info)
+    const sessionUser = sessionUsersMapRef.current.get(userId.toLowerCase());
+    if (sessionUser) {
+      // Role mapping to Vietnamese
+      const roleMap: Record<string, string> = {
+        'chair': 'Chủ tịch',
+        'secretary': 'Thư ký', 
+        'member': 'Thành viên',
+        'student': 'Sinh viên',
+      };
+      const displayRole = roleMap[sessionUser.role.toLowerCase()] || sessionUser.role;
+      return `${sessionUser.fullName} (${displayRole})`;
+    }
+    
+    // If not in session users, try to fetch from auth API
+    if (userInfoCacheRef.current.has(userId.toLowerCase())) {
+      return userInfoCacheRef.current.get(userId.toLowerCase())!.fullName;
+    }
+    
+    try {
+      const response = await authApi.getUserById(userId);
+      if (response.data?.fullName) {
+        userInfoCacheRef.current.set(userId.toLowerCase(), { fullName: response.data.fullName });
+        return response.data.fullName;
+      }
+    } catch (error) {
+      console.error(`Failed to fetch user info for ${userId}:`, error);
+    }
+    
+    return fallbackSpeaker || "Unknown";
   };
 
   // ==========================================
@@ -167,16 +209,29 @@ export default function TranscriptPage({
         if (sessionResponse.data) {
           setSession(sessionResponse.data);
 
-          // Fetch user role in background (non-blocking)
+          // Fetch session users to build user_id -> {fullName, role} cache
           const { authUtils } = await import("@/lib/utils/auth");
           const currentUserId = authUtils.getCurrentUserId();
-          if (currentUserId) {
-            // Fire and forget - don't await
-            defenseSessionsApi
-              .getUsersBySessionId(Number(id))
-              .then((lecturersRes) => {
-                if (lecturersRes.data) {
-                  const currentUserInSession = lecturersRes.data.find(
+          
+          // Fetch session users for speaker name formatting
+          defenseSessionsApi
+            .getUsersBySessionId(Number(id))
+            .then((usersRes) => {
+              if (usersRes.data && Array.isArray(usersRes.data)) {
+                // Build cache: user_id -> {fullName, role}
+                usersRes.data.forEach((user: any) => {
+                  if (user.id && user.fullName && user.role) {
+                    sessionUsersMapRef.current.set(String(user.id).toLowerCase(), {
+                      fullName: user.fullName,
+                      role: user.role,
+                    });
+                  }
+                });
+                console.log(`📋 Loaded ${sessionUsersMapRef.current.size} session users for speaker identification`);
+                
+                // Also set current user's session role
+                if (currentUserId) {
+                  const currentUserInSession = usersRes.data.find(
                     (user: any) =>
                       String(user.id).toLowerCase() ===
                       String(currentUserId).toLowerCase()
@@ -188,11 +243,11 @@ export default function TranscriptPage({
                     );
                   }
                 }
-              })
-              .catch(() => {
-                /* Ignore role fetch errors */
-              });
-          }
+              }
+            })
+            .catch((err) => {
+              console.error("Failed to fetch session users:", err);
+            });
         }
 
         // Process transcript data
@@ -274,7 +329,7 @@ export default function TranscriptPage({
     }
   }, [id]);
 
-  const handleSTTEvent = (msg: any) => {
+  const handleSTTEvent = async (msg: any) => {
     const eventType = msg.type || msg.event;
 
     // DEBUG: Log all events from WebSocket
@@ -380,10 +435,18 @@ export default function TranscriptPage({
         }
       }
 
+      // Get speaker display name as "Name (Role)" format
+      const displaySpeaker = await getSpeakerDisplayName(
+        msg.user_id,
+        msg.speaker_name || msg.speaker || "Unknown"
+      );
+      
       // Normalize event structure for state with unique ID and VTT fields
       const newEntry: STTEvent = {
         ...msg,
         event: "recognized",
+        speaker: displaySpeaker, // Use formatted "Name (Role)"
+        speaker_name: displaySpeaker,
         id:
           msg.id ||
           `stt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -489,10 +552,16 @@ export default function TranscriptPage({
           }
         }
 
+        // Get speaker display name as "Name (Role)" format
+        const displaySpeaker = await getSpeakerDisplayName(
+          msg.user_id,
+          msg.speaker_name || msg.speaker || "Identifying"
+        );
+        
         const newEntry: STTEvent = {
           event: "recognized",
           text: msg.text,
-          speaker: msg.speaker_name || msg.speaker || "Identifying",
+          speaker: displaySpeaker, // Use formatted "Name (Role)"
           id:
             msg.id ||
             `broadcast_${Date.now()}_${Math.random()
