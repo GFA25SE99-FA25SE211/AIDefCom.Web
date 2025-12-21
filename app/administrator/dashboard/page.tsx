@@ -335,7 +335,6 @@ export default function AdminDashboardPage() {
 
         setRecentActivity(recentSessions);
       } catch (error) {
-        console.error("Error fetching dashboard data:", error);
       } finally {
         setLoading(false);
       }

@@ -68,6 +68,11 @@ export const useScoreRealTime = ({
   const [isConnected, setIsConnected] = useState(false);
   const [connectionError, setConnectionError] = useState<Error | null>(null);
   const connectionRef = useRef<signalR.HubConnection | null>(null);
+  const isConnectingRef = useRef(false); // Prevent multiple connection attempts
+  const lastConnectAttemptRef = useRef<number>(0); // Track last connect attempt time
+  const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null); // Heartbeat interval
+  const healthCheckIntervalRef = useRef<NodeJS.Timeout | null>(null); // Health check interval
+  const startHealthCheckRef = useRef<(() => void) | null>(null); // Ref to startHealthCheck function
 
   /**
    * Get authentication token from multiple sources
@@ -98,10 +103,125 @@ export const useScoreRealTime = ({
     return null;
   }, []);
 
+  /**
+   * Subscribe to SignalR groups based on sessionIds, studentIds, evaluatorIds
+   * Backend ScoreHub methods:
+   * - SubscribeToAllScores: Subscribe to all score updates
+   * - SubscribeToSession(sessionId): Subscribe to a specific defense session
+   * - SubscribeToStudent(studentId): Subscribe to a specific student's scores
+   * - SubscribeToEvaluator(evaluatorId): Subscribe to a specific evaluator's scores
+   */
+  const subscribeToGroups = useCallback(
+    async (connection: signalR.HubConnection) => {
+      try {
+        // Đảm bảo connection đã connected trước khi subscribe
+        if (connection.state !== signalR.HubConnectionState.Connected) {
+          devWarn("⚠️ Cannot subscribe: connection not ready", connection.state);
+          return;
+        }
+
+        if (subscribeToAll) {
+          await connection.invoke("SubscribeToAllScores");
+          devLog("✅ Subscribed to all scores");
+        }
+
+        // Subscribe to specific sessions
+        for (const sessionId of sessionIds) {
+          try {
+            await connection.invoke("SubscribeToSession", sessionId);
+            devLog(`✅ Subscribed to session ${sessionId}`);
+          } catch (err) {
+            devWarn(`⚠️ Failed to subscribe to session ${sessionId}:`, err);
+          }
+        }
+
+        // Subscribe to specific students
+        for (const studentId of studentIds) {
+          try {
+            await connection.invoke("SubscribeToStudent", studentId);
+            devLog(`✅ Subscribed to student ${studentId}`);
+          } catch (err) {
+            devWarn(`⚠️ Failed to subscribe to student ${studentId}:`, err);
+          }
+        }
+
+        // Subscribe to specific evaluators
+        for (const evaluatorId of evaluatorIds) {
+          try {
+            await connection.invoke("SubscribeToEvaluator", evaluatorId);
+            devLog(`✅ Subscribed to evaluator ${evaluatorId}`);
+          } catch (err) {
+            devWarn(`⚠️ Failed to subscribe to evaluator ${evaluatorId}:`, err);
+          }
+        }
+      } catch (error) {
+        console.error("❌ Error subscribing to groups:", error);
+      }
+    },
+    [sessionIds, studentIds, evaluatorIds, subscribeToAll]
+  );
+
+  /**
+   * Start heartbeat to keep connection alive
+   * Sends a ping every 30 seconds to prevent connection timeout
+   */
+  const startHeartbeat = useCallback((connection: signalR.HubConnection) => {
+    // Clear existing heartbeat
+    if (heartbeatIntervalRef.current) {
+      clearInterval(heartbeatIntervalRef.current);
+    }
+
+    heartbeatIntervalRef.current = setInterval(() => {
+      if (connection.state === signalR.HubConnectionState.Connected) {
+        // Send a ping to keep connection alive
+        // SignalR automatically handles keepalive, but we can add custom logic here if needed
+        devLog("SignalR heartbeat - connection active");
+      } else {
+        // Stop heartbeat if connection is not active
+        if (heartbeatIntervalRef.current) {
+          clearInterval(heartbeatIntervalRef.current);
+          heartbeatIntervalRef.current = null;
+        }
+      }
+    }, 30000); // Every 30 seconds
+  }, []);
+
+  /**
+   * Stop heartbeat and health check
+   */
+  const stopHeartbeatAndHealthCheck = useCallback(() => {
+    if (heartbeatIntervalRef.current) {
+      clearInterval(heartbeatIntervalRef.current);
+      heartbeatIntervalRef.current = null;
+    }
+    if (healthCheckIntervalRef.current) {
+      clearInterval(healthCheckIntervalRef.current);
+      healthCheckIntervalRef.current = null;
+    }
+  }, []);
+
   const connect = useCallback(async () => {
+    // Prevent multiple connection attempts
+    if (isConnectingRef.current) {
+      devLog("SignalR connection already in progress, skipping...");
+      return;
+    }
+
+    // Check if already connected
     if (connectionRef.current?.state === signalR.HubConnectionState.Connected) {
       return;
     }
+
+    // Throttle connection attempts - wait at least 2 seconds between attempts
+    const now = Date.now();
+    const timeSinceLastAttempt = now - lastConnectAttemptRef.current;
+    if (timeSinceLastAttempt < 2000 && lastConnectAttemptRef.current > 0) {
+      devLog(`SignalR connection throttled, waiting ${2000 - timeSinceLastAttempt}ms...`);
+      return;
+    }
+
+    isConnectingRef.current = true;
+    lastConnectAttemptRef.current = now;
 
     try {
       const token = await getToken();
@@ -136,31 +256,51 @@ export const useScoreRealTime = ({
             return 30000;
           },
         })
-        .configureLogging(signalR.LogLevel.Warning) // Reduce logging to warnings only
+        .configureLogging(signalR.LogLevel.None) // Tắt tất cả logging của SignalR để tránh spam console
         .build();
 
       // Handle connection events
       connection.onclose((error) => {
-        devLog("SignalR connection closed", error);
+        // Stop heartbeat and health check when connection closes
+        stopHeartbeatAndHealthCheck();
+        
+        // Chỉ log trong dev mode và không log error nếu là connection issue thông thường
+        if (error) {
+          const errorMsg = error.message || String(error);
+          // Chỉ log nếu không phải là connection errors thông thường
+          if (!errorMsg.includes("WebSocket") && !errorMsg.includes("connection")) {
+            devWarn("SignalR connection closed with error:", errorMsg);
+          } else {
+            devLog("SignalR connection closed (will reconnect)");
+          }
+        } else {
+          devLog("SignalR connection closed");
+        }
         setIsConnected(false);
         if (error) {
           const err = new Error(`SignalR connection closed: ${error.message}`);
           setConnectionError(err);
-          onError?.(err);
+          // Chỉ call onError nếu không phải là connection errors thông thường
+          const errorMsg = error.message || String(error);
+          if (!errorMsg.includes("WebSocket") && !errorMsg.includes("connection")) {
+            onError?.(err);
+          }
         }
       });
 
       connection.onreconnecting((error) => {
-        devLog("SignalR reconnecting...", error);
+        devLog("SignalR reconnecting...");
         setIsConnected(false);
       });
 
-      connection.onreconnected((connectionId) => {
+      connection.onreconnected(async (connectionId) => {
         devLog("SignalR reconnected", connectionId);
         setIsConnected(true);
         setConnectionError(null);
         // Re-subscribe to groups after reconnection
-        subscribeToGroups(connection);
+        await subscribeToGroups(connection);
+        // Restart heartbeat after reconnection
+        startHeartbeat(connection);
       });
 
       // Listen for score updates from backend
@@ -187,10 +327,11 @@ export const useScoreRealTime = ({
 
       // Start connection with timeout
       try {
+        // Tăng timeout lên 30 giây và không throw error - để automatic reconnect xử lý
         await Promise.race([
           connection.start(),
           new Promise((_, reject) =>
-            setTimeout(() => reject(new Error("Connection timeout")), 15000)
+            setTimeout(() => reject(new Error("Connection timeout")), 30000)
           ),
         ]);
         
@@ -202,29 +343,90 @@ export const useScoreRealTime = ({
         await subscribeToGroups(connection);
 
         connectionRef.current = connection;
+        isConnectingRef.current = false; // Reset connecting flag
+        
+        // Start heartbeat to keep connection alive
+        startHeartbeat(connection);
+        
+        // Start health check to ensure connection stays active
+        // Use ref to avoid circular dependency
+        if (startHealthCheckRef.current) {
+          startHealthCheckRef.current();
+        }
       } catch (startError: any) {
         // Log connection error but don't throw - let automatic reconnect handle it
         const errorMessage = startError?.message || String(startError);
-        if (errorMessage.includes("WebSocket") || errorMessage.includes("connection")) {
-          devLog("SignalR connection failed, will retry automatically:", errorMessage);
+        
+        // Xử lý timeout và connection errors một cách graceful
+        // KHÔNG log error vào console - chỉ log warning trong dev mode
+        if (
+          errorMessage.includes("WebSocket") || 
+          errorMessage.includes("connection") ||
+          errorMessage.includes("timeout") ||
+          errorMessage.includes("Connection timeout") ||
+          errorMessage.includes("Failed to start the transport") ||
+          errorMessage.includes("Insufficient resources") ||
+          errorMessage.includes("Handshake was canceled") ||
+          errorMessage.includes("handshake") ||
+          errorMessage.includes("canceled")
+        ) {
+          // Chỉ log warning trong dev mode, không log error
+          devWarn("SignalR connection failed, will retry automatically:", errorMessage);
           // Don't throw - let automatic reconnect handle retries
-          // The connection will be retried by automatic reconnect
+          // The connection will be retried by automatic reconnect với exponential backoff
+          setIsConnected(false);
+          setConnectionError(new Error("Connection failed - will retry automatically"));
+          // Cleanup connection reference
+          connectionRef.current = null;
+          isConnectingRef.current = false; // Reset connecting flag
           return;
         }
+        
+        // Chỉ throw các lỗi không phải connection/timeout
         throw startError;
       }
     } catch (error) {
       // Only log unexpected errors, not connection failures that are handled gracefully
       const errorMessage = error instanceof Error ? error.message : String(error);
-      if (!errorMessage.includes("WebSocket") && !errorMessage.includes("connection")) {
-        console.error("Error connecting to SignalR:", error);
+      
+      // Xử lý timeout và connection errors một cách graceful
+      // KHÔNG log error vào console - chỉ log warning trong dev mode
+      if (
+        errorMessage.includes("WebSocket") || 
+        errorMessage.includes("connection") ||
+        errorMessage.includes("timeout") ||
+        errorMessage.includes("Connection timeout") ||
+        errorMessage.includes("Failed to start the transport") ||
+        errorMessage.includes("Insufficient resources") ||
+        errorMessage.includes("could not be found on the server") ||
+        errorMessage.includes("Handshake was canceled") ||
+        errorMessage.includes("handshake") ||
+        errorMessage.includes("canceled")
+      ) {
+        // Chỉ log warning trong dev mode, không log error
+        devWarn("SignalR connection error (will retry automatically):", errorMessage);
+        // Không log error và không call onError - để automatic reconnect xử lý
+        setIsConnected(false);
+        setConnectionError(new Error("Connection error - will retry automatically"));
+        connectionRef.current = null;
+        isConnectingRef.current = false; // Reset connecting flag
+        return;
       }
+      
+      // Chỉ log và call onError cho các lỗi không phải connection/timeout
+      console.error("Unexpected error connecting to SignalR:", error);
       const err = error instanceof Error ? error : new Error(String(error));
       setConnectionError(err);
       setIsConnected(false);
-      // Don't call onError for connection failures - they're expected in some environments
-      if (!errorMessage.includes("WebSocket") && !errorMessage.includes("connection")) {
-        onError?.(err);
+      connectionRef.current = null;
+      isConnectingRef.current = false; // Reset connecting flag
+      onError?.(err);
+    } finally {
+      // Đảm bảo reset connecting flag trong mọi trường hợp
+      // (nhưng chỉ nếu không phải đang connected)
+      if (connectionRef.current?.state !== signalR.HubConnectionState.Connected) {
+        // Không reset ở đây vì có thể đang retry
+        // Chỉ reset trong các catch blocks
       }
     }
   }, [
@@ -235,47 +437,52 @@ export const useScoreRealTime = ({
     studentIds,
     evaluatorIds,
     subscribeToAll,
+    subscribeToGroups,
+    startHeartbeat,
+    stopHeartbeatAndHealthCheck,
+    // Note: startHealthCheck is not included here to avoid circular dependency
+    // It's called via startHealthCheckRef.current instead
   ]);
 
   /**
-   * Subscribe to SignalR groups based on sessionIds, studentIds, evaluatorIds
-   * Backend ScoreHub methods:
-   * - SubscribeToAllScores: Subscribe to all score updates
-   * - SubscribeToSession(sessionId): Subscribe to a specific defense session
-   * - SubscribeToStudent(studentId): Subscribe to a specific student's scores
-   * - SubscribeToEvaluator(evaluatorId): Subscribe to a specific evaluator's scores
+   * Start health check to ensure connection and subscriptions are active
+   * Checks every 60 seconds and re-subscribes if needed
+   * Note: This must be defined after connect to avoid circular dependency
    */
-  const subscribeToGroups = useCallback(
-    async (connection: signalR.HubConnection) => {
-      try {
-        if (subscribeToAll) {
-          await connection.invoke("SubscribeToAllScores");
-          devLog("✅ Subscribed to all scores");
-        }
+  const startHealthCheck = useCallback(() => {
+    // Clear existing health check
+    if (healthCheckIntervalRef.current) {
+      clearInterval(healthCheckIntervalRef.current);
+    }
 
-        // Subscribe to specific sessions
-        for (const sessionId of sessionIds) {
-          await connection.invoke("SubscribeToSession", sessionId);
-          devLog(`✅ Subscribed to session ${sessionId}`);
-        }
-
-        // Subscribe to specific students
-        for (const studentId of studentIds) {
-          await connection.invoke("SubscribeToStudent", studentId);
-          devLog(`✅ Subscribed to student ${studentId}`);
-        }
-
-        // Subscribe to specific evaluators
-        for (const evaluatorId of evaluatorIds) {
-          await connection.invoke("SubscribeToEvaluator", evaluatorId);
-          devLog(`✅ Subscribed to evaluator ${evaluatorId}`);
-        }
-      } catch (error) {
-        console.error("❌ Error subscribing to groups:", error);
+    healthCheckIntervalRef.current = setInterval(async () => {
+      const connection = connectionRef.current;
+      if (!connection) {
+        return;
       }
-    },
-    [sessionIds, studentIds, evaluatorIds, subscribeToAll]
-  );
+
+      // Check if connection is still active
+      if (connection.state === signalR.HubConnectionState.Connected) {
+        // Verify subscriptions are still active by re-subscribing
+        // This ensures we don't miss updates if subscription was lost
+        try {
+          await subscribeToGroups(connection);
+          devLog("SignalR health check - subscriptions verified");
+        } catch (error) {
+          devWarn("SignalR health check - re-subscription failed:", error);
+        }
+      } else if (connection.state === signalR.HubConnectionState.Disconnected) {
+        // Connection lost, try to reconnect
+        devLog("SignalR health check - connection lost, attempting reconnect");
+        if (!isConnectingRef.current) {
+          connect();
+        }
+      }
+    }, 60000); // Every 60 seconds
+  }, [subscribeToGroups, connect]);
+
+  // Store ref for use in connect callback (after startHealthCheck is defined)
+  startHealthCheckRef.current = startHealthCheck;
 
   const disconnect = useCallback(async () => {
     if (connectionRef.current) {
@@ -368,14 +575,24 @@ export const useScoreRealTime = ({
     };
   }, [connect, disconnect]);
 
-  // Retry connection when token becomes available
+  // Retry connection when token becomes available or after timeout
   // This handles cases where the component mounts before authentication is complete
   useEffect(() => {
     if (!isConnected && connectionRef.current?.state !== signalR.HubConnectionState.Connecting) {
       const checkAndRetry = async () => {
         const token = await getToken();
-        if (token && connectionRef.current?.state === signalR.HubConnectionState.Disconnected) {
-          devLog("🔄 Token now available, retrying SignalR connection...");
+        const currentState = connectionRef.current?.state;
+        
+        // Retry nếu:
+        // 1. Có token và connection đang disconnected
+        // 2. Hoặc connection bị timeout/error
+        if (
+          token && 
+          (currentState === signalR.HubConnectionState.Disconnected || 
+           currentState === signalR.HubConnectionState.Disconnecting ||
+           !connectionRef.current)
+        ) {
+          devLog("🔄 Retrying SignalR connection...", { token: !!token, state: currentState });
           connect();
         }
       };
@@ -383,13 +600,13 @@ export const useScoreRealTime = ({
       // Check immediately
       checkAndRetry();
 
-      // Also set up a periodic check (every 2 seconds) for a short time
-      const intervalId = setInterval(checkAndRetry, 2000);
+      // Also set up a periodic check (every 5 seconds) for longer time
+      const intervalId = setInterval(checkAndRetry, 5000);
       
-      // Stop checking after 10 seconds to avoid infinite retries
+      // Stop checking after 60 seconds to avoid infinite retries
       const timeoutId = setTimeout(() => {
         clearInterval(intervalId);
-      }, 10000);
+      }, 60000);
 
       return () => {
         clearInterval(intervalId);

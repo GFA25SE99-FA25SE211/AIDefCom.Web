@@ -27,7 +27,7 @@ import { lecturersApi } from "@/lib/api/lecturers";
 import { semestersApi } from "@/lib/api/semesters";
 import { majorsApi } from "@/lib/api/majors";
 import { swalConfig } from "@/lib/utils/sweetAlert";
-import { getSimpleErrorMessage } from "@/lib/utils/apiError";
+import { getSimpleErrorMessage, getApiErrorMessage } from "@/lib/utils/apiError";
 import { authUtils } from "@/lib/utils/auth";
 import type { SemesterDto, MajorDto } from "@/lib/models";
 
@@ -157,6 +157,17 @@ export default function AccountManagementPage() {
   useEffect(() => {
     const fetchUsers = async () => {
       try {
+        // Check if user is authenticated before fetching
+        const userInfo = authUtils.getCurrentUserInfo();
+        if (!userInfo.userId) {
+          console.warn("User not authenticated, redirecting to login...");
+          window.location.href = "/login";
+          return;
+        }
+
+        // Small delay to ensure token is available
+        await new Promise(resolve => setTimeout(resolve, 100));
+
         setLoading(true);
         const response = await authApi.getAllUsers();
 
@@ -170,8 +181,19 @@ export default function AccountManagementPage() {
         setUsers(mapUsersFromApi(response.data));
       } catch (error: any) {
         console.error("Error fetching users:", error);
+        
+        // Check if it's an authentication error
+        if (error?.message?.includes("Authentication required") || 
+            error?.status === 401 ||
+            error?.errorData?.code === "DEF401") {
+          console.warn("Authentication error, redirecting to login...");
+          window.location.href = "/login";
+          return;
+        }
+        
         // Show user-friendly error message
-        swalConfig.error("Load Failed", "Unable to load users");
+        const errorMessage = getApiErrorMessage(error, "Unable to load users");
+        swalConfig.error("Load Failed", errorMessage);
         setUsers([]);
       } finally {
         setLoading(false);
@@ -228,6 +250,13 @@ export default function AccountManagementPage() {
   useEffect(() => {
     const fetchUploadMeta = async () => {
       try {
+        // Check if user is authenticated before fetching
+        const userInfo = authUtils.getCurrentUserInfo();
+        if (!userInfo.userId) {
+          console.warn("User not authenticated, skipping upload meta fetch");
+          return;
+        }
+
         setUploadMetaLoading(true);
         const [semestersRes, majorsRes] = await Promise.all([
           semestersApi.getAll().catch(() => ({ data: [] })),
@@ -402,8 +431,19 @@ export default function AccountManagementPage() {
       swalConfig.success("Success", "Account updated");
     } catch (error: any) {
       console.error("Error updating account:", error);
-      const errorMessage = getSimpleErrorMessage(error, "Failed to update account");
+      
+      // Sử dụng getApiErrorMessage để lấy cả message và details từ API response
+      const errorMessage = getApiErrorMessage(error, "Failed to update account");
+      
+      // Kiểm tra nếu có details về password validation
+      const errorData = error?.response?.data || error?.data || error?.errorData;
+      if (errorData?.details) {
+        // Hiển thị details trực tiếp nếu có (ví dụ: "Password must be at least 8 characters long")
+        swalConfig.error("Update Failed", errorData.details);
+      } else {
+        // Fallback về message chung
       swalConfig.error("Update Failed", errorMessage);
+      }
     }
   };
 

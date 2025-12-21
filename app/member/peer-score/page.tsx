@@ -200,33 +200,58 @@ export default function PeerScoresPage() {
               const firstScore = evaluatorScores[0];
               const evaluatorName = firstScore.evaluatorName || "Unknown";
 
-              // Calculate average score for this evaluator
-              const total = evaluatorScores.reduce(
-                (sum, score) => sum + score.value,
-                0
-              );
-              const average = total / evaluatorScores.length;
+              // Group scores by student first, then calculate average per student
+              // Then calculate overall average of all students
+              const scoresByStudent = new Map<string, any[]>();
+              evaluatorScores.forEach((score) => {
+                if (!scoresByStudent.has(score.studentId)) {
+                  scoresByStudent.set(score.studentId, []);
+                }
+                scoresByStudent.get(score.studentId)!.push(score);
+              });
 
-              // Collect detailed criteria
-              const criteriaDetails: ScoreCriteriaDetail[] =
-                evaluatorScores.map((score) => ({
-                  rubricName:
-                    score.rubricName || `Criteria ${score.rubricId ?? "N/A"}`,
-                  score: score.value.toFixed(1),
-                  comment: score.comment?.trim() || undefined,
-                }));
+              // Calculate average for each student, then overall average
+              const studentAverages: number[] = [];
+              const allCriteriaDetails: ScoreCriteriaDetail[] = [];
 
-              const comments = criteriaDetails
+              scoresByStudent.forEach((studentScores) => {
+                // Calculate average for this student
+                const studentTotal = studentScores.reduce(
+                  (sum, score) => sum + score.value,
+                  0
+                );
+                const studentAverage = studentTotal / studentScores.length;
+                studentAverages.push(studentAverage);
+
+                // Collect criteria details for this student
+                studentScores.forEach((score) => {
+                  allCriteriaDetails.push({
+                    rubricName:
+                      score.rubricName || `Criteria ${score.rubricId ?? "N/A"}`,
+                    score: score.value.toFixed(1),
+                    comment: score.comment?.trim() || undefined,
+                  });
+                });
+              });
+
+              // Calculate overall average: average of all student averages
+              const overallAverage =
+                studentAverages.length > 0
+                  ? studentAverages.reduce((sum, avg) => sum + avg, 0) /
+                    studentAverages.length
+                  : 0;
+
+              const comments = allCriteriaDetails
                 .map((c) => c.comment)
                 .filter((comment) => comment && comment !== "")
                 .join(" | ");
 
               members.push({
                 name: evaluatorName,
-                score: average.toFixed(1),
+                score: overallAverage.toFixed(1),
                 status: "Submitted",
                 comment: comments || undefined,
-                criteria: criteriaDetails,
+                criteria: allCriteriaDetails,
               });
             });
 
@@ -334,29 +359,58 @@ export default function PeerScoresPage() {
           }> = [];
 
           evaluatorMap.forEach((evalScores, evaluatorId) => {
-            const total = evalScores.reduce((sum, s) => sum + s.value, 0);
-            const average = total / evalScores.length;
+            // Group scores by student first, then calculate average per student
+            // Then calculate overall average of all students
+            const scoresByStudent = new Map<string, any[]>();
+            evalScores.forEach((score) => {
+              if (!scoresByStudent.has(score.studentId)) {
+                scoresByStudent.set(score.studentId, []);
+              }
+              scoresByStudent.get(score.studentId)!.push(score);
+            });
 
-            const criteriaDetails: ScoreCriteriaDetail[] = evalScores.map(
-              (score) => ({
-                rubricName:
-                  score.rubricName || `Criteria ${score.rubricId ?? "N/A"}`,
-                score: score.value.toFixed(1),
-                comment: score.comment?.trim() || undefined,
-              })
-            );
+            // Calculate average for each student, then overall average
+            const studentAverages: number[] = [];
+            const allCriteriaDetails: ScoreCriteriaDetail[] = [];
 
-            const comments = criteriaDetails
+            scoresByStudent.forEach((studentScores) => {
+              // Calculate average for this student
+              const studentTotal = studentScores.reduce(
+                (sum, score) => sum + score.value,
+                0
+              );
+              const studentAverage = studentTotal / studentScores.length;
+              studentAverages.push(studentAverage);
+
+              // Collect criteria details for this student
+              studentScores.forEach((score) => {
+                allCriteriaDetails.push({
+                  rubricName:
+                    score.rubricName || `Criteria ${score.rubricId ?? "N/A"}`,
+                  score: score.value.toFixed(1),
+                  comment: score.comment?.trim() || undefined,
+                });
+              });
+            });
+
+            // Calculate overall average: average of all student averages
+            const overallAverage =
+              studentAverages.length > 0
+                ? studentAverages.reduce((sum, avg) => sum + avg, 0) /
+                  studentAverages.length
+                : 0;
+
+            const comments = allCriteriaDetails
               .map((c) => c.comment)
               .filter((comment) => comment && comment !== "")
               .join(" | ");
 
             members.push({
               name: evalScores[0].evaluatorName || "Unknown",
-              score: average.toFixed(1),
+              score: overallAverage.toFixed(1),
               status: "Submitted",
               comment: comments || undefined,
-              criteria: criteriaDetails,
+              criteria: allCriteriaDetails,
             });
           });
 
@@ -419,35 +473,34 @@ export default function PeerScoresPage() {
   // Store ref for useScoreRealTime callback
   fetchPeerScoresRef.current = fetchPeerScores;
 
-  // Real-time score updates - subscribe to all sessions
+  // Real-time score updates via SignalR
   const { isConnected, connectionError } = useScoreRealTime({
     onScoreUpdate: (update) => {
       console.log("📊 Real-time score update received:", update);
 
-      // Check if this update is relevant to any of our sessions
-      const isRelevant = 
-        !update.sessionId || 
-        sessionIds.includes(update.sessionId) ||
-        sessionIds.length === 0;
+      // Always refresh data when score is updated - don't filter by session
+      // This ensures we get the latest data even if sessionIds haven't been set yet
+      // or if the update is for a different session that we should also display
+      
+      // Dispatch custom event for notifications
+      const event = new CustomEvent("scoreUpdate", {
+        detail: {
+          message: update.sessionId
+            ? `Score updated for session ${update.sessionId}`
+            : "Score updated",
+          type: "success",
+        },
+      });
+      window.dispatchEvent(event);
 
-      if (isRelevant) {
-        // Dispatch custom event for notifications
-        const event = new CustomEvent("scoreUpdate", {
-          detail: {
-            message: update.sessionId
-              ? `Score updated for session ${update.sessionId}`
-              : "Score updated",
-            type: "success",
-          },
-        });
-        window.dispatchEvent(event);
-
-        // Refresh data when score is updated
+      // Always refresh data when score is updated
+      // Use a small delay to ensure backend has processed the update
+      setTimeout(() => {
         if (fetchPeerScoresRef.current) {
           console.log("🔄 Refreshing peer scores after real-time update...");
           fetchPeerScoresRef.current();
         }
-      }
+      }, 500); // 500ms delay to ensure backend has processed the update
     },
     onError: (error) => {
       console.error("❌ Real-time connection error:", error);
@@ -455,7 +508,7 @@ export default function PeerScoresPage() {
       // Dispatch error event for notifications
       const event = new CustomEvent("scoreUpdate", {
         detail: {
-          message: "Real-time connection error. Please refresh the page.",
+          message: "Real-time connection error. Will retry automatically.",
           type: "error",
         },
       });
@@ -513,6 +566,7 @@ export default function PeerScoresPage() {
                 {isConnected ? "Live" : "Offline"}
               </span>
             </div>
+            {/* Connection error display */}
             {connectionError && (
               <span className="text-xs text-red-500" title={connectionError.message}>
                 Connection error
