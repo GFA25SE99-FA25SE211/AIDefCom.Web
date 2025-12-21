@@ -7,7 +7,7 @@ import RoleGuard from "@/components/auth/RoleGuard";
 
 export default function HomeLayout({ children }: { children: ReactNode }) {
   return (
-    <RoleGuard allowedRoles={["lecturer"]}>
+    <RoleGuard allowedRoles={["lecturer"]} silentRedirect>
       <VoiceGuard>
         <div className="flex min-h-screen bg-[#F3F6FB]">
           {/* Sidebar cố định */}

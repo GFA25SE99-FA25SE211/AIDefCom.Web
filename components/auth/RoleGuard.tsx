@@ -7,6 +7,7 @@ import { authUtils } from "@/lib/utils/auth";
 interface RoleGuardProps {
   children: React.ReactNode;
   allowedRoles: string[];
+  silentRedirect?: boolean; // If true, redirect immediately without showing Access Denied page
 }
 
 // Map role to their default dashboard
@@ -31,7 +32,11 @@ const getRoleDashboard = (role: string): string => {
   }
 };
 
-export default function RoleGuard({ children, allowedRoles }: RoleGuardProps) {
+export default function RoleGuard({
+  children,
+  allowedRoles,
+  silentRedirect = false,
+}: RoleGuardProps) {
   const router = useRouter();
   const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
@@ -55,29 +60,38 @@ export default function RoleGuard({ children, allowedRoles }: RoleGuardProps) {
         setIsAuthorized(true);
       } else {
         setIsAuthorized(false);
+        // If silentRedirect, redirect immediately
+        if (silentRedirect) {
+          router.push(getRoleDashboard(role));
+        }
       }
     };
 
     checkRole();
-  }, [allowedRoles, router]);
+  }, [allowedRoles, router, silentRedirect]);
 
-  // Countdown and redirect when not authorized
+  // Countdown and redirect when not authorized (only if not silentRedirect)
   useEffect(() => {
-    if (isAuthorized === false && userRole) {
+    if (isAuthorized === false && userRole && !silentRedirect) {
       const timer = setInterval(() => {
         setCountdown((prev) => prev - 1);
       }, 1000);
 
       return () => clearInterval(timer);
     }
-  }, [isAuthorized, userRole]);
+  }, [isAuthorized, userRole, silentRedirect]);
 
-  // Separate effect for redirect when countdown reaches 0
+  // Separate effect for redirect when countdown reaches 0 (only if not silentRedirect)
   useEffect(() => {
-    if (countdown <= 0 && isAuthorized === false && userRole) {
+    if (
+      countdown <= 0 &&
+      isAuthorized === false &&
+      userRole &&
+      !silentRedirect
+    ) {
       router.push(getRoleDashboard(userRole));
     }
-  }, [countdown, isAuthorized, userRole, router]);
+  }, [countdown, isAuthorized, userRole, router, silentRedirect]);
 
   // Loading state
   if (isAuthorized === null) {
@@ -88,7 +102,16 @@ export default function RoleGuard({ children, allowedRoles }: RoleGuardProps) {
     );
   }
 
-  // Access Denied state
+  // For silentRedirect mode, show loading while redirecting
+  if (isAuthorized === false && silentRedirect) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+      </div>
+    );
+  }
+
+  // Access Denied state (only shown when silentRedirect is false)
   if (isAuthorized === false) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
