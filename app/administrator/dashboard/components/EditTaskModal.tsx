@@ -101,7 +101,6 @@ const EditTaskModal: React.FC<EditTaskModalProps> = ({
         setTitleError("");
       }
     } catch (error) {
-      console.error("Error checking title:", error);
       setTitleError("");
     } finally {
       setIsCheckingTitle(false);

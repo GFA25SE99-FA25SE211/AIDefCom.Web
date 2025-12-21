@@ -49,7 +49,7 @@ export default function StudentHistoryListPage() {
 
         setStudents(studentsWithHistory);
       } catch (error) {
-        console.error("Error fetching students:", error);
+        // Error fetching students
       } finally {
         setLoading(false);
       }

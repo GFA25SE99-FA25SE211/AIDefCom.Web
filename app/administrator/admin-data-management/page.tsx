@@ -16,6 +16,7 @@ import { reportsApi } from "@/lib/api/reports";
 import { defenseSessionsApi } from "@/lib/api/defense-sessions";
 import { swalConfig } from "@/lib/utils/sweetAlert";
 import { getSimpleErrorMessage } from "@/lib/utils/apiError";
+import { authUtils } from "@/lib/utils/auth";
 import type {
   MajorDto,
   SemesterDto,
@@ -268,6 +269,21 @@ export default function AdminDataManagementPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
+        // Check if user is authenticated before fetching
+        if (!authUtils.isAuthenticated()) {
+          window.location.href = "/login";
+          return;
+        }
+
+        const userInfo = authUtils.getCurrentUserInfo();
+        if (!userInfo.userId) {
+          window.location.href = "/login";
+          return;
+        }
+
+        // Small delay to ensure token is available
+        await new Promise(resolve => setTimeout(resolve, 100));
+
         setLoading(true);
         const [
           majorsRes,
@@ -325,7 +341,6 @@ export default function AdminDataManagementPage() {
           );
           setCouncilRoles(filteredRoles);
         } catch (error) {
-          console.warn("Failed to fetch council roles, using fallback", error);
           // Use fallback roles if API fails
           setCouncilRoles([
             { id: 1, roleName: "Chair" },
@@ -353,8 +368,15 @@ export default function AdminDataManagementPage() {
           })
         );
         setTasks(transformedTasks);
-      } catch (error) {
-        console.error("Error fetching data:", error);
+      } catch (error: any) {
+        // Check if it's an authentication error
+        if (error?.message?.includes("Authentication required") || 
+            error?.status === 401 ||
+            error?.errorData?.code === "DEF401") {
+          window.location.href = "/login";
+          return;
+        }
+        // Error fetching data
       } finally {
         setLoading(false);
       }
@@ -625,15 +647,6 @@ export default function AdminDataManagementPage() {
       // Map frontend status to backend format (modal uses "InProgress", backend expects "InProgress")
       const backendStatus: string = data.status;
 
-      console.log("Creating task with:", {
-        title: data.title,
-        description: data.description,
-        assignedById: assignedByAssignment.lecturerId,
-        assignedToId: assignedToAssignment.lecturerId,
-        rubricId: firstRubric,
-        status: backendStatus,
-      });
-
       await projectTasksApi.create({
         title: data.title,
         description: data.description,
@@ -665,7 +678,6 @@ export default function AdminDataManagementPage() {
         "Task has been created successfully!"
       );
     } catch (error: any) {
-      console.error("Error creating task:", error);
       await swalConfig.error(
         "Error Creating Task",
         getSimpleErrorMessage(error, "Failed to create task")
@@ -678,9 +690,6 @@ export default function AdminDataManagementPage() {
     data: Omit<Task, "id" | "assignedBy" | "assignedTo">
   ) => {
     try {
-      console.log("Edit task data:", data);
-      console.log("Edit task id:", id);
-
       if (!data.title || !data.status) {
         await swalConfig.error(
           "Invalid Task",
@@ -707,8 +716,6 @@ export default function AdminDataManagementPage() {
         sessionId: 0, // Default sessionId value for update
       };
 
-      console.log("Update payload:", updatePayload);
-
       await projectTasksApi.update(Number(id), updatePayload);
 
       const response = await projectTasksApi.getAll();
@@ -733,9 +740,6 @@ export default function AdminDataManagementPage() {
         "Task has been updated successfully!"
       );
     } catch (error: any) {
-      console.error("Error updating task:", error);
-      console.error("Full error object:", JSON.stringify(error, null, 2));
-
       const errorMessage = getSimpleErrorMessage(error, "Failed to update task");
       await swalConfig.error("Error Updating Task", errorMessage);
     }
@@ -757,7 +761,6 @@ export default function AdminDataManagementPage() {
           "Task has been deleted successfully!"
         );
       } catch (error: any) {
-        console.error("Error deleting task:", error);
         await swalConfig.error(
           "Error Deleting Task",
           getSimpleErrorMessage(error, "Failed to delete task")
@@ -800,8 +803,6 @@ export default function AdminDataManagementPage() {
         "Semester has been created successfully!"
       );
     } catch (error: any) {
-      console.error("Error creating semester:", error);
-
       let errorMessage = "Failed to create semester";
       if (error.response?.data?.errors) {
         const validationErrors = error.response.data.errors;
@@ -824,8 +825,6 @@ export default function AdminDataManagementPage() {
     try {
       const parsedYear = Number(data.year);
       const parsedMajorId = data.majorID ? Number(data.majorID) : null;
-
-      console.log("Semester edit data:", { data, parsedYear, parsedMajorId });
 
       if (
         !data.name ||
@@ -857,8 +856,6 @@ export default function AdminDataManagementPage() {
         "Semester has been updated successfully!"
       );
     } catch (error: any) {
-      console.error("Error updating semester:", error);
-
       let errorMessage = "Failed to update semester";
       if (error.response?.data?.errors) {
         const validationErrors = error.response.data.errors;
@@ -893,7 +890,6 @@ export default function AdminDataManagementPage() {
           "Semester has been deleted successfully!"
         );
       } catch (error: any) {
-        console.error("Error deleting semester:", error);
         await swalConfig.error(
           "Error Deleting Semester",
           getSimpleErrorMessage(error, "Failed to delete semester")
@@ -916,7 +912,6 @@ export default function AdminDataManagementPage() {
         "Major has been created successfully!"
       );
     } catch (error: any) {
-      console.error("Error creating major:", error);
       await swalConfig.error(
         "Error Creating Major",
         getSimpleErrorMessage(error, "Failed to create major")
@@ -936,10 +931,9 @@ export default function AdminDataManagementPage() {
       await swalConfig.success(
         "Success",
         "Major has been updated successfully!"
-      );
-    } catch (error: any) {
-      console.error("Error updating major:", error);
-      await swalConfig.error(
+        );
+      } catch (error: any) {
+        await swalConfig.error(
         "Error Updating Major",
         getSimpleErrorMessage(error, "Failed to update major")
       );
@@ -962,7 +956,6 @@ export default function AdminDataManagementPage() {
           "Major has been deleted successfully!"
         );
       } catch (error: any) {
-        console.error("Error deleting major:", error);
         await swalConfig.error(
           "Error Deleting Major",
           error.message || "Failed to delete major"
@@ -973,10 +966,17 @@ export default function AdminDataManagementPage() {
 
   const handleAddRubric = async (data: any) => {
     try {
+      if (!data.majorId || data.majorId === 0) {
+        await swalConfig.error(
+          "Missing Major",
+          "Please select a major before creating the rubric."
+        );
+        return;
+      }
       await rubricsApi.create({
         rubricName: data.name,
         description: data.description,
-        majorId: 1, // Default majorId value
+        majorId: data.majorId,
       });
       const response = await rubricsApi.getAll();
       setRubrics(response.data || []);
@@ -986,7 +986,6 @@ export default function AdminDataManagementPage() {
         "Rubric has been created successfully!"
       );
     } catch (error: any) {
-      console.error("Error creating rubric:", error);
       await swalConfig.error(
         "Error Creating Rubric",
         getSimpleErrorMessage(error, "Failed to create rubric")
@@ -1008,7 +1007,6 @@ export default function AdminDataManagementPage() {
         "Rubric has been updated successfully!"
       );
     } catch (error: any) {
-      console.error("Error updating rubric:", error);
       await swalConfig.error(
         "Error Updating Rubric",
         getSimpleErrorMessage(error, "Failed to update rubric")
@@ -1097,10 +1095,9 @@ export default function AdminDataManagementPage() {
       // Reload assignments to get updated data
       const response = await committeeAssignmentsApi.getAll();
       setAssignments(response.data || []);
-      setEditingAssignment(null);
-    } catch (error: any) {
-      console.error("Error updating assignment:", error);
-      await swalConfig.error(
+      setEditingAssignment(null        );
+      } catch (error: any) {
+        await swalConfig.error(
         "Error",
         error.message || "An error occurred while updating the assignment"
       );
@@ -1167,7 +1164,6 @@ export default function AdminDataManagementPage() {
           "Rubric has been deleted successfully!"
         );
       } catch (error: any) {
-        console.error("Error deleting rubric:", error);
         await swalConfig.error(
           "Delete Failed",
           getSimpleErrorMessage(error, "Failed to delete rubric")
@@ -1211,7 +1207,6 @@ export default function AdminDataManagementPage() {
           "Note has been deleted successfully!"
         );
       } catch (error: any) {
-        console.error("Error deleting note:", error);
         await swalConfig.error(
           "Error Deleting Note",
           getSimpleErrorMessage(error, "Failed to delete note")
@@ -1248,8 +1243,6 @@ export default function AdminDataManagementPage() {
         status: originalReport.status || "",
       };
 
-      console.log("Updating report with data:", updateData);
-
       await reportsApi.update(id, updateData);
       const response = await reportsApi.getAll();
       setReports(response.data || []);
@@ -1283,7 +1276,6 @@ export default function AdminDataManagementPage() {
           "Report has been deleted successfully!"
         );
       } catch (error: any) {
-        console.error("Error deleting report:", error);
         await swalConfig.error(
           "Error Deleting Report",
           error.message || "Failed to delete report"
@@ -1320,7 +1312,6 @@ export default function AdminDataManagementPage() {
           "Assignment deleted successfully!"
         );
       } catch (error: any) {
-        console.error("Error deleting assignment:", error);
         await swalConfig.error(
           "Error Deleting Assignment",
           getSimpleErrorMessage(error, "Failed to delete assignment")
@@ -1345,7 +1336,6 @@ export default function AdminDataManagementPage() {
           "Group has been deleted successfully!"
         );
       } catch (error: any) {
-        console.error("Error deleting group:", error);
         await swalConfig.error(
           "Error Deleting Group",
           getSimpleErrorMessage(error, "Failed to delete group")
@@ -1666,48 +1656,75 @@ export default function AdminDataManagementPage() {
           {renderTable(
             [
               "ID",
-              "Assignment ID",
-              "Group ID",
+              "Assignment",
+              "Group",
               "Note Content",
               "Created At",
               "Actions",
             ],
-            paginatedNotes.map((n) => (
-              <tr key={n.id}>
-                <td>{n.id}</td>
-                <td>{n.committeeAssignmentId}</td>
-                <td>{n.groupId}</td>
-                <td className="max-w-md truncate">{n.noteContent}</td>
-                <td>{new Date(n.createdAt).toLocaleString()}</td>
-                <td className="text-center align-middle">
-                  <div className="flex gap-2 justify-center items-center">
-                    <button
-                      className="btn-subtle"
-                      onClick={() => {
-                        const newContent = prompt(
-                          "Edit note content:",
-                          n.noteContent
-                        );
-                        if (
-                          newContent !== null &&
-                          newContent !== n.noteContent
-                        ) {
-                          handleEditNote(n.id, newContent);
-                        }
-                      }}
-                    >
-                      <Pencil className="w-4 h-4" />
-                    </button>
-                    <button
-                      className="btn-subtle text-red-600 hover:bg-red-50"
-                      onClick={() => handleDeleteNote(n.id)}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))
+            paginatedNotes.map((n) => {
+              // Find assignment by committeeAssignmentId
+              const assignment = assignments.find(
+                (a) => String(a.id) === String(n.committeeAssignmentId)
+              );
+              
+              // Find lecturer name from assignment
+              let assignmentName = n.committeeAssignmentId || "N/A";
+              if (assignment) {
+                const lecturer = users.find((u) => u.id === assignment.lecturerId);
+                const roleName = assignment.roleName || assignment.role || "";
+                assignmentName = lecturer
+                  ? `${lecturer.fullName || lecturer.email || assignment.lecturerId} (${roleName})`
+                  : `${assignment.lecturerId} (${roleName})`;
+              }
+
+              // Find group from session
+              let groupName = "N/A";
+              const session = defenseSessions.find((s) => s.id === n.sessionId);
+              if (session) {
+                const group = groups.find((g) => g.id === session.groupId);
+                groupName = group
+                  ? group.groupName || group.projectCode || group.topicTitle_EN || session.groupId
+                  : session.groupId;
+              }
+
+              return (
+                <tr key={n.id}>
+                  <td>{n.id}</td>
+                  <td>{assignmentName}</td>
+                  <td>{groupName}</td>
+                  <td className="max-w-md truncate">{n.noteContent}</td>
+                  <td>{new Date(n.createdAt).toLocaleString()}</td>
+                  <td className="text-center align-middle">
+                    <div className="flex gap-2 justify-center items-center">
+                      <button
+                        className="btn-subtle"
+                        onClick={() => {
+                          const newContent = prompt(
+                            "Edit note content:",
+                            n.noteContent
+                          );
+                          if (
+                            newContent !== null &&
+                            newContent !== n.noteContent
+                          ) {
+                            handleEditNote(n.id, newContent);
+                          }
+                        }}
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button
+                        className="btn-subtle text-red-600 hover:bg-red-50"
+                        onClick={() => handleDeleteNote(n.id)}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })
           )}
           {renderPagination(notePage, noteTotalPages, setNotePage)}
         </>
@@ -1821,7 +1838,6 @@ export default function AdminDataManagementPage() {
         onSubmit={handleAddTask}
         userOptions={users
           .filter((u) => {
-            console.log("User:", u.fullName, "Role:", u.role);
             return (
               u.role &&
               (u.role === "Chair" ||
@@ -1830,6 +1846,16 @@ export default function AdminDataManagementPage() {
             );
           })
           .map((u) => ({ id: u.id, name: u.fullName }))}
+        sessionOptions={defenseSessions.map((s) => {
+          let sessionName = s.topicTitle_VN || s.topicTitle_EN;
+          if (!sessionName && s.defenseDate) {
+            sessionName = `Session ${new Date(s.defenseDate).toLocaleDateString("vi-VN")}`;
+          }
+          if (!sessionName) {
+            sessionName = `Session ${s.id}`;
+          }
+          return { id: s.id, name: sessionName };
+        })}
       />
       <AddSemesterModal
         isOpen={isAddSemesterModalOpen}
@@ -1849,6 +1875,10 @@ export default function AdminDataManagementPage() {
         isOpen={isAddRubricModalOpen}
         onClose={() => setIsAddRubricModalOpen(false)}
         onSubmit={handleAddRubric}
+        majors={majors.map((m) => ({
+          id: m.id,
+          majorName: m.majorName || `Major ${m.id}`,
+        }))}
       />
       {editingTask && (
         <EditTaskModal
@@ -1858,7 +1888,6 @@ export default function AdminDataManagementPage() {
           taskData={editingTask}
           userOptions={users
             .filter((u) => {
-              console.log("Edit - User:", u.fullName, "Role:", u.role);
               return (
                 u.role &&
                 (u.role === "Chair" ||

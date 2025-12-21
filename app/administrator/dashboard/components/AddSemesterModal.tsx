@@ -89,7 +89,6 @@ const AddSemesterModal: React.FC<AddSemesterModalProps> = ({
         setNameError("");
       }
     } catch (error) {
-      console.error("Error checking semester name:", error);
       setNameError("");
     } finally {
       setIsCheckingName(false);

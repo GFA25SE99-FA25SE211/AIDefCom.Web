@@ -84,7 +84,6 @@ const AddCouncilModal: React.FC<AddCouncilModalProps> = ({
         setDescriptionError("");
       }
     } catch (error) {
-      console.error("Error checking description:", error);
       setDescriptionError("");
     } finally {
       setIsCheckingDescription(false);

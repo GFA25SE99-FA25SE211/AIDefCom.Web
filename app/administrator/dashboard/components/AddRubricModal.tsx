@@ -75,7 +75,6 @@ const AddRubricModal: React.FC<AddRubricModalProps> = ({
         setNameError("");
       }
     } catch (error) {
-      console.error("Error checking rubric name:", error);
       setNameError("");
     } finally {
       setIsCheckingName(false);

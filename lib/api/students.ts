@@ -40,9 +40,27 @@ export const studentsApi = {
   },
 
   downloadTemplate: async () => {
+    // Get token from localStorage
+    const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+    
+    if (!token || token === 'dummy-token-chair') {
+      throw new Error('Authentication required. Please login first.');
+    }
+
     const response = await fetch(`${env.apiUrl}/api/students/import/template`, {
       method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
     });
+
+    if (!response.ok) {
+      if (response.status === 401 || response.status === 403) {
+        throw new Error('Authentication failed. Please login again.');
+      }
+      throw new Error(`Failed to download template: ${response.statusText}`);
+    }
+
     const blob = await response.blob();
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -55,9 +73,27 @@ export const studentsApi = {
   },
 
   downloadStudentGroupTemplate: async () => {
+    // Get token from localStorage
+    const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+    
+    if (!token || token === 'dummy-token-chair') {
+      throw new Error('Authentication required. Please login first.');
+    }
+
     const response = await fetch(`${env.apiUrl}/api/students/import/student-group-template`, {
       method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
     });
+
+    if (!response.ok) {
+      if (response.status === 401 || response.status === 403) {
+        throw new Error('Authentication failed. Please login again.');
+      }
+      throw new Error(`Failed to download template: ${response.statusText}`);
+    }
+
     const blob = await response.blob();
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');

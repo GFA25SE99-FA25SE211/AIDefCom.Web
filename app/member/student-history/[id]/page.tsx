@@ -160,7 +160,6 @@ export default function StudentHistoryDetailPage() {
 
         setStudent(studentDetail);
       } catch (error) {
-        console.error("Error fetching student data:", error);
         setStudent(studentDetailData[studentId] || studentDetailData["SV001"]);
       } finally {
         setLoading(false);

@@ -65,7 +65,6 @@ const TranscriptDetailModal: React.FC<TranscriptDetailModalProps> = ({
       return [];
     } catch (error) {
       // If parsing fails, treat as plain text
-      console.warn("Failed to parse transcript as JSON:", error);
       return [];
     }
   }, [transcript.transcriptText]);

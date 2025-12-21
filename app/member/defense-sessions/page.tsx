@@ -38,7 +38,7 @@ function DefenseSessionsContent() {
           const { authUtils } = await import("@/lib/utils/auth");
           lecturerId = authUtils.getCurrentUserId();
         } catch (err) {
-          console.error("Error getting userId from token:", err);
+          // Error getting userId from token
         }
 
         // Fetch sessions by lecturerId if available, otherwise fetch all
@@ -107,7 +107,7 @@ function DefenseSessionsContent() {
 
         setSessions(sessionsWithStatus);
       } catch (error) {
-        console.error("Error fetching sessions:", error);
+        // Error fetching sessions
       } finally {
         setLoading(false);
       }
@@ -194,13 +194,12 @@ function DefenseSessionsContent() {
           }
         }
       } catch (err) {
-        console.error("Failed to check session role:", err);
+        // Failed to check session role
       }
 
       // Fallback: If not in session or role check failed -> home view
       router.push(`/home/view/${session.groupId}`);
     } catch (error) {
-      console.error("Error getting session details:", error);
       router.push(`/member/groups-to-grade?sessionId=${sessionId}`);
     }
   };

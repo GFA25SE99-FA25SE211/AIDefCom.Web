@@ -118,7 +118,6 @@ const AddGroupModal: React.FC<AddGroupModalProps> = ({
         setTopicENError("");
       }
     } catch (error) {
-      console.error("Error checking topic EN:", error);
       setTopicENError("");
     } finally {
       setIsCheckingEN(false);
@@ -143,7 +142,6 @@ const AddGroupModal: React.FC<AddGroupModalProps> = ({
         setTopicVNError("");
       }
     } catch (error) {
-      console.error("Error checking topic VN:", error);
       setTopicVNError("");
     } finally {
       setIsCheckingVN(false);

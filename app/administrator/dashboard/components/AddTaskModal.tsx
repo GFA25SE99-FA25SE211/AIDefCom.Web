@@ -91,7 +91,6 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({
         setTitleError("");
       }
     } catch (error) {
-      console.error("Error checking title:", error);
       setTitleError("");
     } finally {
       setIsCheckingTitle(false);

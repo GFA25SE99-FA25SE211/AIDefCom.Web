@@ -90,7 +90,6 @@ const AddMajorModal: React.FC<AddMajorModalProps> = ({
         setNameError("");
       }
     } catch (error) {
-      console.error("Error checking major name:", error);
       setNameError("");
     } finally {
       setIsCheckingName(false);

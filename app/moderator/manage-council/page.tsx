@@ -14,6 +14,7 @@ import { majorsApi } from "@/lib/api/majors";
 import type { CouncilDto, CommitteeAssignmentDto } from "@/lib/models";
 import { Plus, Shield, Users, UserCircle2, Edit, Trash2 } from "lucide-react";
 import { swalConfig } from "@/lib/utils/sweetAlert";
+import { authUtils } from "@/lib/utils/auth";
 
 const IconBadge = ({
   children,
@@ -71,6 +72,16 @@ export default function ManageCouncilPage() {
 
   const fetchCouncils = async () => {
     try {
+      // Check if user is authenticated before fetching
+      const userInfo = authUtils.getCurrentUserInfo();
+      if (!userInfo.userId) {
+        window.location.href = "/login";
+        return;
+      }
+
+      // Small delay to ensure token is available
+      await new Promise(resolve => setTimeout(resolve, 100));
+
       setLoading(true);
       const [councilsRes, assignmentsRes, usersRes, majorsRes] =
         await Promise.all([
@@ -135,7 +146,6 @@ export default function ManageCouncilPage() {
           )
         );
       } catch (error) {
-        console.warn("Failed to fetch council roles, using fallback", error);
         // Use fallback roles if API fails
         roles = [
           { id: 1, roleName: "Chair" },
@@ -190,8 +200,14 @@ export default function ManageCouncilPage() {
       );
 
       setCouncils(councilsWithMembers);
-    } catch (error) {
-      console.error("Error fetching councils:", error);
+    } catch (error: any) {
+      // Check if it's an authentication error
+      if (error?.message?.includes("Authentication required") || 
+          error?.status === 401 ||
+          error?.errorData?.code === "DEF401") {
+        window.location.href = "/login";
+        return;
+      }
       await swalConfig.error("Load Failed", "Failed to load council information");
     } finally {
       setLoading(false);
@@ -232,7 +248,7 @@ export default function ManageCouncilPage() {
               councilRoleId: councilRoleId,
             })
             .catch((err) => {
-              console.error(`Failed to add member ${member.fullName}:`, err);
+              // Failed to add member
               return null;
             });
         });
@@ -312,7 +328,6 @@ export default function ManageCouncilPage() {
         } member(s).`
       );
     } catch (error: any) {
-      console.error("Error creating council:", error);
       await swalConfig.error("Creation Failed", "Council creation failed");
     }
   };
@@ -405,7 +420,6 @@ export default function ManageCouncilPage() {
         "The lecturer has been added to the council."
       );
     } catch (error: any) {
-      console.error("Error adding member:", error);
       await swalConfig.error("Add Failed", "Member addition failed");
     }
   };
@@ -456,7 +470,6 @@ export default function ManageCouncilPage() {
         "The council member information has been updated."
       );
     } catch (error: any) {
-      console.error("Error updating member:", error);
       await swalConfig.error("Update Failed", "Member update failed");
     }
   };
@@ -484,7 +497,6 @@ export default function ManageCouncilPage() {
         );
       }
     } catch (error: any) {
-      console.error("Error deleting member:", error);
       await swalConfig.error("Delete Failed", "Member removal failed");
     }
   };
@@ -502,10 +514,6 @@ export default function ManageCouncilPage() {
 
         <button
           onClick={() => {
-            console.log(
-              "Create New Council clicked, isFormVisible:",
-              isFormVisible
-            );
             setIsFormVisible(true);
           }}
           className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-blue-500 text-white text-sm shadow hover:opacity-90 transition"
@@ -525,7 +533,6 @@ export default function ManageCouncilPage() {
           )}
           <CreateCouncilForm
             onCancel={() => {
-              console.log("Form cancelled");
               setIsFormVisible(false);
             }}
             onSubmit={handleCreateCouncil}

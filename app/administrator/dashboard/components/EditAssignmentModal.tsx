@@ -45,20 +45,6 @@ const EditAssignmentModal: React.FC<EditAssignmentModalProps> = ({
       // Use roleName if available, otherwise use role
       const roleToSet = assignmentData.roleName || assignmentData.role || "";
       setRole(roleToSet);
-      console.log(
-        "Setting role:",
-        roleToSet,
-        "from assignmentData:",
-        assignmentData
-      );
-
-      // Log warning if council not found
-      if (!foundCouncil && councils.length > 0) {
-        console.warn(
-          `Council with ID ${stringCouncilId} not found in councils array. Available councils:`,
-          councils.map((c) => c.id)
-        );
-      }
     } else {
       setLecturerId("");
       setCouncilId("");
@@ -121,12 +107,6 @@ const EditAssignmentModal: React.FC<EditAssignmentModalProps> = ({
             id="council-select"
             value={councilId}
             onChange={(e) => {
-              console.log(
-                "Council changed from",
-                councilId,
-                "to",
-                e.target.value
-              );
               setCouncilId(e.target.value);
             }}
             required

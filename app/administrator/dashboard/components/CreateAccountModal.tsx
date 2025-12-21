@@ -85,7 +85,6 @@ const CreateAccountModal: React.FC<CreateAccountModalProps> = ({
         setEmailError("");
       }
     } catch (error) {
-      console.error("Error checking email:", error);
       setEmailError("");
     } finally {
       setIsCheckingEmail(false);

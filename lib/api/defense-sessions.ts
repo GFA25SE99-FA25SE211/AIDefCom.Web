@@ -4,6 +4,7 @@ import type {
   DefenseSessionDto,
   DefenseSessionCreateDto,
   DefenseSessionUpdateDto,
+  DefenseSessionImportResultDto,
 } from "@/lib/models";
 
 export const defenseSessionsApi = {
@@ -52,20 +53,36 @@ export const defenseSessionsApi = {
   },
 
   downloadTemplate: async () => {
+    // Get token from localStorage
+    const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+    
+    if (!token || token === 'dummy-token-chair' || token.trim() === '') {
+      throw new Error('Authentication required. Please login first.');
+    }
+
     const response = await fetch(
       `${env.apiUrl}/api/defense-sessions/import/template`,
       {
         method: "GET",
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
       }
     );
+
     if (!response.ok) {
-      throw new Error("Failed to download defense session template");
+      if (response.status === 401 || response.status === 403) {
+        throw new Error('Authentication failed. Please login again.');
+      }
+      const errorText = await response.text();
+      throw new Error(`Failed to download defense session template: ${response.status} ${response.statusText} - ${errorText}`);
     }
+
     const blob = await response.blob();
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `DefenseSessions_Template_${
+    a.download = `DefenseSession_Import_Template_${
       new Date().toISOString().split("T")[0]
     }.xlsx`;
     document.body.appendChild(a);
@@ -77,7 +94,10 @@ export const defenseSessionsApi = {
   importFromFile: async (file: File) => {
     const formData = new FormData();
     formData.append("file", file);
-    return apiClient.postFormData("/api/defense-sessions/import", formData);
+    return apiClient.postFormData<DefenseSessionImportResultDto>(
+      "/api/defense-sessions/import",
+      formData
+    );
   },
 
   // Start a defense session (change status to InProgress)

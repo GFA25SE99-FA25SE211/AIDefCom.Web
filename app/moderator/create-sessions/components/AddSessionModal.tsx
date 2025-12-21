@@ -134,7 +134,6 @@ const AddSessionModal: React.FC<AddSessionModalProps> = ({
             setSessionError("");
           }
         } catch (error) {
-          console.error("Error checking session:", error);
           setSessionError("");
         } finally {
           setIsCheckingSession(false);
