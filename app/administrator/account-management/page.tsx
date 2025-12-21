@@ -26,7 +26,7 @@ import { studentsApi } from "@/lib/api/students";
 import { lecturersApi } from "@/lib/api/lecturers";
 import { semestersApi } from "@/lib/api/semesters";
 import { majorsApi } from "@/lib/api/majors";
-import { swalConfig } from "@/lib/utils/sweetAlert";
+import { swalConfig, closeSwal } from "@/lib/utils/sweetAlert";
 import { getSimpleErrorMessage, getApiErrorMessage } from "@/lib/utils/apiError";
 import { authUtils } from "@/lib/utils/auth";
 import type { SemesterDto, MajorDto } from "@/lib/models";
@@ -160,7 +160,6 @@ export default function AccountManagementPage() {
         // Check if user is authenticated before fetching
         const userInfo = authUtils.getCurrentUserInfo();
         if (!userInfo.userId) {
-          console.warn("User not authenticated, redirecting to login...");
           window.location.href = "/login";
           return;
         }
@@ -173,20 +172,16 @@ export default function AccountManagementPage() {
 
         // Check if response has the expected structure
         if (!response || !response.data) {
-          console.warn("Unexpected response structure:", response);
           setUsers([]);
           return;
         }
 
         setUsers(mapUsersFromApi(response.data));
       } catch (error: any) {
-        console.error("Error fetching users:", error);
-        
         // Check if it's an authentication error
         if (error?.message?.includes("Authentication required") || 
             error?.status === 401 ||
             error?.errorData?.code === "DEF401") {
-          console.warn("Authentication error, redirecting to login...");
           window.location.href = "/login";
           return;
         }
@@ -253,7 +248,6 @@ export default function AccountManagementPage() {
         // Check if user is authenticated before fetching
         const userInfo = authUtils.getCurrentUserInfo();
         if (!userInfo.userId) {
-          console.warn("User not authenticated, skipping upload meta fetch");
           return;
         }
 
@@ -272,7 +266,7 @@ export default function AccountManagementPage() {
             prev.majorId || (majorList.length ? String(majorList[0].id) : ""),
         }));
       } catch (error) {
-        console.error("Error loading upload metadata:", error);
+        // Error loading upload metadata
       } finally {
         setUploadMetaLoading(false);
       }
@@ -363,15 +357,12 @@ export default function AccountManagementPage() {
       } catch (firstError: any) {
         // If ID field causes error, try without ID
         if (firstError.response?.data?.errors?.Id) {
-          console.log("ID field caused error, trying without ID...");
           const { id, ...dataWithoutId } = createAccountData;
           response = await authApi.createAccount(dataWithoutId);
         } else {
           throw firstError;
         }
       }
-
-      console.log("Create account response:", response);
 
       if (data.role && data.role !== "Student") {
         // Gửi "Admin" thay vì "Administrator" cho backend
@@ -385,7 +376,6 @@ export default function AccountManagementPage() {
       setIsCreateModalOpen(false);
       swalConfig.success("Success", "Account created");
     } catch (error: any) {
-      console.error("Error creating account:", error);
 
       const errorMessage = getSimpleErrorMessage(error, "Failed to create account");
       swalConfig.error("Create Failed", errorMessage);
@@ -430,7 +420,6 @@ export default function AccountManagementPage() {
       setEditingUser(null);
       swalConfig.success("Success", "Account updated");
     } catch (error: any) {
-      console.error("Error updating account:", error);
       
       // Sử dụng getApiErrorMessage để lấy cả message và details từ API response
       const errorMessage = getApiErrorMessage(error, "Failed to update account");
@@ -493,12 +482,6 @@ export default function AccountManagementPage() {
 
     // Nếu đang cố xóa chính mình và là admin, chặn lại
     if (isDeletingSelf && isUserAdmin) {
-      console.log("BLOCKED: Admin trying to delete themselves", {
-        currentUser: currentUser,
-        userToDelete: { id: user.id, email: user.email, roles: user.roles },
-        isDeletingSelf,
-        isUserAdmin,
-      });
       await swalConfig.error("Cannot Delete", "Cannot delete your own admin account");
       return;
     }
@@ -513,14 +496,12 @@ export default function AccountManagementPage() {
       setDeletingUserId(String(id));
       try {
         // Try the soft delete API call
-        const response = await authApi.softDeleteAccount(user.email);
-        console.log("Delete response:", response);
+        await authApi.softDeleteAccount(user.email);
 
         // Remove the user from the local state
         setUsers((prevUsers) => prevUsers.filter((u) => u.id !== id));
         swalConfig.success("Success", "Account deleted");
       } catch (error: any) {
-        console.error("Error deleting account:", error);
 
         const errorMessage = getSimpleErrorMessage(error, "Failed to delete account");
         swalConfig.error("Delete Failed", errorMessage);
@@ -538,10 +519,12 @@ export default function AccountManagementPage() {
       await studentsApi.downloadStudentGroupTemplate();
 
       setIsDownloadModalOpen(false);
-      await swalConfig.success("Success", "Student template downloaded");
+      closeSwal();
+      await swalConfig.success("Success", "Student-Group template downloaded successfully");
     } catch (error: any) {
-      console.error("Error downloading student-group template:", error);
-      swalConfig.error("Download Failed", "Template download failed");
+      closeSwal();
+      const errorMessage = error?.message || "Template download failed. Please try again.";
+      swalConfig.error("Download Failed", errorMessage);
     } finally {
       setIsDownloadingStudentTemplate(false);
     }
@@ -555,10 +538,12 @@ export default function AccountManagementPage() {
       await lecturersApi.downloadTemplate();
 
       setIsDownloadModalOpen(false);
-      await swalConfig.success("Success", "Lecturer template downloaded");
+      closeSwal();
+      await swalConfig.success("Success", "Lecturer template downloaded successfully");
     } catch (error: any) {
-      console.error("Error downloading lecturer template:", error);
-      swalConfig.error("Download Failed", "Template download failed");
+      closeSwal();
+      const errorMessage = error?.message || "Template download failed. Please try again.";
+      swalConfig.error("Download Failed", errorMessage);
     } finally {
       setIsDownloadingLecturerTemplate(false);
     }
@@ -633,8 +618,6 @@ export default function AccountManagementPage() {
       swalConfig.success("Success", "Student data uploaded");
       closeUploadModal();
     } catch (error: any) {
-      console.error("Error uploading student-group file:", error);
-
       const errorMessage = getSimpleErrorMessage(error, "Upload failed");
       swalConfig.error("Upload Failed", errorMessage);
     } finally {
@@ -657,7 +640,6 @@ export default function AccountManagementPage() {
       swalConfig.success("Success", "Lecturer data uploaded");
       closeUploadModal();
     } catch (error: any) {
-      console.error("Error uploading lecturer file:", error);
       swalConfig.error("Upload Failed", "Upload failed");
     } finally {
       setIsImportingFile(false);
@@ -678,7 +660,6 @@ export default function AccountManagementPage() {
         const userStr = localStorage.getItem("user");
         if (userStr) {
           const user = JSON.parse(userStr);
-          console.log("Current logged in user from localStorage:", user);
           return {
             userId: user.id || user.Id || user.userId || null,
             email: user.email || user.Email || null,
@@ -687,13 +668,12 @@ export default function AccountManagementPage() {
           };
         }
       } catch (error) {
-        console.error("Error parsing user from localStorage:", error);
+        // Error parsing user from localStorage
       }
     }
 
     // Fallback: thử lấy từ authUtils (token)
     const userInfo = authUtils.getCurrentUserInfo();
-    console.log("Current logged in user from token:", userInfo);
     return userInfo;
   }, []);
 
@@ -716,11 +696,6 @@ export default function AccountManagementPage() {
       const currentUserIdStr = String(currentUserInfo.userId).trim();
       const userToCheckIdStr = String(user.id).trim();
       if (currentUserIdStr === userToCheckIdStr) {
-        console.log("Match by userId:", {
-          currentUserIdStr,
-          userToCheckIdStr,
-          userEmail: user.email,
-        });
         return true;
       }
     }
@@ -730,11 +705,6 @@ export default function AccountManagementPage() {
       const currentEmailLower = currentUserInfo.email.toLowerCase().trim();
       const userEmailLower = user.email.toLowerCase().trim();
       if (currentEmailLower === userEmailLower) {
-        console.log("Match by email:", {
-          currentEmailLower,
-          userEmailLower,
-          userId: user.id,
-        });
         return true;
       }
     }

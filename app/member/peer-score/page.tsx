@@ -113,19 +113,7 @@ export default function PeerScoresPage() {
             return fallback;
           }
           
-          // Only log unexpected errors
-          if (!isExpectedError) {
-            console.error("API call failed:", error);
-          }
-          
-          // Check if it's a network error
-          if (
-            error?.isNetworkError ||
-            error?.message?.includes("Network error") ||
-            error?.message?.includes("Failed to fetch")
-          ) {
-            console.warn("Network error detected, using fallback data");
-          }
+          // Check if it's a network error (no logging)
           
           // Return fallback for all errors
           return fallback;
@@ -149,14 +137,6 @@ export default function PeerScoresPage() {
       const assignments = assignmentsResult.status === 'fulfilled' ? assignmentsResult.value : [];
       const users = usersResult.status === 'fulfilled' ? usersResult.value : [];
       const allScores = allScoresResult.status === 'fulfilled' ? allScoresResult.value : [];
-
-      // Debug logging
-      console.log("🔍 Debug Peer Scores Data:");
-      console.log("Groups:", groups.length, groups);
-      console.log("Sessions:", sessions.length, sessions);
-      console.log("Assignments:", assignments.length, assignments);
-      console.log("Users:", users.length, users);
-      console.log("All Scores:", allScores.length, allScores);
 
       // Transform data to score format
       const scores: ScoreData[] = [];
@@ -326,7 +306,6 @@ export default function PeerScoresPage() {
 
       // Final fallback: if we have scores but no organized data, create simple display
       if (scores.length === 0 && allScores.length > 0) {
-        console.log("🔄 Using direct scores fallback");
 
         // Group scores by student and session
         const sessionGroups = new Map<number, any[]>();
@@ -433,8 +412,6 @@ export default function PeerScoresPage() {
         });
       }
 
-      console.log("📊 Transformed scores:", scores);
-
       // Extract session IDs for SignalR subscription
       const uniqueSessionIds = Array.from(
         new Set(
@@ -447,22 +424,7 @@ export default function PeerScoresPage() {
 
       setScoreData(scores); // Don't use fallback mock data
     } catch (error: any) {
-      console.error("Error fetching peer scores:", error);
-
-      // Show user-friendly error message for network errors
-      if (
-        error?.isNetworkError ||
-        error?.message?.includes("Network error") ||
-        error?.message?.includes("Failed to fetch")
-      ) {
-        console.error("Network connection error. Please check:");
-        console.error("1. Is the backend server running?");
-        console.error("2. Is the API URL correct?");
-        console.error("3. Are CORS settings configured?");
-
-        // You can optionally show a toast/notification here
-        // For now, we'll use default data as fallback
-      }
+      // Error fetching peer scores
 
       setScoreData([]); // Don't use mock data on error
     } finally {
@@ -476,8 +438,6 @@ export default function PeerScoresPage() {
   // Real-time score updates via SignalR
   const { isConnected, connectionError } = useScoreRealTime({
     onScoreUpdate: (update) => {
-      console.log("📊 Real-time score update received:", update);
-
       // Always refresh data when score is updated - don't filter by session
       // This ensures we get the latest data even if sessionIds haven't been set yet
       // or if the update is for a different session that we should also display
@@ -497,13 +457,12 @@ export default function PeerScoresPage() {
       // Use a small delay to ensure backend has processed the update
       setTimeout(() => {
         if (fetchPeerScoresRef.current) {
-          console.log("🔄 Refreshing peer scores after real-time update...");
           fetchPeerScoresRef.current();
         }
       }, 500); // 500ms delay to ensure backend has processed the update
     },
     onError: (error) => {
-      console.error("❌ Real-time connection error:", error);
+      // Real-time connection error
 
       // Dispatch error event for notifications
       const event = new CustomEvent("scoreUpdate", {

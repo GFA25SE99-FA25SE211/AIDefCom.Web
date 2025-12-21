@@ -200,12 +200,6 @@ function GroupsToGradePageContent() {
           ? sessionsRes.data
           : [];
 
-        console.log("Groups API Response:", {
-          code: groupsRes.code,
-          message: groupsRes.message,
-          dataLength: groups.length,
-          sampleGroup: groups[0],
-        });
 
         if (groups.length === 0) {
           setGroupsData(defaultGroupsData);
@@ -233,10 +227,6 @@ function GroupsToGradePageContent() {
             tasksBySession = Array.isArray(tasksRes.data) ? tasksRes.data : [];
             hasPermissionInSession = tasksBySession.length > 0;
           } catch (error) {
-            console.error(
-              "Error fetching project tasks for permissions:",
-              error
-            );
             hasPermissionInSession = false;
           }
         }
@@ -375,9 +365,6 @@ function GroupsToGradePageContent() {
         );
 
         if (groupsWithSessions.length === 0) {
-          console.warn(
-            "No groups matched selected session, falling back to default data"
-          );
           setGroupsData(defaultGroupsData);
         } else {
           setGroupsData(groupsWithSessions);

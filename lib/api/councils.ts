@@ -32,12 +32,28 @@ export const councilsApi = {
   },
 
   downloadTemplate: async () => {
+    // Get token from localStorage
+    const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+    
+    if (!token || token === 'dummy-token-chair' || token.trim() === '') {
+      throw new Error('Authentication required. Please login first.');
+    }
+
     const response = await fetch(`${env.apiUrl}/api/councils/import/template`, {
       method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
     });
+
     if (!response.ok) {
-      throw new Error('Failed to download council template');
+      if (response.status === 401 || response.status === 403) {
+        throw new Error('Authentication failed. Please login again.');
+      }
+      const errorText = await response.text();
+      throw new Error(`Failed to download council template: ${response.status} ${response.statusText} - ${errorText}`);
     }
+
     const blob = await response.blob();
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -66,7 +82,6 @@ export const councilsApi = {
           council.description?.toLowerCase() === description.trim().toLowerCase()
       );
     } catch (error) {
-      console.error('Error checking council description:', error);
       return false;
     }
   },

@@ -135,7 +135,6 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
         setUserIdError("");
       }
     } catch (error) {
-      console.error("Error checking student code:", error);
       setUserIdError("");
     } finally {
       setIsCheckingUserId(false);

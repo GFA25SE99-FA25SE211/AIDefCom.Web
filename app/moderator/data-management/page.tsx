@@ -305,12 +305,6 @@ export default function DataManagementPage() {
           .catch(() => ({ code: 500, message: "Failed", data: [] })),
       ]);
 
-      console.log("API Responses:", {
-        semesters: semestersRes,
-        groups: groupsRes,
-        students: studentsRes,
-      });
-
       // Create lookup maps
       const semesterMap = new Map();
       (Array.isArray(semestersRes.data) ? semestersRes.data : []).forEach(
@@ -394,14 +388,6 @@ export default function DataManagementPage() {
             (s as any).group_id ||
             (s as any).groupID ||
             (s as any).Group_ID;
-
-          console.log(`Student ${index + 1}:`, {
-            studentData: s,
-            realId: s.id, // Log real ID from API
-            groupId: studentGroupId,
-            groupIdType: typeof studentGroupId,
-            foundInMap: groupMap.get(String(studentGroupId)),
-          });
 
           const actualGroupId = studentGroupId ? String(studentGroupId) : "";
           const groupDisplayName = actualGroupId
@@ -487,7 +473,7 @@ export default function DataManagementPage() {
       }));
       setReports(reportsData);
     } catch (error) {
-      console.error("Error fetching data:", error);
+      // Error fetching data
     } finally {
       setLoading(false);
     }
@@ -558,10 +544,10 @@ export default function DataManagementPage() {
         "Council template has been downloaded successfully."
       );
     } catch (error: any) {
-      console.error("Download template error:", error);
+      const errorMessage = error?.message || "Unable to download council template.";
       await swalConfig.error(
         "Download Failed",
-        getSimpleErrorMessage(error, "Unable to download council template.")
+        errorMessage
       );
     } finally {
       setIsDownloadingCouncilTemplate(false);
@@ -606,7 +592,6 @@ export default function DataManagementPage() {
       event.target.value = "";
     } catch (error: any) {
       setIsImportingCouncil(false);
-      console.error("Import council error:", error);
       await swalConfig.error(
         "Import Failed",
         getSimpleErrorMessage(error, "Unable to import councils.")
@@ -668,8 +653,6 @@ export default function DataManagementPage() {
     semesterId: string;
   }) => {
     try {
-      console.log("Add student data:", data);
-
       // Validate age (must be at least 18 years old)
       if (data.dob) {
         const today = new Date();
@@ -702,7 +685,6 @@ export default function DataManagementPage() {
         gender: data.gender,
         semesterId: Number(data.semesterId), // Include semester ID in the payload
       };
-      console.log("Create student payload:", createPayload);
 
       await studentsApi.create(createPayload);
       await fetchData();
@@ -768,7 +750,6 @@ export default function DataManagementPage() {
         "Student template has been downloaded successfully."
       );
     } catch (error: any) {
-      console.error("Download template error:", error);
       await swalConfig.error(
         "Download Failed",
         getSimpleErrorMessage(error, "Unable to download student template.")
@@ -801,7 +782,6 @@ export default function DataManagementPage() {
       event.target.value = "";
     } catch (error: any) {
       setIsImportingStudent(false);
-      console.error("Import student error:", error);
       await swalConfig.error(
         "Import Failed",
         getSimpleErrorMessage(error, "Unable to import students.")
@@ -916,9 +896,7 @@ export default function DataManagementPage() {
     }
   ) => {
     try {
-      console.log("Edit student data:", { id, data });
       const student = students.find((s) => s.id === id); // Now both are strings
-      console.log("Found student:", student);
 
       if (student) {
         const updatePayload = {
@@ -928,7 +906,6 @@ export default function DataManagementPage() {
           dateOfBirth: data.dob,
           gender: data.gender,
         };
-        console.log("Update student payload:", updatePayload);
 
         await studentsApi.update(student.id, updatePayload);
         await fetchData(); // This will refresh the data and update group info
@@ -959,8 +936,6 @@ export default function DataManagementPage() {
     }
   ) => {
     try {
-      console.log("Edit session data:", data);
-
       // Find the actual group ID from the display name
       let actualGroupId = data.groupId;
 
@@ -978,17 +953,13 @@ export default function DataManagementPage() {
         if (group) {
           actualGroupId = group.id;
         } else {
-          console.warn("Could not find group with display name:", data.groupId);
           // Try to find any group as fallback
           const firstGroup = groups[0];
           if (firstGroup) {
             actualGroupId = firstGroup.id;
-            console.log("Using fallback group:", firstGroup.id);
           }
         }
       }
-
-      console.log("Using actualGroupId:", actualGroupId);
 
       // Handle time properly - data.time could be just start time or start-end time format
       let startTime, endTime;
@@ -1024,8 +995,6 @@ export default function DataManagementPage() {
         status: data.status,
         councilId: data.councilId,
       };
-
-      console.log("Update payload:", updatePayload);
 
       await defenseSessionsApi.update(id, updatePayload);
       const response = await defenseSessionsApi.getAll();
@@ -1089,7 +1058,6 @@ export default function DataManagementPage() {
           "Council has been deleted successfully!"
         );
       } catch (error: any) {
-        console.error("Error deleting council:", error);
         await swalConfig.error(
           "Delete Failed",
           getSimpleErrorMessage(error, "Failed to delete council")
@@ -1115,7 +1083,6 @@ export default function DataManagementPage() {
         "Group has been deleted successfully!"
       );
     } catch (error: any) {
-      console.error("Error deleting group:", error);
       await swalConfig.error(
         "Delete Failed",
         getSimpleErrorMessage(error, "Failed to delete group")
@@ -1124,14 +1091,10 @@ export default function DataManagementPage() {
   };
 
   const handleDeleteStudent = async (studentId: string) => {
-    console.log("Delete student called with ID:", studentId);
-    console.log("Student ID type:", typeof studentId);
-
     // Find the actual student to get more info
     const student = students.find(
       (s) => s.id.toString() === studentId.toString() || s.userId === studentId
     );
-    console.log("Found student for deletion:", student);
 
     const result = await swalConfig.confirm(
       "Delete Student",
@@ -1144,16 +1107,13 @@ export default function DataManagementPage() {
     if (!result.isConfirmed) return;
 
     try {
-      console.log("Calling API delete with studentId:", studentId);
-      const deleteResponse = await studentsApi.delete(studentId);
-      console.log("Delete student API response:", deleteResponse);
+      await studentsApi.delete(studentId);
       await fetchData();
       await swalConfig.success(
         "Success",
         "Student has been deleted successfully!"
       );
     } catch (error: any) {
-      console.error("Error deleting student:", error);
       await swalConfig.error(
         "Error Deleting Student",
         getSimpleErrorMessage(error, "Failed to delete student")
@@ -1178,7 +1138,6 @@ export default function DataManagementPage() {
         "Session has been deleted successfully!"
       );
     } catch (error: any) {
-      console.error("Error deleting session:", error);
       await swalConfig.error(
         "Error Deleting Session",
         getSimpleErrorMessage(error, "Failed to delete session")
@@ -1196,9 +1155,7 @@ export default function DataManagementPage() {
     if (!result.isConfirmed) return;
 
     try {
-      console.log("Deleting transcript with id:", id);
-      const response = await transcriptsApi.delete(id);
-      console.log("Delete transcript response:", response);
+      await transcriptsApi.delete(id);
 
       setTranscripts((prev) => prev.filter((t) => t.id !== id));
       await swalConfig.success(
@@ -1206,7 +1163,6 @@ export default function DataManagementPage() {
         "Transcript has been deleted successfully!"
       );
     } catch (error: any) {
-      console.error("Error deleting transcript:", error);
       await swalConfig.error(
         "Error Deleting Transcript",
         getSimpleErrorMessage(error, "Failed to delete transcript")
@@ -1224,9 +1180,7 @@ export default function DataManagementPage() {
     if (!result.isConfirmed) return;
 
     try {
-      console.log("Deleting report with id:", id);
-      const response = await reportsApi.delete(id);
-      console.log("Delete report response:", response);
+      await reportsApi.delete(id);
 
       setReports((prev) => prev.filter((r) => r.id !== id));
       await swalConfig.success(
@@ -1234,7 +1188,6 @@ export default function DataManagementPage() {
         "Report has been deleted successfully!"
       );
     } catch (error: any) {
-      console.error("Error deleting report:", error);
       await swalConfig.error(
         "Error Deleting Report",
         getSimpleErrorMessage(error, "Failed to delete report")
@@ -1278,7 +1231,6 @@ export default function DataManagementPage() {
         );
       }
     } catch (error: any) {
-      console.error("Download report error:", error);
       await swalConfig.error(
         "Download Failed",
         getSimpleErrorMessage(error, "Unable to download report.")

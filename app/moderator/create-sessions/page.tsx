@@ -94,7 +94,7 @@ export default function CreateSessionsPage() {
         setGroups(normalizedGroups);
         setCouncils(councilsRes.data || []);
       } catch (error) {
-        console.error("Error fetching data:", error);
+        // Error fetching data
       } finally {
         setLoading(false);
       }
@@ -105,11 +105,13 @@ export default function CreateSessionsPage() {
 
   const handleDownloadTemplate = async () => {
     try {
+      swalConfig.loading("Downloading...", "Please wait");
       await defenseSessionsApi.downloadTemplate();
       setIsDownloadModalOpen(false);
+      await swalConfig.success("Download Complete", "Template downloaded successfully");
     } catch (error: any) {
-      console.error("Download template failed:", error);
-      await swalConfig.error("Download Failed", "Template download failed");
+      const errorMessage = error?.message || "Template download failed";
+      await swalConfig.error("Download Failed", errorMessage);
     }
   };
 
@@ -124,14 +126,76 @@ export default function CreateSessionsPage() {
     if (!file) return;
 
     try {
-      await defenseSessionsApi.importFromFile(file);
+      swalConfig.loading("Importing...", "Processing file");
+      const response = await defenseSessionsApi.importFromFile(file);
+      
+      // Refresh sessions
       const refreshed = await defenseSessionsApi.getAll();
       setSessions(refreshed.data || []);
-      await swalConfig.success("Import Complete", "Defense sessions imported!");
+      
+      // Show detailed import result
+      const result = response.data;
+      if (result) {
+        const successCount = result.successCount || 0;
+        const failureCount = result.failureCount || 0;
+        const totalRows = result.totalRows || 0;
+        
+        if (failureCount === 0) {
+          await swalConfig.success(
+            "Import Complete",
+            `Successfully imported ${successCount} defense session(s)`
+          );
+        } else {
+          // Build error message with details
+          let errorDetails = `Success: ${successCount}, Failed: ${failureCount} out of ${totalRows} rows.\n\n`;
+          
+          if (result.errors && result.errors.length > 0) {
+            errorDetails += "Errors:\n";
+            result.errors.slice(0, 10).forEach((err, idx) => {
+              errorDetails += `${idx + 1}. Row ${err.row}, ${err.field}: ${err.errorMessage}\n`;
+            });
+            if (result.errors.length > 10) {
+              errorDetails += `... and ${result.errors.length - 10} more errors`;
+            }
+          }
+          
+          await swalConfig.warning("Import Completed with Errors", errorDetails);
+        }
+      } else {
+        await swalConfig.success("Import Complete", "Defense sessions imported!");
+      }
+      
       setIsUploadModalOpen(false);
     } catch (error: any) {
-      console.error("Upload failed:", error);
-      await swalConfig.error("Import Failed", "File upload failed");
+      // Extract error details from API response
+      const errorData = error?.errorData || error?.data || error?.response?.data;
+      let errorMessage = "File upload failed";
+      
+      if (errorData) {
+        if (errorData.data) {
+          // DefenseSessionImportResultDto with errors
+          const result = errorData.data;
+          if (result.errors && result.errors.length > 0) {
+            errorMessage = `Import failed: ${result.failureCount || 0} error(s) found.\n\n`;
+            result.errors.slice(0, 10).forEach((err: any, idx: number) => {
+              errorMessage += `${idx + 1}. Row ${err.row}, ${err.field}: ${err.errorMessage}\n`;
+            });
+            if (result.errors.length > 10) {
+              errorMessage += `... and ${result.errors.length - 10} more errors`;
+            }
+          } else if (result.message) {
+            errorMessage = result.message;
+          }
+        } else if (errorData.message) {
+          errorMessage = errorData.message;
+        } else if (errorData.details) {
+          errorMessage = errorData.details;
+        }
+      } else if (error?.message) {
+        errorMessage = error.message;
+      }
+      
+      await swalConfig.error("Import Failed", errorMessage);
     } finally {
       event.target.value = "";
     }
@@ -212,7 +276,6 @@ export default function CreateSessionsPage() {
         "The defense session has been scheduled successfully."
       );
     } catch (error: any) {
-      console.error("Error creating session:", error);
       const apiDetails =
         error?.errorData?.details ||
         error?.errorData?.message ||

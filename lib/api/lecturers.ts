@@ -11,12 +11,27 @@ export const lecturersApi = {
   },
 
   downloadTemplate: async () => {
+    // Get token from localStorage
+    const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+    
+    if (!token || token === 'dummy-token-chair') {
+      throw new Error('Authentication required. Please login first.');
+    }
+
     const response = await fetch(`${env.apiUrl}/api/lecturers/import/template`, {
       method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
     });
+
     if (!response.ok) {
-      throw new Error('Failed to download lecturer template');
+      if (response.status === 401 || response.status === 403) {
+        throw new Error('Authentication failed. Please login again.');
+      }
+      throw new Error(`Failed to download template: ${response.statusText}`);
     }
+
     const blob = await response.blob();
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');

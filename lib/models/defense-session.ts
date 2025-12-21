@@ -35,3 +35,20 @@ export interface DefenseSessionUpdateDto {
   status?: string;
   councilId?: number;
 }
+
+// Import Result DTOs
+export interface ImportErrorDto {
+  row: number;
+  field: string;
+  errorMessage: string;
+  value: string;
+}
+
+export interface DefenseSessionImportResultDto {
+  totalRows: number;
+  successCount: number;
+  failureCount: number;
+  errors: ImportErrorDto[];
+  createdDefenseSessionIds: number[];
+  message?: string;
+}

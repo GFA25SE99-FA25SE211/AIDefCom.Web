@@ -205,7 +205,7 @@ export default function ViewScorePage() {
                 }
               }
             } catch (err) {
-              console.error("Failed to get session role:", err);
+              // Failed to get session role
             }
           }
         }
@@ -217,28 +217,12 @@ export default function ViewScorePage() {
         // Ưu tiên 1: Lấy rubrics từ API theo lecturer và session
         if (groupSession && currentUserId) {
           try {
-            console.log(
-              "🔍 Attempting to load rubrics from lecturer/session API:",
-              {
-                lecturerId: currentUserId,
-                sessionId: groupSession.id,
-              }
-            );
-
             // Gọi API mới để lấy danh sách tên rubrics
             const rubricsRes =
               await projectTasksApi.getRubricsByLecturerAndSession(
                 currentUserId,
                 groupSession.id
               );
-
-            console.log("📋 Rubrics API response:", {
-              hasData: !!rubricsRes.data,
-              dataLength: Array.isArray(rubricsRes.data)
-                ? rubricsRes.data.length
-                : 0,
-              rubricNames: rubricsRes.data,
-            });
 
             if (
               rubricsRes.data &&
@@ -254,15 +238,6 @@ export default function ViewScorePage() {
                 : [];
 
               // Map tên rubrics với full rubric objects, giữ nguyên thứ tự từ API
-              console.log("🔍 Debug mapping process:", {
-                rubricNamesFromAPI: rubricsRes.data,
-                allRubricsCount: allRubrics.length,
-                sampleAllRubrics: allRubrics.slice(0, 3).map((r: any) => ({
-                  id: r.id,
-                  rubricName: r.rubricName,
-                })),
-              });
-
               rubricsList = rubricsRes.data.map((rubricName: string) => {
                 // Tìm rubric theo tên (case-insensitive)
                 const rubric = allRubrics.find(
@@ -270,16 +245,8 @@ export default function ViewScorePage() {
                     r.rubricName?.toLowerCase() === rubricName.toLowerCase()
                 );
 
-                console.log("🔍 Mapping rubric:", {
-                  searchingFor: rubricName,
-                  found: !!rubric,
-                  rubricId: rubric?.id,
-                  rubricName: rubric?.rubricName,
-                });
-
                 // If not found, create a fallback rubric object
                 if (!rubric) {
-                  console.warn("⚠️ Creating fallback rubric for:", rubricName);
                   return {
                     id: Date.now() + Math.random(), // Temporary ID
                     rubricName: rubricName,
@@ -292,46 +259,15 @@ export default function ViewScorePage() {
               });
 
               setRubrics(rubricsList);
-              console.log(
-                "✅ Rubrics loaded from lecturer/session API:",
-                rubricsList.length,
-                "rubrics:",
-                rubricsList
-              );
             } else {
               // API trả về data: [] - không có rubrics
-              console.warn(
-                "⚠️ No rubrics found from lecturer/session API (empty array)"
-              );
               setRubrics([]); // Set empty để hiển thị message yêu cầu thêm tiêu chí
               rubricsList = []; // Đảm bảo rubricsList rỗng
               shouldSkipFallback = true; // Đánh dấu không fallback sang major rubrics
             }
           } catch (error: any) {
-            // Nếu là 404 hoặc endpoint chưa có, fallback về logic cũ
-            const is404 =
-              error?.status === 404 ||
-              error?.message?.includes("404") ||
-              error?.message?.includes("not found");
-            if (is404) {
-              console.warn(
-                "⚠️ Lecturer/session API endpoint not found (404), falling back to old logic"
-              );
-            } else {
-              console.error(
-                "❌ Error fetching rubrics from lecturer/session API:",
-                error
-              );
-            }
             // Continue to fallback logic below
           }
-        } else {
-          console.warn("⚠️ Cannot load rubrics from lecturer/session API:", {
-            hasSession: !!groupSession,
-            hasUserId: !!currentUserId,
-            sessionId: groupSession?.id,
-            userId: currentUserId,
-          });
         }
 
         // Fallback: Lấy rubrics theo majorId nếu chưa có từ project tasks
@@ -339,20 +275,9 @@ export default function ViewScorePage() {
         // KHÔNG fallback nếu API trả về data: [] (shouldSkipFallback = true)
         if (rubricsList.length === 0 && group?.majorId && !shouldSkipFallback) {
           try {
-            console.log(
-              "🔍 Fallback: Loading rubrics from majorId:",
-              group.majorId
-            );
             const majorRubricsRes = await majorRubricsApi.getByMajorId(
               group.majorId
             );
-            console.log("📋 Major rubrics response:", {
-              hasData: !!majorRubricsRes.data,
-              dataLength: Array.isArray(majorRubricsRes.data)
-                ? majorRubricsRes.data.length
-                : 0,
-              data: majorRubricsRes.data,
-            });
 
             if (
               majorRubricsRes.data &&
@@ -375,7 +300,6 @@ export default function ViewScorePage() {
                 // Lấy full rubric info từ các rubricIds
                 const rubricPromises = rubricIds.map((rubricId: number) =>
                   rubricsApi.getById(rubricId).catch((err) => {
-                    console.error(`Error fetching rubric ${rubricId}:`, err);
                     return { data: null };
                   })
                 );
@@ -387,40 +311,16 @@ export default function ViewScorePage() {
                   .filter((r: any): r is any => r !== null && r !== undefined);
 
                 setRubrics(rubricsList);
-                console.log(
-                  "✅ Rubrics loaded from major:",
-                  rubricsList.length,
-                  "rubrics:",
-                  rubricsList
-                );
-              } else {
-                console.warn(
-                  "⚠️ No valid rubricIds found in major-rubrics response"
-                );
               }
-            } else {
-              console.warn(
-                "⚠️ Major rubrics response is not an array or empty"
-              );
             }
           } catch (error) {
-            console.error("❌ Error fetching rubrics by major:", error);
+            // Error fetching rubrics by major
           }
-        } else if (rubricsList.length === 0) {
-          console.warn("⚠️ Cannot load rubrics from major - no majorId:", {
-            hasGroup: !!group,
-            majorId: group?.majorId,
-          });
         }
 
         // Nếu vẫn không có rubrics, để trống (không dùng default criteria)
         if (rubricsList.length === 0) {
-          console.warn(
-            "⚠️ No rubrics found for group/session, will leave empty (no default criteria)"
-          );
           setRubrics([]);
-        } else {
-          console.log("✅ Final rubrics list:", rubricsList.length, "items");
         }
 
         if (group) {
@@ -505,12 +405,7 @@ export default function ViewScorePage() {
               const notesRes = await memberNotesApi.getBySessionId(groupSession.id);
               const notes = notesRes.data || [];
               setMemberNotes(notes);
-              
-              // Map notes to students by committeeAssignmentId or userName
-              // Note: We'll display notes separately, not in student.note field
-              console.log("Loaded member notes:", notes);
             } catch (error) {
-              console.error("Error loading member notes:", error);
               setMemberNotes([]);
             }
           }
@@ -529,7 +424,7 @@ export default function ViewScorePage() {
           setStudentScores(normalizedStudents);
         }
       } catch (error) {
-        console.error("Error fetching group data:", error);
+        // Error fetching group data
         const defaultData = allGroupsData[groupId] || allGroupsData["1"];
         const rubricCountFallback = rubricsList.length;
         const normalizedStudents = buildFallbackStudents(
@@ -585,7 +480,6 @@ export default function ViewScorePage() {
         );
       }
     } else if (eventType === "error") {
-      console.error("STT Error:", msg.message || msg.error);
       swalConfig.error("Speech Error", "Speech processing failed");
     } else if (eventType === "broadcast_transcript") {
       // Transcript từ client khác trong cùng session (thư ký hoặc member khác nói)
@@ -594,10 +488,8 @@ export default function ViewScorePage() {
         msg.source_session_id &&
         msg.source_session_id === mySessionIdRef.current
       ) {
-        console.log("🚫 Ignoring broadcast from self");
         return;
       }
-      console.log("📢 Broadcast from other client:", msg.speaker, msg.text);
       // Member có thể hiển thị hoặc bỏ qua tùy nhu cầu
     } else if (eventType === "broadcast_question_started") {
       // Người khác (chair/thư ký/member khác) bắt đầu đặt câu hỏi - dùng toast nhẹ
@@ -642,12 +534,6 @@ export default function ViewScorePage() {
         swalConfig.toast.success(`Question from ${speakerName} recorded`);
       }
     } else if (eventType === "connected") {
-      console.log(
-        "✅ WebSocket connected:",
-        msg.session_id,
-        "room_size:",
-        msg.room_size
-      );
       // Lưu session_id của mình
       if (msg.session_id) {
         setMySessionId(msg.session_id);
@@ -657,11 +543,9 @@ export default function ViewScorePage() {
       // Chỉ enable khi nhận được session_started từ thư ký
     } else if (eventType === "session_started") {
       // Thư ký đã bắt đầu ghi âm - cho phép member sử dụng mic
-      console.log("🎤 Session started by secretary - mic enabled");
       setSessionStarted(true);
     } else if (eventType === "session_ended") {
       // Thư ký đã kết thúc phiên
-      console.log("🛑 Session ended by secretary - mic disabled");
       setSessionStarted(false);
     }
   };
@@ -823,14 +707,7 @@ export default function ViewScorePage() {
                 try {
                   const rubricIdRes = await rubricsApi.getIdByName(rubricName);
                   const validatedRubricId = rubricIdRes.data;
-                  console.log(
-                    `✅ Validated rubric ID ${validatedRubricId} for update, name: "${rubricName}"`
-                  );
                 } catch (nameError: any) {
-                  console.warn(
-                    `⚠️ Could not validate rubric by name "${rubricName}" for update:`,
-                    nameError.message
-                  );
                   // Continue with update anyway since rubricId is not required in ScoreUpdateDto
                 }
               }
@@ -840,7 +717,6 @@ export default function ViewScorePage() {
                 comment: criterionComment || undefined,
               });
             } catch (error) {
-              console.error("Error updating score:", error);
               // Continue with next score instead of breaking the entire save process
             }
           } else if (score > 0) {
@@ -850,10 +726,8 @@ export default function ViewScorePage() {
               // Get rubric ID by name using API
               const rubricName = (rubric.rubricName || rubric.name)?.trim();
               if (!rubricName) {
-                console.error("Missing rubric name for rubric:", rubric);
                 // Fallback: try to use rubric.id if available
                 if (rubric.id && typeof rubric.id === "number") {
-                  console.warn("Using rubric.id as fallback:", rubric.id);
                   rubricId = rubric.id;
                 } else {
                   continue; // Skip this rubric if no name and no id
@@ -862,24 +736,11 @@ export default function ViewScorePage() {
                 try {
                   const rubricIdRes = await rubricsApi.getIdByName(rubricName);
                   rubricId = rubricIdRes.data;
-                  console.log(
-                    `✅ Found rubric ID ${rubricId} for name: "${rubricName}"`
-                  );
                 } catch (nameError: any) {
-                  console.warn(
-                    `⚠️ Could not find rubric by name "${rubricName}":`,
-                    nameError.message
-                  );
                   // Fallback: try to use rubric.id if available
                   if (rubric.id && typeof rubric.id === "number") {
-                    console.warn(
-                      `Using rubric.id ${rubric.id} as fallback for name "${rubricName}"`
-                    );
                     rubricId = rubric.id;
                   } else {
-                    console.error(
-                      `❌ Cannot create score: rubric not found by name "${rubricName}" and no rubric.id available`
-                    );
                     continue; // Skip this rubric
                   }
                 }
@@ -894,23 +755,6 @@ export default function ViewScorePage() {
                 comment: criterionComment || undefined,
               };
 
-              // Debug logging before API call
-              console.log("Creating score with DTO:", {
-                value: score,
-                rubricId,
-                evaluatorId: currentUserId,
-                studentId: student.id,
-                sessionId,
-                comment: criterionComment,
-                hasValidData: !!(
-                  score &&
-                  rubricId &&
-                  currentUserId &&
-                  student.id &&
-                  sessionId
-                ),
-              });
-
               // Validate all required fields are present
               if (
                 !score ||
@@ -919,22 +763,12 @@ export default function ViewScorePage() {
                 !student.id ||
                 !sessionId
               ) {
-                console.error("Missing required fields for score creation:", {
-                  score: !!score,
-                  rubricId: !!rubricId,
-                  currentUserId: !!currentUserId,
-                  studentId: !!student.id,
-                  sessionId: !!sessionId,
-                });
                 continue; // Skip this score
               }
 
               await scoresApi.create(newScore);
             } catch (error) {
-              console.error(
-                "Error getting rubric ID or creating score:",
-                error
-              );
+              // Error getting rubric ID or creating score
               // Continue with next score instead of breaking the entire save process
             }
           }
@@ -990,7 +824,7 @@ export default function ViewScorePage() {
           setStudentScores(updatedStudents);
         }
       } catch (error) {
-        console.error("Error refreshing scores after save:", error);
+        // Error refreshing scores after save
       }
       
       // Hiển thị success message sau khi đã refresh data
@@ -1005,7 +839,6 @@ export default function ViewScorePage() {
       // Return ngay để tránh bất kỳ logic nào khác có thể trigger redirect
       return;
     } catch (error: any) {
-      console.error("Error saving scores:", error);
       // Close loading dialog if it exists
       Swal.close();
       swalConfig.error("Error", "Failed to save scores");
