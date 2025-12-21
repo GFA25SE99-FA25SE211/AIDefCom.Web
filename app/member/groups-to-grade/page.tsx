@@ -208,7 +208,6 @@ function GroupsToGradePageContent() {
         });
 
         if (groups.length === 0) {
-          console.warn("No groups found in API response");
           setGroupsData(defaultGroupsData);
           return;
         }
@@ -384,7 +383,6 @@ function GroupsToGradePageContent() {
           setGroupsData(groupsWithSessions);
         }
       } catch (error) {
-        console.error("Error fetching groups:", error);
         setGroupsData(defaultGroupsData);
       } finally {
         setLoading(false);

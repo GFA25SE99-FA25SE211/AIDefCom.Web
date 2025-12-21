@@ -9,9 +9,9 @@ import { scoresApi } from "@/lib/api/scores";
 import { authApi } from "@/lib/api/auth";
 import { rubricsApi } from "@/lib/api/rubrics";
 import { studentsApi } from "@/lib/api/students";
-import { useScoreRealTime } from "@/lib/hooks/useScoreRealTime";
+// import { useScoreRealTime } from "@/lib/hooks/useScoreRealTime"; // Tạm thời tắt SignalR
 import { useVoiceEnrollmentCheck } from "@/lib/hooks/useVoiceEnrollmentCheck";
-import { ScoreNotifications } from "@/lib/components/ScoreNotifications";
+// import { ScoreNotifications } from "@/lib/components/ScoreNotifications"; // Tạm thời tắt SignalR
 import type { GroupDto, DefenseSessionDto, ScoreReadDto } from "@/lib/models";
 
 interface ScoreCriteriaDetail {
@@ -419,51 +419,55 @@ export default function PeerScoresPage() {
   // Store ref for useScoreRealTime callback
   fetchPeerScoresRef.current = fetchPeerScores;
 
-  // Real-time score updates - subscribe to all sessions
-  const { isConnected, connectionError } = useScoreRealTime({
-    onScoreUpdate: (update) => {
-      console.log("📊 Real-time score update received:", update);
+  // Real-time score updates - TẠM THỜI TẮT SignalR
+  // const { isConnected, connectionError } = useScoreRealTime({
+  //   onScoreUpdate: (update) => {
+  //     console.log("📊 Real-time score update received:", update);
 
-      // Check if this update is relevant to any of our sessions
-      const isRelevant = 
-        !update.sessionId || 
-        sessionIds.includes(update.sessionId) ||
-        sessionIds.length === 0;
+  //     // Check if this update is relevant to any of our sessions
+  //     const isRelevant = 
+  //       !update.sessionId || 
+  //       sessionIds.includes(update.sessionId) ||
+  //       sessionIds.length === 0;
 
-      if (isRelevant) {
-        // Dispatch custom event for notifications
-        const event = new CustomEvent("scoreUpdate", {
-          detail: {
-            message: update.sessionId
-              ? `Score updated for session ${update.sessionId}`
-              : "Score updated",
-            type: "success",
-          },
-        });
-        window.dispatchEvent(event);
+  //     if (isRelevant) {
+  //     // Dispatch custom event for notifications
+  //     const event = new CustomEvent("scoreUpdate", {
+  //       detail: {
+  //         message: update.sessionId
+  //           ? `Score updated for session ${update.sessionId}`
+  //           : "Score updated",
+  //         type: "success",
+  //       },
+  //     });
+  //     window.dispatchEvent(event);
 
-        // Refresh data when score is updated
-        if (fetchPeerScoresRef.current) {
-          console.log("🔄 Refreshing peer scores after real-time update...");
-          fetchPeerScoresRef.current();
-        }
-      }
-    },
-    onError: (error) => {
-      console.error("❌ Real-time connection error:", error);
+  //     // Refresh data when score is updated
+  //     if (fetchPeerScoresRef.current) {
+  //         console.log("🔄 Refreshing peer scores after real-time update...");
+  //       fetchPeerScoresRef.current();
+  //       }
+  //     }
+  //   },
+  //   onError: (error) => {
+  //     console.error("❌ Real-time connection error:", error);
 
-      // Dispatch error event for notifications
-      const event = new CustomEvent("scoreUpdate", {
-        detail: {
-          message: "Real-time connection error. Please refresh the page.",
-          type: "error",
-        },
-      });
-      window.dispatchEvent(event);
-    },
-    sessionIds: sessionIds,
-    subscribeToAll: sessionIds.length === 0, // Subscribe to all if no specific sessions
-  });
+  //     // Dispatch error event for notifications
+  //     const event = new CustomEvent("scoreUpdate", {
+  //       detail: {
+  //         message: "Real-time connection error. Please refresh the page.",
+  //         type: "error",
+  //       },
+  //     });
+  //     window.dispatchEvent(event);
+  //   },
+  //   sessionIds: sessionIds,
+  //   subscribeToAll: sessionIds.length === 0, // Subscribe to all if no specific sessions
+  // });
+
+  // Tạm thời disable SignalR - dùng giá trị mặc định
+  const isConnected = false;
+  const connectionError = null;
 
   useEffect(() => {
     fetchPeerScores();
@@ -481,8 +485,8 @@ export default function PeerScoresPage() {
 
   return (
     <>
-      {/* Real-time Score Notifications */}
-      <ScoreNotifications position="top-right" />
+      {/* Real-time Score Notifications - TẠM THỜI TẮT */}
+      {/* <ScoreNotifications position="top-right" /> */}
 
       <main className="main-content">
         <header className="main-header flex flex-col md:flex-row md:items-center md:justify-between bg-white p-5 rounded-2xl shadow-sm border border-gray-100 mb-6">
@@ -513,11 +517,12 @@ export default function PeerScoresPage() {
                 {isConnected ? "Live" : "Offline"}
               </span>
             </div>
-            {connectionError && (
+            {/* Connection error display - TẠM THỜI TẮT vì SignalR đã tắt */}
+            {/* {connectionError && (
               <span className="text-xs text-red-500" title={connectionError.message}>
                 Connection error
               </span>
-            )}
+            )} */}
           </div>
         </header>
 

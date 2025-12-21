@@ -27,7 +27,7 @@ import { lecturersApi } from "@/lib/api/lecturers";
 import { semestersApi } from "@/lib/api/semesters";
 import { majorsApi } from "@/lib/api/majors";
 import { swalConfig } from "@/lib/utils/sweetAlert";
-import { getSimpleErrorMessage } from "@/lib/utils/apiError";
+import { getSimpleErrorMessage, getApiErrorMessage } from "@/lib/utils/apiError";
 import { authUtils } from "@/lib/utils/auth";
 import type { SemesterDto, MajorDto } from "@/lib/models";
 
@@ -402,8 +402,19 @@ export default function AccountManagementPage() {
       swalConfig.success("Success", "Account updated");
     } catch (error: any) {
       console.error("Error updating account:", error);
-      const errorMessage = getSimpleErrorMessage(error, "Failed to update account");
+      
+      // Sử dụng getApiErrorMessage để lấy cả message và details từ API response
+      const errorMessage = getApiErrorMessage(error, "Failed to update account");
+      
+      // Kiểm tra nếu có details về password validation
+      const errorData = error?.response?.data || error?.data || error?.errorData;
+      if (errorData?.details) {
+        // Hiển thị details trực tiếp nếu có (ví dụ: "Password must be at least 8 characters long")
+        swalConfig.error("Update Failed", errorData.details);
+      } else {
+        // Fallback về message chung
       swalConfig.error("Update Failed", errorMessage);
+      }
     }
   };
 

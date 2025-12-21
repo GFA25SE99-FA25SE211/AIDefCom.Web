@@ -23,7 +23,7 @@ import { committeeAssignmentsApi } from "@/lib/api/committee-assignments";
 import { swalConfig, closeSwal } from "@/lib/utils/sweetAlert";
 import { useAudioRecorder } from "@/lib/hooks/useAudioRecorder";
 import { useVoiceEnrollmentCheck } from "@/lib/hooks/useVoiceEnrollmentCheck";
-import { useScoreRealTime } from "@/lib/hooks/useScoreRealTime";
+// import { useScoreRealTime } from "@/lib/hooks/useScoreRealTime"; // Tạm thời tắt SignalR
 import { authUtils } from "@/lib/utils/auth";
 import Swal from "sweetalert2";
 import type { GroupDto, StudentDto, ScoreCreateDto, MemberNoteDto } from "@/lib/models";
@@ -120,131 +120,135 @@ export default function GradeGroupPage() {
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string>("");
   const [memberNotes, setMemberNotes] = useState<MemberNoteDto[]>([]);
+  const savingRef = useRef(false); // Ref để prevent redirect khi đang save
 
   // Get sessionId from URL if available
   const urlSessionId = searchParams?.get("sessionId");
 
-  // Real-time score updates via SignalR
-  const handleScoreUpdate = useCallback(
-    (update: any) => {
-      console.log("📊 Real-time score update received:", update);
+  // Real-time score updates via SignalR - TẠM THỜI TẮT
+  // const handleScoreUpdate = useCallback(
+  //   (update: any) => {
+  //     console.log("📊 Real-time score update received:", update);
       
-      // Refresh scores when real-time update is received
-      if (update.sessionId === sessionId || update.studentId) {
-        // Reload scores for the affected student or session
-        const refreshScores = async () => {
-          try {
-            if (update.studentId && groupData) {
-              // Reload scores for specific student
-              const scoresRes = await scoresApi.getByStudentId(update.studentId);
-              const updatedScores = scoresRes.data || [];
+  //     // Refresh scores when real-time update is received
+  //     if (update.sessionId === sessionId || update.studentId) {
+  //       // Reload scores for the affected student or session
+  //       const refreshScores = async () => {
+  //         try {
+  //           if (update.studentId && groupData) {
+  //             // Reload scores for specific student
+  //             const scoresRes = await scoresApi.getByStudentId(update.studentId);
+  //             const updatedScores = scoresRes.data || [];
               
-              // Update student scores in state
-              setStudentScores((prev) =>
-                prev.map((student) => {
-                  if (student.id === update.studentId) {
-                    // Update scores array based on rubric order
-                    const newScores = rubrics.map((rubric) => {
-                      const score = updatedScores.find(
-                        (s: any) =>
-                          s.rubricId === rubric.id &&
-                          s.evaluatorId === currentUserId
-                      );
-                      return score ? score.value : 0;
-                    });
+  //             // Update student scores in state
+  //             setStudentScores((prev) =>
+  //               prev.map((student) => {
+  //                 if (student.id === update.studentId) {
+  //                   // Update scores array based on rubric order
+  //                   const newScores = rubrics.map((rubric) => {
+  //                     const score = updatedScores.find(
+  //                       (s: any) =>
+  //                         s.rubricId === rubric.id &&
+  //                         s.evaluatorId === currentUserId
+  //                     );
+  //                     return score ? score.value : 0;
+  //                   });
                     
-                    const newComments = rubrics.map((rubric) => {
-                      const score = updatedScores.find(
-                        (s: any) =>
-                          s.rubricId === rubric.id &&
-                          s.evaluatorId === currentUserId
-                      );
-                      return score?.comment || "";
-                    });
+  //                   const newComments = rubrics.map((rubric) => {
+  //                     const score = updatedScores.find(
+  //                       (s: any) =>
+  //                         s.rubricId === rubric.id &&
+  //                         s.evaluatorId === currentUserId
+  //                     );
+  //                     return score?.comment || "";
+  //                   });
                     
-                    const newScoreIds = rubrics.map((rubric) => {
-                      const score = updatedScores.find(
-                        (s: any) =>
-                          s.rubricId === rubric.id &&
-                          s.evaluatorId === currentUserId
-                      );
-                      return score?.id || 0;
-                    });
+  //                   const newScoreIds = rubrics.map((rubric) => {
+  //                     const score = updatedScores.find(
+  //                       (s: any) =>
+  //                         s.rubricId === rubric.id &&
+  //                         s.evaluatorId === currentUserId
+  //                     );
+  //                     return score?.id || 0;
+  //                   });
                     
-                    return {
-                      ...student,
-                      scores: newScores,
-                      criterionComments: newComments,
-                      existingScoreIds: newScoreIds,
-                    };
-                  }
-                  return student;
-                })
-              );
-            } else if (update.sessionId === sessionId) {
-              // Reload all scores for the session
-              if (groupData && sessionId) {
-                const scoresRes = await scoresApi.getBySessionId(sessionId);
-                const allScores = scoresRes.data || [];
+  //                   return {
+  //                     ...student,
+  //                     scores: newScores,
+  //                     criterionComments: newComments,
+  //                     existingScoreIds: newScoreIds,
+  //                   };
+  //                 }
+  //                 return student;
+  //               })
+  //             );
+  //           } else if (update.sessionId === sessionId) {
+  //             // Reload all scores for the session
+  //             if (groupData && sessionId) {
+  //               const scoresRes = await scoresApi.getBySessionId(sessionId);
+  //               const allScores = scoresRes.data || [];
                 
-                // Update all students' scores
-                setStudentScores((prev) =>
-                  prev.map((student) => {
-                    const studentScores = allScores.filter(
-                      (s: any) =>
-                        s.studentId === student.id &&
-                        s.evaluatorId === currentUserId
-                    );
+  //               // Update all students' scores
+  //               setStudentScores((prev) =>
+  //                 prev.map((student) => {
+  //                   const studentScores = allScores.filter(
+  //                     (s: any) =>
+  //                       s.studentId === student.id &&
+  //                       s.evaluatorId === currentUserId
+  //                   );
                     
-                    const newScores = rubrics.map((rubric) => {
-                      const score = studentScores.find(
-                        (s: any) => s.rubricId === rubric.id
-                      );
-                      return score ? score.value : 0;
-                    });
+  //                   const newScores = rubrics.map((rubric) => {
+  //                     const score = studentScores.find(
+  //                       (s: any) => s.rubricId === rubric.id
+  //                     );
+  //                     return score ? score.value : 0;
+  //                   });
                     
-                    const newComments = rubrics.map((rubric) => {
-                      const score = studentScores.find(
-                        (s: any) => s.rubricId === rubric.id
-                      );
-                      return score?.comment || "";
-                    });
+  //                   const newComments = rubrics.map((rubric) => {
+  //                     const score = studentScores.find(
+  //                       (s: any) => s.rubricId === rubric.id
+  //                     );
+  //                     return score?.comment || "";
+  //                   });
                     
-                    const newScoreIds = rubrics.map((rubric) => {
-                      const score = studentScores.find(
-                        (s: any) => s.rubricId === rubric.id
-                      );
-                      return score?.id || 0;
-                    });
+  //                   const newScoreIds = rubrics.map((rubric) => {
+  //                     const score = studentScores.find(
+  //                       (s: any) => s.rubricId === rubric.id
+  //                     );
+  //                     return score?.id || 0;
+  //                   });
                     
-                    return {
-                      ...student,
-                      scores: newScores,
-                      criterionComments: newComments,
-                      existingScoreIds: newScoreIds,
-                    };
-                  })
-                );
-              }
-            }
-          } catch (error) {
-            console.error("Error refreshing scores after real-time update:", error);
-          }
-        };
+  //                   return {
+  //                     ...student,
+  //                     scores: newScores,
+  //                     criterionComments: newComments,
+  //                     existingScoreIds: newScoreIds,
+  //                   };
+  //                 })
+  //               );
+  //             }
+  //           }
+  //         } catch (error) {
+  //           console.error("Error refreshing scores after real-time update:", error);
+  //         }
+  //       };
         
-        refreshScores();
-      }
-    },
-    [sessionId, currentUserId, groupData, rubrics]
-  );
+  //       refreshScores();
+  //     }
+  //   },
+  //   [sessionId, currentUserId, groupData, rubrics]
+  // );
 
-  // Initialize SignalR connection for real-time score updates
-  const { isConnected: scoreRealtimeConnected } = useScoreRealTime({
-    onScoreUpdate: handleScoreUpdate,
-    sessionIds: sessionId ? [sessionId] : [],
-    studentIds: groupData?.students.map((s) => s.id) || [],
-    evaluatorIds: currentUserId ? [currentUserId] : [],
-  });
+  // Initialize SignalR connection for real-time score updates - TẠM THỜI TẮT
+  // const { isConnected: scoreRealtimeConnected } = useScoreRealTime({
+  //   onScoreUpdate: handleScoreUpdate,
+  //   sessionIds: sessionId ? [sessionId] : [],
+  //   studentIds: groupData?.students.map((s) => s.id) || [],
+  //   evaluatorIds: currentUserId ? [currentUserId] : [],
+  // });
+
+  // Tạm thời disable SignalR - dùng giá trị mặc định
+  const scoreRealtimeConnected = false;
 
   // Mic and session states
   const [sessionStarted, setSessionStarted] = useState(false); // Thư ký đã bắt đầu phiên chưa
@@ -464,9 +468,12 @@ export default function GradeGroupPage() {
           : sessions.find((s: any) => s.groupId === groupId);
         if (groupSession) {
           setSessionId(groupSession.id);
+          // CHỈ redirect nếu KHÔNG đang trong quá trình save
+          // Để tránh redirect khi user vừa save score xong
           if (
             groupSession.status &&
-            groupSession.status.toLowerCase() === "completed"
+            groupSession.status.toLowerCase() === "completed" &&
+            !savingRef.current
           ) {
             setLoading(false);
             router.replace(`/member/grading/view/${groupId}`);
@@ -986,6 +993,7 @@ export default function GradeGroupPage() {
       }
 
       setSaving(true);
+      savingRef.current = true; // Set flag để prevent redirect
       const loadingSwal = swalConfig.loading(
         "Saving scores...",
         "Please wait while we save your scores and notes."
@@ -1139,16 +1147,63 @@ export default function GradeGroupPage() {
       }
 
       Swal.close();
-      await swalConfig.success(
-        "Success",
-        "Scores and notes saved successfully!"
-      );
-      const finalSessionId = urlSessionId ? parseInt(urlSessionId) : sessionId;
-      if (finalSessionId) {
-        router.push(`/member/defense-sessions?sessionId=${finalSessionId}`);
-      } else {
-        router.push("/member/defense-sessions");
+      
+      // Reload lại data trước khi hiển thị success message
+      // Để đảm bảo data được refresh ngay lập tức
+      try {
+        if (groupData && sessionId && currentUserId) {
+          const updatedStudents = await Promise.all(
+            studentScores.map(async (student) => {
+              const scoresRes = await scoresApi
+                .getByStudentId(student.id)
+                .catch(() => ({ data: [] }));
+              const existingScores = scoresRes.data || [];
+
+              // Filter scores for current session
+              const sessionScores = existingScores.filter(
+                (score: ScoreReadDto) => score.sessionId === sessionId
+              );
+
+              // Create scores array based on rubrics
+              const scoresArray = new Array(rubrics.length).fill(0);
+              const scoreIds = new Array(rubrics.length).fill(0);
+              const commentsArray = new Array(rubrics.length).fill("");
+
+              // Map existing scores to rubrics
+              sessionScores.forEach((score: ScoreReadDto) => {
+                const rubricIndex = rubrics.findIndex(
+                  (r: any) => r.id === score.rubricId
+                );
+                if (rubricIndex >= 0) {
+                  scoresArray[rubricIndex] = score.value;
+                  scoreIds[rubricIndex] = score.id;
+                  commentsArray[rubricIndex] = score.comment || "";
+                }
+              });
+
+              return {
+                ...student,
+                scores: scoresArray,
+                criterionComments: commentsArray,
+                existingScoreIds: scoreIds,
+              };
+            })
+          );
+
+          setStudentScores(updatedStudents);
+        }
+      } catch (error) {
+        console.error("Error refreshing scores after save:", error);
       }
+      
+      // Hiển thị success message sau khi đã refresh data
+      // KHÔNG redirect - chỉ hiển thị thông báo và ở lại trang hiện tại
+      // Sử dụng toast notification thay vì modal để tránh bất kỳ callback nào có thể redirect
+      swalConfig.toast.success("Scores and notes saved successfully!");
+      
+      // Đảm bảo không có redirect nào được thực hiện
+      // Return ngay để tránh bất kỳ logic nào khác có thể trigger redirect
+      return;
     } catch (error: any) {
       console.error("Error saving scores:", error);
       // Close loading dialog if it exists
@@ -1156,6 +1211,10 @@ export default function GradeGroupPage() {
       swalConfig.error("Error", "Failed to save scores");
     } finally {
       setSaving(false);
+      // Reset flag sau một khoảng thời gian ngắn để tránh race condition
+      setTimeout(() => {
+        savingRef.current = false;
+      }, 2000); // 2 giây sau khi save xong mới cho phép redirect
     }
   };
 
