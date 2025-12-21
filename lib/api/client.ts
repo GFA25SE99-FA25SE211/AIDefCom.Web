@@ -14,7 +14,14 @@ class ApiClient {
   private async getToken(): Promise<string | null> {
     if (typeof window === "undefined") return null;
     // Get accessToken from localStorage
-    return localStorage.getItem("accessToken");
+    const token = localStorage.getItem("accessToken");
+    
+    // Skip dummy tokens - they're not valid for API calls
+    if (token === "dummy-token-chair" || !token || token.trim() === "") {
+      return null;
+    }
+    
+    return token;
   }
 
   private async getRefreshToken(): Promise<string | null> {
@@ -125,10 +132,28 @@ class ApiClient {
       ...options.headers,
     };
 
+    // Check if endpoint requires authentication (most endpoints do, except login/register)
+    const requiresAuth = !endpoint.includes("/auth/login") && 
+                         !endpoint.includes("/auth/register") &&
+                         !endpoint.includes("/auth/password/forgot") &&
+                         !endpoint.includes("/auth/password/reset");
+
+    if (requiresAuth && !token) {
+      // No token available for authenticated endpoint - redirect to login
+      if (typeof window !== "undefined") {
+        console.warn("No token available for authenticated endpoint, redirecting to login");
+        this.clearTokensAndRedirect();
+      }
+      throw new Error("Authentication required. Please login first.");
+    }
+
     if (token && typeof headers === "object" && headers !== null) {
       // TypeScript: HeadersInit can be Headers, string[][], or Record<string, string>
       // Only mutate if it's a plain object (Record<string, string>)
-      (headers as Record<string, string>)["Authorization"] = `Bearer ${token}`;
+      // Ensure token is valid (not dummy token)
+      if (token !== "dummy-token-chair" && token.trim() !== "") {
+        (headers as Record<string, string>)["Authorization"] = `Bearer ${token}`;
+      }
     }
 
     try {
@@ -334,7 +359,10 @@ Please check:
 
     const headers: HeadersInit = {};
     if (token && typeof headers === "object" && headers !== null) {
-      (headers as Record<string, string>)["Authorization"] = `Bearer ${token}`;
+      // Ensure token is valid (not dummy token)
+      if (token !== "dummy-token-chair" && token.trim() !== "") {
+        (headers as Record<string, string>)["Authorization"] = `Bearer ${token}`;
+      }
     }
     // Note: Do NOT set Content-Type header - browser will automatically set it with boundary for FormData
 

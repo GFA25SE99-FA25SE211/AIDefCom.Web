@@ -157,6 +157,17 @@ export default function AccountManagementPage() {
   useEffect(() => {
     const fetchUsers = async () => {
       try {
+        // Check if user is authenticated before fetching
+        const userInfo = authUtils.getCurrentUserInfo();
+        if (!userInfo.userId) {
+          console.warn("User not authenticated, redirecting to login...");
+          window.location.href = "/login";
+          return;
+        }
+
+        // Small delay to ensure token is available
+        await new Promise(resolve => setTimeout(resolve, 100));
+
         setLoading(true);
         const response = await authApi.getAllUsers();
 
@@ -170,8 +181,19 @@ export default function AccountManagementPage() {
         setUsers(mapUsersFromApi(response.data));
       } catch (error: any) {
         console.error("Error fetching users:", error);
+        
+        // Check if it's an authentication error
+        if (error?.message?.includes("Authentication required") || 
+            error?.status === 401 ||
+            error?.errorData?.code === "DEF401") {
+          console.warn("Authentication error, redirecting to login...");
+          window.location.href = "/login";
+          return;
+        }
+        
         // Show user-friendly error message
-        swalConfig.error("Load Failed", "Unable to load users");
+        const errorMessage = getApiErrorMessage(error, "Unable to load users");
+        swalConfig.error("Load Failed", errorMessage);
         setUsers([]);
       } finally {
         setLoading(false);
@@ -228,6 +250,13 @@ export default function AccountManagementPage() {
   useEffect(() => {
     const fetchUploadMeta = async () => {
       try {
+        // Check if user is authenticated before fetching
+        const userInfo = authUtils.getCurrentUserInfo();
+        if (!userInfo.userId) {
+          console.warn("User not authenticated, skipping upload meta fetch");
+          return;
+        }
+
         setUploadMetaLoading(true);
         const [semestersRes, majorsRes] = await Promise.all([
           semestersApi.getAll().catch(() => ({ data: [] })),
