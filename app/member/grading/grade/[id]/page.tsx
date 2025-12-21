@@ -1198,8 +1198,11 @@ export default function GradeGroupPage() {
       
       // Hiển thị success message sau khi đã refresh data
       // KHÔNG redirect - chỉ hiển thị thông báo và ở lại trang hiện tại
-      // Sử dụng toast notification thay vì modal để tránh bất kỳ callback nào có thể redirect
-      swalConfig.toast.success("Scores and notes saved successfully!");
+      // Sử dụng SweetAlert2 modal (alert2)
+      await swalConfig.success(
+        "Success",
+        "Scores and notes saved successfully!"
+      );
       
       // Đảm bảo không có redirect nào được thực hiện
       // Return ngay để tránh bất kỳ logic nào khác có thể trigger redirect
