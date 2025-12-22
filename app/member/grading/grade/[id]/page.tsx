@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { groupsApi } from "@/lib/api/groups";
 import { studentsApi } from "@/lib/api/students";
-import { memberNotesApi } from "@/lib/api/member-notes";
+import { notesApi } from "@/lib/api/notes";
 import { rubricsApi } from "@/lib/api/rubrics";
 import { majorRubricsApi } from "@/lib/api/major-rubrics";
 import { scoresApi, type ScoreReadDto } from "@/lib/api/scores";
@@ -26,7 +26,7 @@ import { useVoiceEnrollmentCheck } from "@/lib/hooks/useVoiceEnrollmentCheck";
 // import { useScoreRealTime } from "@/lib/hooks/useScoreRealTime"; // Không cần real-time ở trang grading - đã tự refresh sau khi save
 import { authUtils } from "@/lib/utils/auth";
 import Swal from "sweetalert2";
-import type { GroupDto, StudentDto, ScoreCreateDto, MemberNoteDto } from "@/lib/models";
+import type { GroupDto, StudentDto, ScoreCreateDto, NoteDto } from "@/lib/models";
 import { getWebSocketUrl } from "@/lib/config/api-urls";
 
 interface StudentScore {
@@ -36,6 +36,7 @@ interface StudentScore {
   scores: number[];
   criterionComments: string[];
   note: string;
+  noteId?: number; // Track existing note ID for updates
   existingScoreIds: number[]; // Track existing score IDs for updates
 }
 
@@ -119,7 +120,6 @@ export default function GradeGroupPage() {
     rubrics.every((r) => r && (r.id || r.rubricName));
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string>("");
-  const [memberNotes, setMemberNotes] = useState<MemberNoteDto[]>([]);
   const savingRef = useRef(false); // Ref để prevent redirect khi đang save
 
   // Get sessionId from URL if available
@@ -607,19 +607,42 @@ export default function GradeGroupPage() {
             project: projectTitle,
             students: studentsWithScores,
           };
-          setGroupData(groupData);
-          setStudentScores(groupData.students);
-
-          // Load member notes for this session
+          // Load existing notes for this session (one note per student)
           if (groupSession?.id) {
             try {
-              const notesRes = await memberNotesApi.getBySessionId(groupSession.id);
-              const notes = notesRes.data || [];
-              setMemberNotes(notes);
+              // Get all notes and filter by sessionId
+              const allNotesRes = await notesApi.getAll();
+              const allNotes = allNotesRes.data || [];
+              const sessionNotes = allNotes.filter((note: NoteDto) => note.sessionId === groupSession.id);
+              
+              // Map notes to students by matching title (format: "Note for {studentName}")
+              const updatedStudents = studentsWithScores.map((student) => {
+                const matchingNote = sessionNotes.find((note: NoteDto) => 
+                  note.title.includes(student.name) || note.title === `Note for ${student.name}`
+                );
+                if (matchingNote) {
+                  return {
+                    ...student,
+                    note: matchingNote.content || "",
+                    noteId: matchingNote.id,
+                  };
+                }
+                return student;
+              });
+              
+              setGroupData({
+                ...groupData,
+                students: updatedStudents,
+              });
+              setStudentScores(updatedStudents);
+              return; // Early return to avoid setting groupData again below
             } catch (error) {
-              setMemberNotes([]);
+              // Error loading notes - continue with students without notes
             }
           }
+
+          setGroupData(groupData);
+          setStudentScores(groupData.students);
         } else {
           // Tạo empty groupData hoặc từ students đã fetch (không fallback criteria)
           const rubricCountFallback = rubricsList.length;
@@ -727,7 +750,14 @@ export default function GradeGroupPage() {
     setStudentScores(newScores);
   };
 
-  // Notes are read-only, no need for handleNoteChange
+  const handleNoteChange = (
+    studentIndex: number,
+    value: string
+  ) => {
+    const newScores = [...studentScores];
+    newScores[studentIndex].note = value;
+    setStudentScores(newScores);
+  };
 
   const toggleNoteVisibility = (studentId: string) =>
     setNotesVisibility((prev) => ({ ...prev, [studentId]: !prev[studentId] }));
@@ -853,7 +883,35 @@ export default function GradeGroupPage() {
           }
         }
 
-        // Notes are read-only, no need to save them
+        // Save note for this student (one note per student per session)
+        const studentNote = student.note?.trim();
+        if (studentNote && sessionId) {
+          try {
+            if (student.noteId && student.noteId > 0) {
+              // Update existing note
+              await notesApi.update(student.noteId, {
+                title: `Note for ${student.name}`,
+                content: studentNote,
+              });
+            } else {
+              // Create new note
+              const noteRes = await notesApi.create({
+                sessionId: sessionId,
+                title: `Note for ${student.name}`,
+                content: studentNote,
+              });
+              // Update student's noteId for future updates
+              const updatedScores = [...studentScores];
+              const studentIndex = updatedScores.findIndex(s => s.id === student.id);
+              if (studentIndex >= 0 && noteRes.data) {
+                updatedScores[studentIndex].noteId = noteRes.data.id;
+                setStudentScores(updatedScores);
+              }
+            }
+          } catch (error) {
+            // Error saving note - continue with next student
+          }
+        }
       }
 
       Swal.close();
@@ -1288,104 +1346,153 @@ export default function GradeGroupPage() {
                           </td>
 
                           <td className="py-3 px-3 align-top">
-                            <div className="flex flex-col gap-1">
-                              <span className="text-xs text-gray-500">
-                                Set All:
-                              </span>
-                              <div className="flex gap-1">
-                                {[7, 8, 9].map((score) => (
-                                  <button
-                                    key={score}
-                                    type="button"
-                                    disabled={rubrics.length === 0}
-                                    onClick={() => {
-                                      const newScores = [...studentScores];
-                                      newScores[studentIndex].scores =
-                                        newScores[studentIndex].scores.map(
-                                          () => score
-                                        );
-                                      setStudentScores(newScores);
-                                    }}
-                                    className={`px-1.5 py-0.5 text-xs rounded border transition-colors ${
-                                      rubrics.length === 0
-                                        ? "bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed opacity-50"
-                                        : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"
-                                    }`}
-                                    title={
-                                      rubrics.length === 0
-                                        ? "Please add grading criteria"
-                                        : `Set all scores to ${score}`
-                                    }
-                                  >
-                                    {score}
-                                  </button>
-                                ))}
+                            <div className="flex flex-col gap-2">
+                              <div className="flex flex-col gap-1">
+                                <span className="text-xs text-gray-500">
+                                  Set All:
+                                </span>
+                                <div className="flex gap-1">
+                                  {[7, 8, 9].map((score) => (
+                                    <button
+                                      key={score}
+                                      type="button"
+                                      disabled={rubrics.length === 0}
+                                      onClick={() => {
+                                        const newScores = [...studentScores];
+                                        newScores[studentIndex].scores =
+                                          newScores[studentIndex].scores.map(
+                                            () => score
+                                          );
+                                        setStudentScores(newScores);
+                                      }}
+                                      className={`px-1.5 py-0.5 text-xs rounded border transition-colors ${
+                                        rubrics.length === 0
+                                          ? "bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed opacity-50"
+                                          : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"
+                                      }`}
+                                      title={
+                                        rubrics.length === 0
+                                          ? "Please add grading criteria"
+                                          : `Set all scores to ${score}`
+                                      }
+                                    >
+                                      {score}
+                                    </button>
+                                  ))}
+                                </div>
                               </div>
+                              <button
+                                type="button"
+                                onClick={() => toggleNoteVisibility(student.id)}
+                                className={`px-2 py-1 text-xs rounded border transition-colors ${
+                                  notesVisibility[student.id]
+                                    ? "bg-purple-100 border-purple-300 text-purple-700 hover:bg-purple-200"
+                                    : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"
+                                }`}
+                                title={
+                                  notesVisibility[student.id]
+                                    ? "Hide note"
+                                    : "Show note"
+                                }
+                              >
+                                {notesVisibility[student.id] ? "Hide Note" : "Note"}
+                              </button>
                             </div>
                           </td>
                         </tr>
 
-                        {notesVisibility[student.id] && (
-                          <tr>
-                            <td
-                              colSpan={
-                                (rubrics.length > 0
-                                  ? rubrics.length
-                                  : criteria.length) + 3
-                              }
-                              className="py-3"
-                            >
-                              <div className="bg-gray-50 border rounded-md p-3">
-                                <div className="mb-3">
-                                  <h4 className="text-sm font-semibold text-gray-700 mb-2">
-                                    Member Notes
-                                  </h4>
-                                  {memberNotes.length > 0 ? (
-                                    <div className="space-y-2">
-                                      {memberNotes.map((note) => (
-                                        <div
-                                          key={note.id}
-                                          className="bg-white border rounded-md p-3 text-sm"
-                                        >
-                                          <div className="flex items-start justify-between mb-1">
-                                            <span className="font-medium text-gray-700">
-                                              {note.userName || "Unknown Member"}
-                                            </span>
-                                            <span className="text-xs text-gray-500">
-                                              {new Date(note.createdAt).toLocaleString()}
-                                            </span>
-                                          </div>
-                                          <p className="text-gray-600 mt-1 whitespace-pre-wrap">
-                                            {note.noteContent || "No content"}
-                                          </p>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  ) : (
-                                    <p className="text-sm text-gray-500 italic">
-                                      No notes available for this session.
-                                    </p>
-                                  )}
-                                </div>
-                                <div className="text-right mt-2">
-                                  <button
-                                    className="text-sm text-gray-600 hover:underline"
-                                    onClick={() =>
-                                      toggleNoteVisibility(student.id)
+                        {/* Note section - always visible */}
+                        <tr>
+                          <td
+                            colSpan={
+                              (rubrics.length > 0
+                                ? rubrics.length
+                                : criteria.length) + 3
+                            }
+                            className="py-3"
+                          >
+                            <div className="bg-gray-50 border rounded-md p-3">
+                              <div className="mb-2">
+                                <h4 className="text-sm font-semibold text-gray-700 mb-2">
+                                  Đánh giá cho {student.name}
+                                </h4>
+                                <textarea
+                                  className="w-full rounded-md border px-3 py-2 text-sm text-gray-700 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors resize-none"
+                                  rows={4}
+                                  placeholder="Nhập đánh giá cho sinh viên này..."
+                                  value={student.note || ""}
+                                  onChange={(e) => {
+                                    const studentIndex = studentScores.findIndex(s => s.id === student.id);
+                                    if (studentIndex >= 0) {
+                                      handleNoteChange(studentIndex, e.target.value);
                                     }
-                                  >
-                                    Hide
-                                  </button>
-                                </div>
+                                  }}
+                                />
                               </div>
-                            </td>
-                          </tr>
-                        )}
+                            </div>
+                          </td>
+                        </tr>
                       </React.Fragment>
                     ))}
                   </tbody>
                 </table>
               </div>
+
+              {/* Member Notes Section - Display all notes for the session */}
+              {sessionId && (
+                <div className="mt-6 bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-base font-semibold text-gray-800">
+                      Member Notes
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        // Toggle visibility of member notes section
+                        setNotesVisibility((prev) => ({
+                          ...prev,
+                          memberNotesSection: !prev.memberNotesSection,
+                        }));
+                      }}
+                      className="text-sm text-gray-600 hover:text-gray-800"
+                    >
+                      {notesVisibility.memberNotesSection ? "Hide" : "Show"}
+                    </button>
+                  </div>
+                  
+                  {!notesVisibility.memberNotesSection && (
+                    <div className="space-y-3">
+                      {studentScores.map((student) => {
+                        if (!student.note || student.note.trim() === "") {
+                          return null;
+                        }
+                        return (
+                          <div
+                            key={student.id}
+                            className="bg-gray-50 border rounded-md p-3"
+                          >
+                            <div className="flex items-start justify-between mb-2">
+                              <span className="text-sm font-medium text-gray-700">
+                                {student.name}
+                              </span>
+                            </div>
+                            <p className="text-sm text-gray-600 whitespace-pre-wrap">
+                              {student.note}
+                            </p>
+                          </div>
+                        );
+                      })}
+                      {studentScores.every(
+                        (s) => !s.note || s.note.trim() === ""
+                      ) && (
+                        <p className="text-sm text-gray-500 italic text-center py-4">
+                          No notes available for this session.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </>
           )}
         </div>
