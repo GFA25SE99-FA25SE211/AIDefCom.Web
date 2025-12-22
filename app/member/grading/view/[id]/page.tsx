@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { groupsApi } from "@/lib/api/groups";
 import { studentsApi } from "@/lib/api/students";
-import { memberNotesApi } from "@/lib/api/member-notes";
+import { notesApi } from "@/lib/api/notes";
 import { rubricsApi } from "@/lib/api/rubrics";
 import { majorRubricsApi } from "@/lib/api/major-rubrics";
 import { scoresApi, type ScoreReadDto } from "@/lib/api/scores";
@@ -26,7 +26,7 @@ import { useVoiceEnrollmentCheck } from "@/lib/hooks/useVoiceEnrollmentCheck";
 // import { useScoreRealTime } from "@/lib/hooks/useScoreRealTime"; // Không cần real-time ở trang grading - đã tự refresh sau khi save
 import { authUtils } from "@/lib/utils/auth";
 import Swal from "sweetalert2";
-import type { GroupDto, StudentDto, ScoreCreateDto, MemberNoteDto } from "@/lib/models";
+import type { GroupDto, StudentDto, ScoreCreateDto, NoteDto } from "@/lib/models";
 import { getWebSocketUrl } from "@/lib/config/api-urls";
 
 // --- (Code Icons giữ nguyên) ---
@@ -113,7 +113,8 @@ export default function ViewScorePage() {
   const [rubrics, setRubrics] = useState<any[]>([]);
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string>("");
-  const [memberNotes, setMemberNotes] = useState<MemberNoteDto[]>([]);
+  const [sessionNote, setSessionNote] = useState<string>("");
+  const [sessionNoteId, setSessionNoteId] = useState<number | null>(null);
   const savingRef = useRef(false); // Ref để prevent redirect khi đang save
 
   // Get sessionId from URL if available
@@ -399,14 +400,22 @@ export default function ViewScorePage() {
           setGroupData(groupData);
           setStudentScores(groupData.students);
 
-          // Load member notes for this session
+          // Load session note
           if (groupSession?.id) {
             try {
-              const notesRes = await memberNotesApi.getBySessionId(groupSession.id);
-              const notes = notesRes.data || [];
-              setMemberNotes(notes);
+              const notesRes = await notesApi.getBySessionId(groupSession.id);
+              const sessionNoteData = notesRes.data as NoteDto;
+              
+              if (sessionNoteData) {
+                setSessionNote(sessionNoteData.content || "");
+                setSessionNoteId(sessionNoteData.id);
+              } else {
+                setSessionNote("");
+                setSessionNoteId(null);
+              }
             } catch (error) {
-              setMemberNotes([]);
+              setSessionNote("");
+              setSessionNoteId(null);
             }
           }
         } else {
@@ -774,7 +783,30 @@ export default function ViewScorePage() {
           }
         }
 
-        // Notes are read-only, no need to save them
+        // Save session note
+        if (sessionId) {
+          try {
+            if (sessionNoteId && sessionNote.trim()) {
+              // Update existing note
+              await notesApi.update(sessionNoteId, {
+                title: "Session Note",
+                content: sessionNote.trim(),
+              });
+            } else if (sessionNote.trim()) {
+              // Create new note
+              await notesApi.create({
+                sessionId: sessionId,
+                title: "Session Note",
+                content: sessionNote.trim(),
+              });
+            } else if (sessionNoteId && !sessionNote.trim()) {
+              // Delete note if empty
+              await notesApi.delete(sessionNoteId);
+            }
+          } catch (error) {
+            // Error saving note - continue
+          }
+        }
       }
 
       Swal.close();
@@ -1230,32 +1262,13 @@ export default function ViewScorePage() {
                                     <h4 className="text-sm font-semibold text-gray-700 mb-2">
                                       Member Notes
                                     </h4>
-                                    {memberNotes.length > 0 ? (
-                                      <div className="space-y-2">
-                                        {memberNotes.map((note) => (
-                                          <div
-                                            key={note.id}
-                                            className="bg-white border rounded-md p-3 text-sm"
-                                          >
-                                            <div className="flex items-start justify-between mb-1">
-                                              <span className="font-medium text-gray-700">
-                                                {note.userName || "Unknown Member"}
-                                              </span>
-                                              <span className="text-xs text-gray-500">
-                                                {new Date(note.createdAt).toLocaleString()}
-                                              </span>
-                                            </div>
-                                            <p className="text-gray-600 mt-1 whitespace-pre-wrap">
-                                              {note.noteContent || "No content"}
-                                            </p>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    ) : (
-                                      <p className="text-sm text-gray-500 italic">
-                                        No notes available for this session.
-                                      </p>
-                                    )}
+                                    <textarea
+                                      className="w-full rounded-md border px-3 py-2 text-sm text-gray-700 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors resize-none"
+                                      rows={6}
+                                      placeholder="Nhập đánh giá cho session này..."
+                                      value={sessionNote || ""}
+                                      onChange={(e) => setSessionNote(e.target.value)}
+                                    />
                                   </div>
                                   <div className="text-right mt-2">
                                     <button

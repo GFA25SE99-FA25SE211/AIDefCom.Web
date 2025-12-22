@@ -12,6 +12,7 @@ export * from './committee-assignment';
 export * from './transcript';
 export * from './report';
 export * from './member-note';
+export * from './note';
 export * from './score';
 export * from './common';
 
