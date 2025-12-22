@@ -29,7 +29,7 @@ export default function VoiceEnrollPage() {
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Sample tracking (like mobile app)
+  // Sample tracking
   type SampleStatus =
     | "pending"
     | "recording"
@@ -47,6 +47,20 @@ export default function VoiceEnrollPage() {
     { status: "pending", index: 1 },
     { status: "pending", index: 2 },
   ]);
+
+  // Helper function to redirect only for lecturer role
+  const redirectIfLecturer = async () => {
+    const { authUtils } = await import("@/lib/utils/auth");
+    const userInfo = authUtils.getCurrentUserInfo();
+    const role =
+      userInfo.role?.toLowerCase() ||
+      user?.roles?.[0]?.toLowerCase() ||
+      user?.role?.toLowerCase() ||
+      "";
+    if (role === "lecturer") {
+      router.push("/home");
+    }
+  };
 
   useEffect(() => {
     // Get userId from accessToken and fetch user info from API
@@ -104,19 +118,8 @@ export default function VoiceEnrollPage() {
           "Completed!",
           "You have successfully registered your voice."
         );
-        // Redirect based on user role
-        const { authUtils } = await import("@/lib/utils/auth");
-        const userInfo = authUtils.getCurrentUserInfo();
-        const role = userInfo.role?.toLowerCase() || "member";
-        if (role === "admin" || role === "administrator") {
-          router.push("/administrator");
-        } else if (role === "moderator") {
-          router.push("/moderator");
-        } else if (role === "lecturer") {
-          router.push("/member");
-        } else {
-          router.push("/member");
-        }
+        // Redirect only for lecturer role
+        redirectIfLecturer();
       } else if (enrolledCount > 0) {
         // User has partial enrollment, restore their progress
         setCurrentSampleIndex(enrolledCount);
@@ -298,31 +301,8 @@ export default function VoiceEnrollPage() {
         if (result.completed) {
           swalConfig.success("Success", "Voice registration completed!");
 
-          // Redirect based on role
-          const role =
-            user?.roles?.[0]?.toLowerCase() ||
-            user?.role?.toLowerCase() ||
-            "member";
-          switch (role) {
-            case "admin":
-            case "administrator":
-              router.push("/administrator");
-              break;
-            case "lecturer":
-              router.push("/member");
-              break;
-            case "chair":
-              router.push("/chair");
-              break;
-            case "secretary":
-              router.push("/secretary");
-              break;
-            case "moderator":
-              router.push("/moderator");
-              break;
-            default:
-              router.push("/home");
-          }
+          // Redirect only for lecturer role
+          redirectIfLecturer();
         } else {
           swalConfig.success(
             "Saved",
@@ -368,31 +348,8 @@ export default function VoiceEnrollPage() {
           "System records that you already have enough voice samples."
         );
 
-        // Redirect based on role
-        const role =
-          user?.roles?.[0]?.toLowerCase() ||
-          user?.role?.toLowerCase() ||
-          "member";
-        switch (role) {
-          case "admin":
-          case "administrator":
-            router.push("/administrator");
-            break;
-          case "lecturer":
-            router.push("/home");
-            break;
-          case "chair":
-            router.push("/chair");
-            break;
-          case "secretary":
-            router.push("/secretary");
-            break;
-          case "moderator":
-            router.push("/moderator");
-            break;
-          default:
-            router.push("/member");
-        }
+        // Redirect only for lecturer role
+        redirectIfLecturer();
         return;
       }
 
