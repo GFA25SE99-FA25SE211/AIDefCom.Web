@@ -122,12 +122,12 @@ export default function TranscriptPage({
     // First check session users cache (has role info)
     const sessionUser = sessionUsersMapRef.current.get(userId.toLowerCase());
     if (sessionUser) {
-      // Role mapping to Vietnamese
+      // Role mapping
       const roleMap: Record<string, string> = {
-        chair: "Chủ tịch",
-        secretary: "Thư ký",
-        member: "Thành viên",
-        student: "Sinh viên",
+        chair: "Chair",
+        secretary: "Secretary",
+        member: "Member",
+        student: "Student",
       };
       const displayRole =
         roleMap[sessionUser.role.toLowerCase()] || sessionUser.role;
