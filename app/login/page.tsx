@@ -376,18 +376,16 @@ function extractRole(token: string) {
 }
 
 // ============================
-// REDIRECT
-// ============================
-// ============================
-// REDIRECT
+// REDIRECT (ROLE → ROUTE MAP)
 // ============================
 async function redirectByRole(role: string, router: any, user?: any) {
   const r = role?.toLowerCase();
 
-  // Check voice enrollment for non-admin and non-moderator users
-  if (user && r !== "admin" && r !== "administrator" && r !== "moderator") {
+  // ============================
+  // VOICE ENROLLMENT CHECK
+  // ============================
+  if (user && !["admin", "moderator"].includes(r)) {
     try {
-      // Import dynamically to avoid circular dependencies if any, or just use global import
       const { voiceApi } = await import("@/lib/api/voice");
       const status = await voiceApi.getStatus(user.id);
 
@@ -397,33 +395,18 @@ async function redirectByRole(role: string, router: any, user?: any) {
       }
     } catch (e) {
       console.error("Failed to check voice status", e);
-      // Fallback to normal redirect if check fails (or maybe block? defaulting to allow for now)
+      // fallback: continue redirect
     }
   }
 
-  switch (r) {
-    case "admin":
-    case "administrator":
-      router.push("/administrator");
-      break;
-    case "moderator":
-      router.push("/moderator");
-      break;
-    case "lecturer":
-      router.push("/home");
-      break;
-    case "chair":
-      router.push("/chair");
-      break;
-    case "secretary":
-      router.push("/secretary");
-      break;
-    case "member":
-      router.push("/member");
-      break;
-    default:
-      // Default: try /home first
-      router.push("/home");
-      break;
-  }
+  // ============================
+  // ROLE → ROUTE MAP
+  // ============================
+  const roleRouteMap: Record<string, string> = {
+    admin: "/administrator",
+    moderator: "/moderator",
+    lecturer: "/home",
+  };
+
+  router.push(roleRouteMap[r] ?? "/home");
 }
