@@ -23,7 +23,7 @@ interface STTEvent {
   speaker_name?: string;
   session_id?: string;
   message?: string;
-  id?: string; // unique id for editing
+  id?: string;
   isNew?: boolean; // flag to mark new entries from STT
   user_id?: string;
   timestamp?: string;
@@ -90,9 +90,11 @@ export default function TranscriptPage({
   const transcriptLoadedRef = useRef<boolean>(false);
   // Track recording start time for VTT timestamp calculation
   const sessionStartTimeRef = useRef<number | null>(null);
-  
+
   // Cache session users: Map<user_id, {fullName, role}> for "Name (Role)" format
-  const sessionUsersMapRef = useRef<Map<string, { fullName: string; role: string }>>(new Map());
+  const sessionUsersMapRef = useRef<
+    Map<string, { fullName: string; role: string }>
+  >(new Map());
   // Cache user info from API (for users not in session users list)
   const userInfoCacheRef = useRef<Map<string, { fullName: string }>>(new Map());
 
@@ -111,38 +113,44 @@ export default function TranscriptPage({
   };
 
   // Helper function to get speaker display name as "Name (Role)" format
-  const getSpeakerDisplayName = async (userId: string | null | undefined, fallbackSpeaker?: string): Promise<string> => {
+  const getSpeakerDisplayName = async (
+    userId: string | null | undefined,
+    fallbackSpeaker?: string
+  ): Promise<string> => {
     if (!userId) return fallbackSpeaker || "Unknown";
-    
+
     // First check session users cache (has role info)
     const sessionUser = sessionUsersMapRef.current.get(userId.toLowerCase());
     if (sessionUser) {
       // Role mapping to Vietnamese
       const roleMap: Record<string, string> = {
-        'chair': 'Chủ tịch',
-        'secretary': 'Thư ký', 
-        'member': 'Thành viên',
-        'student': 'Sinh viên',
+        chair: "Chủ tịch",
+        secretary: "Thư ký",
+        member: "Thành viên",
+        student: "Sinh viên",
       };
-      const displayRole = roleMap[sessionUser.role.toLowerCase()] || sessionUser.role;
+      const displayRole =
+        roleMap[sessionUser.role.toLowerCase()] || sessionUser.role;
       return `${sessionUser.fullName} (${displayRole})`;
     }
-    
+
     // If not in session users, try to fetch from auth API
     if (userInfoCacheRef.current.has(userId.toLowerCase())) {
       return userInfoCacheRef.current.get(userId.toLowerCase())!.fullName;
     }
-    
+
     try {
       const response = await authApi.getUserById(userId);
       if (response.data?.fullName) {
-        userInfoCacheRef.current.set(userId.toLowerCase(), { fullName: response.data.fullName });
+        userInfoCacheRef.current.set(userId.toLowerCase(), {
+          fullName: response.data.fullName,
+        });
         return response.data.fullName;
       }
     } catch (error) {
       console.error(`Failed to fetch user info for ${userId}:`, error);
     }
-    
+
     return fallbackSpeaker || "Unknown";
   };
 
@@ -212,7 +220,7 @@ export default function TranscriptPage({
           // Fetch session users to build user_id -> {fullName, role} cache
           const { authUtils } = await import("@/lib/utils/auth");
           const currentUserId = authUtils.getCurrentUserId();
-          
+
           // Fetch session users for speaker name formatting
           defenseSessionsApi
             .getUsersBySessionId(Number(id))
@@ -221,14 +229,19 @@ export default function TranscriptPage({
                 // Build cache: user_id -> {fullName, role}
                 usersRes.data.forEach((user: any) => {
                   if (user.id && user.fullName && user.role) {
-                    sessionUsersMapRef.current.set(String(user.id).toLowerCase(), {
-                      fullName: user.fullName,
-                      role: user.role,
-                    });
+                    sessionUsersMapRef.current.set(
+                      String(user.id).toLowerCase(),
+                      {
+                        fullName: user.fullName,
+                        role: user.role,
+                      }
+                    );
                   }
                 });
-                console.log(`📋 Loaded ${sessionUsersMapRef.current.size} session users for speaker identification`);
-                
+                console.log(
+                  `📋 Loaded ${sessionUsersMapRef.current.size} session users for speaker identification`
+                );
+
                 // Also set current user's session role
                 if (currentUserId) {
                   const currentUserInSession = usersRes.data.find(
@@ -440,7 +453,7 @@ export default function TranscriptPage({
         msg.user_id,
         msg.speaker_name || msg.speaker || "Unknown"
       );
-      
+
       // Normalize event structure for state with unique ID and VTT fields
       const newEntry: STTEvent = {
         ...msg,
@@ -557,7 +570,7 @@ export default function TranscriptPage({
           msg.user_id,
           msg.speaker_name || msg.speaker || "Identifying"
         );
-        
+
         const newEntry: STTEvent = {
           event: "recognized",
           text: msg.text,
