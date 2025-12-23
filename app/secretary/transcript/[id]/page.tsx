@@ -9,6 +9,7 @@ import { swalConfig, closeSwal } from "@/lib/utils/sweetAlert";
 // import { useSTTWebSocket, STTEvent } from "@/lib/hooks/useSTTWebSocket";
 import { defenseSessionsApi } from "@/lib/api/defense-sessions";
 import { transcriptsApi } from "@/lib/api/transcripts";
+import { notesApi } from "@/lib/api/notes";
 import { authApi } from "@/lib/api/auth";
 import { DefenseSessionDto, TranscriptDto } from "@/lib/models";
 import MeetingMinutesForm from "../../components/MeetingMinutesForm";
@@ -51,6 +52,10 @@ export default function TranscriptPage({
 
   const [transcript, setTranscript] = useState<STTEvent[]>([]);
   const [notes, setNotes] = useState("");
+  const [noteId, setNoteId] = useState<number | null>(null);
+  const [noteSaving, setNoteSaving] = useState(false);
+  const [initialNotes, setInitialNotes] = useState(""); // Track original value to detect changes
+  const noteAutoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [isClient, setIsClient] = useState(false);
   const [session, setSession] = useState<DefenseSessionDto | null>(null);
   const [loading, setLoading] = useState(true);
@@ -342,6 +347,98 @@ export default function TranscriptPage({
     }
   }, [id]);
 
+  // Fetch notes for this session
+  useEffect(() => {
+    const fetchNotes = async () => {
+      if (!id) return;
+      try {
+        const res = await notesApi.getBySessionId(Number(id));
+        if (res.data) {
+          setNoteId(res.data.id);
+          setNotes(res.data.content || "");
+          setInitialNotes(res.data.content || "");
+        }
+      } catch (error: any) {
+        // 404 means no note exists yet - this is fine
+        if (!error.message?.includes("404")) {
+          console.error("Failed to fetch notes:", error);
+        }
+      }
+    };
+    fetchNotes();
+  }, [id]);
+
+  // Auto-save notes with debounce (2 seconds after user stops typing)
+  useEffect(() => {
+    // Skip if session is completed, no changes, or same as initial
+    if (session?.status === "Completed") return;
+    if (notes === initialNotes) return;
+    if (!notes.trim() && !noteId) return; // Don't save empty note if no note exists
+
+    // Clear existing timer
+    if (noteAutoSaveTimerRef.current) {
+      clearTimeout(noteAutoSaveTimerRef.current);
+    }
+
+    // Set new timer - save after 2 seconds of inactivity
+    noteAutoSaveTimerRef.current = setTimeout(async () => {
+      try {
+        setNoteSaving(true);
+
+        if (noteId) {
+          // Update existing note
+          await notesApi.update(noteId, {
+            title: "Session Note",
+            content: notes,
+          });
+        } else {
+          // Create new note
+          const res = await notesApi.create({
+            sessionId: Number(id),
+            title: "Session Note",
+            content: notes,
+          });
+          if (res.data?.id) {
+            setNoteId(res.data.id);
+          }
+        }
+        setInitialNotes(notes); // Update initial to prevent re-save
+        console.log("📝 Notes auto-saved");
+      } catch (error: any) {
+        // Handle 409 Conflict (note already exists) - try to fetch and update
+        if (
+          error.message?.includes("409") ||
+          error.message?.includes("Conflict")
+        ) {
+          try {
+            const existingRes = await notesApi.getBySessionId(Number(id));
+            if (existingRes.data?.id) {
+              setNoteId(existingRes.data.id);
+              await notesApi.update(existingRes.data.id, {
+                title: "Session Note",
+                content: notes,
+              });
+              setInitialNotes(notes);
+              console.log("📝 Notes updated after conflict resolution");
+            }
+          } catch (retryError) {
+            console.error("Failed to resolve note conflict:", retryError);
+          }
+        } else {
+          console.error("Failed to save notes:", error);
+        }
+      } finally {
+        setNoteSaving(false);
+      }
+    }, 2000);
+
+    return () => {
+      if (noteAutoSaveTimerRef.current) {
+        clearTimeout(noteAutoSaveTimerRef.current);
+      }
+    };
+  }, [notes, noteId, session?.status, initialNotes, id]);
+
   const handleSTTEvent = async (msg: any) => {
     const eventType = msg.type || msg.event;
 
@@ -482,7 +579,10 @@ export default function TranscriptPage({
       swalConfig.info("Recording question");
       // Reset flag when starting new question
       setHasQuestionFinalText(false);
-    } else if (eventType === "question_mode_result") {
+    } else if (
+      eventType === "question_mode_result" ||
+      eventType === "question_mode_ended"
+    ) {
       // Kết quả câu hỏi của CHÍNH MÌNH (thư ký tự đặt)
 
       // Clear timeout and reset waiting flag
@@ -506,9 +606,9 @@ export default function TranscriptPage({
           "This question has already been recorded."
         );
       } else {
-        // Thêm vào danh sách (không cần dedup vì đây là event trực tiếp)
+        // Thêm vào danh sách câu hỏi
         if (questionText) {
-          setQuestionResults((prev) => [{ ...msg, from_self: true }, ...prev]);
+          setQuestionResults((prev) => [{ ...msg }, ...prev]);
         }
         swalConfig.success("Valid Question", "New question has been recorded.");
       }
@@ -1054,8 +1154,8 @@ export default function TranscriptPage({
     try {
       setSaving(true);
 
-      // Filter out entries with unknown speakers ("Khách", "Unknown", "Identifying")
-      const unknownSpeakers = ["khách", "unknown", "identifying", "guest"];
+      // Filter out entries with unknown speakers ("Guest", "Unknown", "Identifying")
+      const unknownSpeakers = ["Guest", "unknown", "identifying"];
 
       // Check if there are any entries with unknown speakers - block saving if so
       const entriesWithUnknownSpeaker = transcript.filter((item) => {
@@ -1068,7 +1168,7 @@ export default function TranscriptPage({
       if (entriesWithUnknownSpeaker.length > 0) {
         swalConfig.error(
           "Cannot Complete Session",
-          `There are ${entriesWithUnknownSpeaker.length} transcript entries with unknown speakers ("Khách", "Unknown"). Please identify all speakers before completing the session.`
+          `There are ${entriesWithUnknownSpeaker.length} transcript entries with unknown speakers ("Guest", "Unknown"). Please identify all speakers before completing the session.`
         );
         setSaving(false);
         return;
@@ -1491,8 +1591,13 @@ export default function TranscriptPage({
                         )}
                         {/* Speaker name with role-based coloring */}
                         {(() => {
-                          const displaySpeaker =
+                          // Translate "Khách" from backend to "Guest" for display
+                          let rawSpeaker =
                             item.edited_speaker || item.speaker || "Unknown";
+                          if (rawSpeaker.toLowerCase() === "khách") {
+                            rawSpeaker = "Guest";
+                          }
+                          const displaySpeaker = rawSpeaker;
                           const speakerLower = displaySpeaker.toLowerCase();
                           const isEdited =
                             !!item.edited_speaker || !!item.edited_text;
@@ -1526,12 +1631,9 @@ export default function TranscriptPage({
                             roleColor = "text-amber-700 bg-amber-50";
                             roleLabel = "Member";
                           } else if (
-                            [
-                              "khách",
-                              "unknown",
-                              "identifying",
-                              "guest",
-                            ].includes(speakerLower)
+                            ["guest", "unknown", "identifying"].includes(
+                              speakerLower
+                            )
                           ) {
                             roleColor = "text-red-600 bg-red-50";
                             roleLabel = "Unknown";
@@ -1614,7 +1716,24 @@ export default function TranscriptPage({
         {/* Notes Section */}
         <div className="bg-white rounded-lg shadow-sm border p-4 flex flex-col h-[500px]">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-semibold text-gray-800">Notes</h2>
+            <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+              Notes
+              {noteSaving && (
+                <span className="text-xs text-purple-500 font-normal animate-pulse">
+                  Saving...
+                </span>
+              )}
+              {!noteSaving && notes !== initialNotes && notes.trim() && (
+                <span className="text-xs text-gray-400 font-normal">
+                  Unsaved changes
+                </span>
+              )}
+              {!noteSaving && notes === initialNotes && noteId && (
+                <span className="text-xs text-green-500 font-normal">
+                  ✓ Saved
+                </span>
+              )}
+            </h2>
             {session?.status === "Completed" && (
               <span className="text-xs text-gray-400">
                 Session completed - read only
@@ -1650,28 +1769,22 @@ export default function TranscriptPage({
             {questionResults.map((q, i) => (
               <div
                 key={i}
-                className={`border rounded-md p-3 flex flex-col gap-2 ${
-                  q.from_member ? "bg-green-50 border-green-200" : "bg-gray-50"
-                }`}
+                className="border rounded-md p-3 flex flex-col gap-2 bg-purple-50 border-purple-200"
               >
                 <div className="flex justify-between items-start">
                   <div className="flex-1">
-                    {/* Hiển thị người đặt câu hỏi */}
-                    {q.from_member && (
-                      <span className="text-xs font-medium text-green-700 mb-1 block">
-                        👤 {q.speaker_name || q.speaker || "Member"}
-                      </span>
-                    )}
-                    <p className="text-sm text-gray-800 whitespace-pre-line">
+                    {/* Hiển thị số thứ tự câu hỏi */}
+                    <span className="text-xs font-semibold mb-1 block text-purple-700">
+                      Question {questionResults.length - i}
+                    </span>
+                    <p
+                      className="text-sm text-gray-800 whitespace-pre-line"
+                      style={{ fontFamily: "'Times New Roman', Times, serif" }}
+                    >
                       {q.question_text || q.text || "(Empty)"}
                     </p>
                   </div>
                   <div className="flex gap-1">
-                    {q.from_member && (
-                      <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
-                        From Member
-                      </span>
-                    )}
                     {q.is_duplicate && (
                       <span className="text-xs bg-red-100 text-red-600 px-2 py-1 rounded">
                         Duplicate

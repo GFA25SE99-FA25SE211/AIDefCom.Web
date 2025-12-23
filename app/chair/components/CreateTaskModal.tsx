@@ -70,7 +70,25 @@ export default function CreateTaskModal({
       );
     } catch (err: any) {
       console.error("Failed to create task:", err);
-      setError(err.message || "Failed to create task. Please try again.");
+
+      // Check if error is about duplicate/already exists
+      const errorMessage = err.message || "";
+      if (
+        errorMessage.includes("already exists") ||
+        errorMessage.includes("409") ||
+        errorMessage.includes("Conflict")
+      ) {
+        // Get the selected rubric name for better error message
+        const selectedRubric = rubrics.find(
+          (r) => r.id === Number(formData.rubricId)
+        );
+        const rubricName = selectedRubric?.rubricName || "Selected rubric";
+        setError(
+          `Rubric "${rubricName}" has already been assigned. Please select a different rubric.`
+        );
+      } else {
+        setError(errorMessage || "Failed to create task. Please try again.");
+      }
     } finally {
       setLoading(false);
     }
@@ -186,11 +204,14 @@ export default function CreateTaskModal({
                 >
                   <option value="">👤 Select a member...</option>
                   {lecturers
-                    .filter((l) => l.id !== currentUserId)
+                    .filter(
+                      (l) =>
+                        l.id !== currentUserId &&
+                        l.role?.toLowerCase() === "member"
+                    )
                     .map((lecturer) => (
                       <option key={lecturer.id} value={lecturer.id}>
-                        {lecturer.fullName || lecturer.userName} (
-                        {lecturer.role || "Member"})
+                        {lecturer.fullName || lecturer.userName}
                       </option>
                     ))}
                 </select>
