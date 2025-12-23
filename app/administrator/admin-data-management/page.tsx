@@ -1174,7 +1174,7 @@ export default function AdminDataManagementPage() {
 
   const handleEditNote = async (id: number, content: string) => {
     try {
-      await memberNotesApi.update(id, { content });
+      await memberNotesApi.update(id, { noteContent: content });
       const response = await memberNotesApi.getAll();
       setNotes(response.data || []);
       setEditingNote(null);
