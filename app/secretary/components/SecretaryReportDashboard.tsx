@@ -126,6 +126,83 @@ export default function SecretaryReportDashboard() {
     }
   };
 
+  // Handle download recording by reportId
+  const handleDownloadRecording = async (reportId: number) => {
+    try {
+      // Step 1: Get recording info by reportId
+      const recordingResponse = await fetch(
+        `${BACKEND_API_URL}/api/recordings/report/${reportId}`,
+        {
+          method: "GET",
+          headers: {
+            Accept: "application/json",
+          },
+        }
+      );
+
+      if (!recordingResponse.ok) {
+        throw new Error("Failed to get recording info");
+      }
+
+      const recordingData = await recordingResponse.json();
+      const recordingId = recordingData.data?.id;
+
+      if (!recordingId) {
+        swalConfig.error(
+          "No Recording Found",
+          "No recording available for this report."
+        );
+        return;
+      }
+
+      // Step 2: Get download SAS URL
+      const sasResponse = await fetch(
+        `${BACKEND_API_URL}/api/recordings/${recordingId}/download-sas?minutes=60`,
+        {
+          method: "GET",
+          headers: {
+            Accept: "application/json",
+          },
+        }
+      );
+
+      if (!sasResponse.ok) {
+        throw new Error("Failed to get download link");
+      }
+
+      const sasData = await sasResponse.json();
+      const downloadUrl = sasData.data;
+
+      if (!downloadUrl) {
+        throw new Error("No download URL returned");
+      }
+
+      // Step 3: Download the file
+      const response = await fetch(downloadUrl);
+      if (!response.ok) {
+        throw new Error("Failed to download recording");
+      }
+
+      const arrayBuffer = await response.arrayBuffer();
+      const blob = new Blob([arrayBuffer], { type: "audio/webm" });
+
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `recording-report-${reportId}.webm`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Recording download failed:", error);
+      swalConfig.error(
+        "Download Failed",
+        "Could not download the recording. Please try again."
+      );
+    }
+  };
+
   // Handle upload new file for rejected report
   const handleUploadClick = (reportId: number) => {
     const inputRef = fileInputRefs.current[reportId];
@@ -349,16 +426,38 @@ export default function SecretaryReportDashboard() {
                             : "No date"}
                         </p>
                       </div>
-                      {r.filePath && (
+                      <div className="flex gap-1">
+                        {r.filePath && (
+                          <button
+                            onClick={() =>
+                              handleDownload(
+                                r.filePath,
+                                `meeting-minutes-${r.sessionId}.docx`
+                              )
+                            }
+                            className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-100 rounded transition"
+                            title="Download Report"
+                          >
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              strokeWidth={2}
+                              stroke="currentColor"
+                              className="w-4 h-4"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V4"
+                              />
+                            </svg>
+                          </button>
+                        )}
                         <button
-                          onClick={() =>
-                            handleDownload(
-                              r.filePath,
-                              `meeting-minutes-${r.sessionId}.docx`
-                            )
-                          }
+                          onClick={() => handleDownloadRecording(r.id)}
                           className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-100 rounded transition"
-                          title="Download"
+                          title="Download Recording"
                         >
                           <svg
                             xmlns="http://www.w3.org/2000/svg"
@@ -371,11 +470,11 @@ export default function SecretaryReportDashboard() {
                             <path
                               strokeLinecap="round"
                               strokeLinejoin="round"
-                              d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V4"
+                              d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
                             />
                           </svg>
                         </button>
-                      )}
+                      </div>
                     </div>
                     <p
                       className="text-xs text-gray-600 mb-2 line-clamp-2"
@@ -425,16 +524,38 @@ export default function SecretaryReportDashboard() {
                             : "No date"}
                         </p>
                       </div>
-                      {r.filePath && (
+                      <div className="flex gap-1">
+                        {r.filePath && (
+                          <button
+                            onClick={() =>
+                              handleDownload(
+                                r.filePath,
+                                `meeting-minutes-${r.sessionId}.docx`
+                              )
+                            }
+                            className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-100 rounded transition"
+                            title="Download Report"
+                          >
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              strokeWidth={2}
+                              stroke="currentColor"
+                              className="w-4 h-4"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V4"
+                              />
+                            </svg>
+                          </button>
+                        )}
                         <button
-                          onClick={() =>
-                            handleDownload(
-                              r.filePath,
-                              `meeting-minutes-${r.sessionId}.docx`
-                            )
-                          }
+                          onClick={() => handleDownloadRecording(r.id)}
                           className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-100 rounded transition"
-                          title="Download"
+                          title="Download Recording"
                         >
                           <svg
                             xmlns="http://www.w3.org/2000/svg"
@@ -447,11 +568,11 @@ export default function SecretaryReportDashboard() {
                             <path
                               strokeLinecap="round"
                               strokeLinejoin="round"
-                              d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V4"
+                              d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
                             />
                           </svg>
                         </button>
-                      )}
+                      </div>
                     </div>
                     <p
                       className="text-xs text-gray-600 mb-2 line-clamp-2"
@@ -501,16 +622,38 @@ export default function SecretaryReportDashboard() {
                             : "No date"}
                         </p>
                       </div>
-                      {r.filePath && (
+                      <div className="flex gap-1">
+                        {r.filePath && (
+                          <button
+                            onClick={() =>
+                              handleDownload(
+                                r.filePath,
+                                `meeting-minutes-${r.sessionId}.docx`
+                              )
+                            }
+                            className="p-1.5 text-gray-400 hover:text-orange-600 hover:bg-orange-100 rounded transition"
+                            title="Download Report"
+                          >
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              strokeWidth={2}
+                              stroke="currentColor"
+                              className="w-4 h-4"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V4"
+                              />
+                            </svg>
+                          </button>
+                        )}
                         <button
-                          onClick={() =>
-                            handleDownload(
-                              r.filePath,
-                              `meeting-minutes-${r.sessionId}.docx`
-                            )
-                          }
+                          onClick={() => handleDownloadRecording(r.id)}
                           className="p-1.5 text-gray-400 hover:text-orange-600 hover:bg-orange-100 rounded transition"
-                          title="Download"
+                          title="Download Recording"
                         >
                           <svg
                             xmlns="http://www.w3.org/2000/svg"
@@ -523,11 +666,11 @@ export default function SecretaryReportDashboard() {
                             <path
                               strokeLinecap="round"
                               strokeLinejoin="round"
-                              d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V4"
+                              d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
                             />
                           </svg>
                         </button>
-                      )}
+                      </div>
                     </div>
                     <p
                       className="text-xs text-gray-600 mb-2 line-clamp-2"
