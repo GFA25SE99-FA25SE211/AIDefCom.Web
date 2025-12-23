@@ -190,7 +190,7 @@ export default function HomePage() {
                 displayStatus = "InProgress";
               } else if (apiStatus === "scheduled") {
                 // Giữ nguyên status "Scheduled" từ backend
-                displayStatus = "Scheduled";
+                  displayStatus = "Scheduled";
               } else {
                 // Fallback: nếu không có status hoặc status không hợp lệ, dùng logic cũ
                 const sessionDate = new Date(session.defenseDate);

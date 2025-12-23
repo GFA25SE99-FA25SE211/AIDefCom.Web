@@ -610,18 +610,15 @@ export default function ViewScorePage() {
         }
 
         // Save notes separately if needed
-        if (student.note && groupData) {
+        if (student.note && sessionId && currentUserId) {
           try {
             await memberNotesApi.create({
-              userId: currentUserId,
-              groupId: groupId,
-              content: student.note,
+              lecturerId: currentUserId,
+              sessionId: sessionId,
+              noteContent: student.note,
             });
           } catch (error) {
-            console.error(
-              `Error saving note for student ${student.id}:`,
-              error
-            );
+            // Error saving note - continue
           }
         }
       }

@@ -691,17 +691,14 @@ export default function ViewScorePage() {
     setStudentScores(newScores);
   };
 
-  // Notes are read-only, no need for handleNoteChange
-
-  const toggleNoteVisibility = (studentId: string) => {
-    // SỬA ĐỔI: Dùng type 'NotesVisibility'
-    setNotesVisibility((prev: NotesVisibility) => ({
-      ...prev,
-      [studentId]: !prev[studentId],
-    }));
-  };
+  // Notes are read-only, no need for handleNoteChange or toggleNoteVisibility
 
   const handleSave = async () => {
+    // CRITICAL: Prevent multiple simultaneous saves - check at the very beginning
+    if (savingRef.current || saving) {
+      return; // Already saving, skip completely
+    }
+    
     if (!sessionId) {
       swalConfig.error("Error", "Defense session not found");
       return;
@@ -713,6 +710,7 @@ export default function ViewScorePage() {
     }
 
     try {
+      // CRITICAL: Set flags IMMEDIATELY to prevent any duplicate calls
       setSaving(true);
       savingRef.current = true; // Set flag để prevent redirect
       const loadingSwal = swalConfig.loading(
@@ -804,48 +802,50 @@ export default function ViewScorePage() {
             }
           }
         }
+      }
 
-        // Get committeeAssignmentId if not already set
-        let assignmentId = committeeAssignmentId;
-        if (!assignmentId && sessionId && currentUserId) {
-          try {
-            const assignmentIdRes = await committeeAssignmentsApi.getIdByLecturerIdAndSessionId(currentUserId, sessionId);
-            if (assignmentIdRes.data) {
-              assignmentId = String(assignmentIdRes.data);
-              setCommitteeAssignmentId(assignmentId);
-            }
-          } catch (error: any) {
-            // Error getting assignment - continue without assignmentId
+      // Save session note (one note for entire session) - OUTSIDE student loop
+      // CRITICAL: This must run EXACTLY ONCE per handleSave call
+      // Get committeeAssignmentId if not already set
+      let assignmentId = committeeAssignmentId;
+      if (!assignmentId && sessionId && currentUserId) {
+        try {
+          const assignmentIdRes = await committeeAssignmentsApi.getIdByLecturerIdAndSessionId(currentUserId, sessionId);
+          if (assignmentIdRes.data) {
+            assignmentId = String(assignmentIdRes.data);
+            setCommitteeAssignmentId(assignmentId);
           }
+        } catch (error: any) {
+          // Error getting assignment - continue without assignmentId
         }
+      }
 
-        // Save session note
-        if (sessionId && currentUserId) {
-          try {
-            if (sessionNoteId && sessionNote.trim()) {
-              // Update existing note
-              await memberNotesApi.update(sessionNoteId, {
-                noteContent: sessionNote.trim(),
-              });
-            } else if (sessionNote.trim()) {
-              // Create new note
-              const noteRes = await memberNotesApi.create({
-                lecturerId: currentUserId,
-                sessionId: sessionId,
-                noteContent: sessionNote.trim(),
+      // Save session note - ONLY ONCE, outside student loop
+      if (sessionId && currentUserId) {
+        try {
+          if (sessionNoteId && sessionNote.trim()) {
+            // Update existing note
+            await memberNotesApi.update(sessionNoteId, {
+              noteContent: sessionNote.trim(),
             });
-              if (noteRes.data) {
-                setSessionNoteId(noteRes.data.id);
-              }
-            } else if (sessionNoteId && !sessionNote.trim()) {
-              // Delete note if empty
-              await memberNotesApi.delete(sessionNoteId);
-              setSessionNoteId(null);
+          } else if (sessionNote.trim()) {
+            // Create new note
+            const noteRes = await memberNotesApi.create({
+              lecturerId: currentUserId,
+              sessionId: sessionId,
+              noteContent: sessionNote.trim(),
+            });
+            if (noteRes.data) {
+              setSessionNoteId(noteRes.data.id);
             }
-          } catch (error: any) {
-            // Error saving note - log but continue
-            const errorMsg = error?.message || "Failed to save note";
+          } else if (sessionNoteId && !sessionNote.trim()) {
+            // Delete note if empty
+            await memberNotesApi.delete(sessionNoteId);
+            setSessionNoteId(null);
           }
+        } catch (error: any) {
+          // Error saving note - log but continue
+          const errorMsg = error?.message || "Failed to save note";
         }
       }
 
@@ -1054,7 +1054,17 @@ export default function ViewScorePage() {
               </button>
 
               <button
-                onClick={handleSave}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  
+                  // Prevent multiple clicks
+                  if (saving || savingRef.current) {
+                    return;
+                  }
+                  
+                  handleSave();
+                }}
                 disabled={saving}
                 className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-blue-500 text-white text-sm font-medium shadow-sm hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
@@ -1282,54 +1292,34 @@ export default function ViewScorePage() {
                                     </button>
                                   ))}
                                 </div>
-                                <button
-                                  className="text-sm text-violet-600 border px-3 py-1 rounded-md hover:bg-violet-50 mt-2"
-                                  onClick={() =>
-                                    toggleNoteVisibility(student.id)
-                                  }
-                                >
-                                  Notes
-                                </button>
                               </div>
                             </td>
                           </tr>
-
-                          {notesVisibility[student.id] && (
-                            <tr>
-                              <td colSpan={rubrics.length + 3} className="py-3">
-                                <div className="bg-gray-50 border rounded-md p-3">
-                                  <div className="mb-3">
-                                    <h4 className="text-sm font-semibold text-gray-700 mb-2">
-                                      Member Notes
-                                    </h4>
-                                  <textarea
-                                      className="w-full rounded-md border px-3 py-2 text-sm text-gray-700 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors resize-none"
-                                      rows={6}
-                                      placeholder="Nhập đánh giá cho session này..."
-                                      value={sessionNote || ""}
-                                      onChange={(e) => setSessionNote(e.target.value)}
-                                  />
-                                  </div>
-                                  <div className="text-right mt-2">
-                                    <button
-                                      className="text-sm text-gray-600 hover:underline"
-                                      onClick={() =>
-                                        toggleNoteVisibility(student.id)
-                                      }
-                                    >
-                                      Hide
-                                    </button>
-                                  </div>
-                                </div>
-                              </td>
-                            </tr>
-                          )}
                         </React.Fragment>
                       )
                     )}
                   </tbody>
                 </table>
               </div>
+
+              {/* Session Note Section - One note for entire session */}
+              {sessionId && (
+                <div className="mt-6 bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+                  <div className="mb-4">
+                    <h3 className="text-base font-semibold text-gray-800 mb-2">
+                      Note
+                    </h3>
+                   
+                  </div>
+                  <textarea
+                    className="w-full rounded-md border px-3 py-2 text-sm text-gray-700 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors resize-none"
+                    rows={6}
+                    placeholder="Enter note for the group..."
+                    value={sessionNote || ""}
+                    onChange={(e) => setSessionNote(e.target.value)}
+                  />
+                </div>
+              )}
             </>
           )}
         </div>

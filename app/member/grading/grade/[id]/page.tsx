@@ -121,7 +121,11 @@ export default function GradeGroupPage() {
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string>("");
   const [committeeAssignmentId, setCommitteeAssignmentId] = useState<string>("");
+  const [sessionNote, setSessionNote] = useState<string>(""); // Note chung cho toàn bộ session
+  const [sessionNoteId, setSessionNoteId] = useState<number | null>(null); // ID của note chung
   const savingRef = useRef(false); // Ref để prevent redirect khi đang save
+  const noteSavingRef = useRef(false); // Ref để prevent multiple note saves
+  const noteSaveInProgressRef = useRef(false); // Ref to track if note save is in progress in current handleSave call
 
   // Get sessionId from URL if available
   const urlSessionId = searchParams?.get("sessionId");
@@ -620,7 +624,7 @@ export default function GradeGroupPage() {
             project: projectTitle,
             students: studentsWithScores,
           };
-          // Load existing notes for this session (one note per student per committee assignment)
+          // Load existing note for this session (one note per session per committee assignment)
           // Fetch committeeAssignmentId if not already set
           let finalAssignmentId = committeeAssignmentId;
           if (groupSession?.id && userId && !finalAssignmentId) {
@@ -645,48 +649,33 @@ export default function GradeGroupPage() {
                 String(note.committeeAssignmentId) === String(finalAssignmentId)
               );
               
-              // Map notes to students by matching student name in noteContent
-              // Format: "Note for {studentName}: {content}" or just "{content}" if it's a general note
-              const updatedStudents = studentsWithScores.map((student) => {
-                // Try to find a note that matches this student
-                // First, try exact match with "Note for {name}:"
-                let matchingNote = userNotes.find((note: MemberNoteDto) => {
-                  const content = note.noteContent || "";
-                  return content.startsWith(`Note for ${student.name}:`) || 
-                         content.startsWith(`${student.name}:`);
+              // Get the first note as session note (one note per session)
+              // If there are multiple notes, keep only the most recent one and delete others
+              if (userNotes.length > 0) {
+                // Sort by createdAt descending to get the most recent note first
+                const sortedNotes = [...userNotes].sort((a, b) => {
+                  const dateA = new Date(a.createdAt || 0).getTime();
+                  const dateB = new Date(b.createdAt || 0).getTime();
+                  return dateB - dateA;
                 });
                 
-                // If no exact match, use the first note as general note for all students
-                if (!matchingNote && userNotes.length > 0) {
-                  matchingNote = userNotes[0];
-                }
+                const mostRecentNote = sortedNotes[0];
+                setSessionNote(mostRecentNote.noteContent || "");
+                setSessionNoteId(mostRecentNote.id);
                 
-                if (matchingNote) {
-                  let noteContent = matchingNote.noteContent || "";
-                  // Extract content if it starts with "Note for {name}:"
-                  if (noteContent.includes(":")) {
-                    const parts = noteContent.split(":");
-                    if (parts.length > 1) {
-                      noteContent = parts.slice(1).join(":").trim();
+                // Delete duplicate notes (keep only the most recent one)
+                if (userNotes.length > 1) {
+                  for (let i = 1; i < sortedNotes.length; i++) {
+                    try {
+                      await memberNotesApi.delete(sortedNotes[i].id);
+                    } catch (error) {
+                      // Continue deleting other notes
                     }
                   }
-                  return {
-                    ...student,
-                    note: noteContent,
-                    noteId: matchingNote.id,
-                  };
                 }
-                return student;
-              });
-              
-              setGroupData({
-                ...groupData,
-                students: updatedStudents,
-              });
-              setStudentScores(updatedStudents);
-              return; // Early return to avoid setting groupData again below
+              }
             } catch (error) {
-              // Error loading notes - continue with students without notes
+              // Error loading notes - continue without notes
             }
           }
 
@@ -799,19 +788,25 @@ export default function GradeGroupPage() {
     setStudentScores(newScores);
   };
 
-  const handleNoteChange = (
-    studentIndex: number,
-    value: string
-  ) => {
-    const newScores = [...studentScores];
-    newScores[studentIndex].note = value;
-    setStudentScores(newScores);
-  };
-
-  const toggleNoteVisibility = (studentId: string) =>
-    setNotesVisibility((prev) => ({ ...prev, [studentId]: !prev[studentId] }));
 
   const handleSave = async () => {
+    console.log('[HANDLE SAVE] ========== CALLED ==========', {
+      timestamp: new Date().toISOString(),
+      savingRef: savingRef.current,
+      saving,
+      noteSavingRef: noteSavingRef.current,
+      noteSaveInProgressRef: noteSaveInProgressRef.current,
+      stackTrace: new Error().stack?.split('\n').slice(1, 4).join('\n')
+    });
+    
+    // CRITICAL: Prevent multiple simultaneous saves - check at the very beginning
+    if (savingRef.current || saving || noteSavingRef.current) {
+      console.log('[HANDLE SAVE] BLOCKED - Already saving, returning early');
+      return; // Already saving, skip completely
+    }
+    
+    console.log('[HANDLE SAVE] PROCEEDING with save operation');
+
     // Triple check - prevent save if no rubrics (check for undefined, null, or empty)
     if (!hasRubrics) {
       await swalConfig.error("Error", "No grading criteria available");
@@ -859,8 +854,11 @@ export default function GradeGroupPage() {
         return;
       }
 
+      // CRITICAL: Set flags IMMEDIATELY to prevent any duplicate calls
       setSaving(true);
       savingRef.current = true; // Set flag để prevent redirect
+      noteSaveInProgressRef.current = false; // Reset note save progress flag for this save
+      
       const loadingSwal = swalConfig.loading(
         "Saving scores...",
         "Please wait while we save your scores and notes."
@@ -946,78 +944,150 @@ export default function GradeGroupPage() {
             }
           }
         }
+      }
 
-        // Save note for this student
-        // Store student name in noteContent to identify which student the note belongs to
-        const studentNote = student.note?.trim();
-        if (studentNote && sessionId && currentUserId) {
-          try {
-            const noteContentWithStudentName = `Note for ${student.name}: ${studentNote}`;
-            if (student.noteId && student.noteId > 0) {
-              // Update existing note
-              await memberNotesApi.update(student.noteId, {
-                noteContent: noteContentWithStudentName,
-              });
-            } else {
-              // Create new note
-              const noteRes = await memberNotesApi.create({
-                lecturerId: currentUserId,
-                sessionId: sessionId,
-                noteContent: noteContentWithStudentName,
-              });
-              // Update student's noteId for future updates
-              if (noteRes.data && noteRes.data.id) {
-                const updatedScores = [...studentScores];
-                const studentIndex = updatedScores.findIndex(s => s.id === student.id);
-                if (studentIndex >= 0) {
-                  updatedScores[studentIndex].noteId = noteRes.data.id;
-                  setStudentScores(updatedScores);
-                  // Also update groupData to keep it in sync
-                  if (groupData) {
-                    const updatedGroupStudents = [...groupData.students];
-                    const groupStudentIndex = updatedGroupStudents.findIndex(s => s.id === student.id);
-                    if (groupStudentIndex >= 0) {
-                      updatedGroupStudents[groupStudentIndex].noteId = noteRes.data.id;
-                      setGroupData({
-                        ...groupData,
-                        students: updatedGroupStudents,
-                      });
-          }
-        }
-                }
+      // Save session note (one note for entire session) - OUTSIDE student loop
+      // CRITICAL: This must run EXACTLY ONCE per handleSave call
+      // FINAL FIX: Use a combination of refs and immediate execution check
+      const sessionNoteContent = sessionNote?.trim();
+      
+      console.log('[NOTE SAVE] Starting note save check:', {
+        sessionNoteContent: sessionNoteContent?.substring(0, 20),
+        sessionId,
+        currentUserId: currentUserId?.substring(0, 10),
+        sessionNoteId,
+        noteSavingRef: noteSavingRef.current,
+        noteSaveInProgressRef: noteSaveInProgressRef.current,
+        timestamp: new Date().toISOString()
+      });
+      
+      // CRITICAL: Multiple checks to prevent ANY duplicate saves
+      if (noteSavingRef.current || noteSaveInProgressRef.current) {
+        console.log('[NOTE SAVE] SKIPPED - Already saving note');
+        // Already saving - skip completely
+      } else if (sessionNoteContent && sessionId && currentUserId) {
+        console.log('[NOTE SAVE] PROCEEDING - Setting flags and saving note');
+        // Set flags IMMEDIATELY before any async operations
+        noteSavingRef.current = true;
+        noteSaveInProgressRef.current = true;
+        
+        try {
+          // Strategy: Always check for existing note first, then update or create
+          // This ensures we never create duplicates
+          let noteIdToUse = sessionNoteId;
+          
+          console.log('[NOTE SAVE] Current noteIdToUse:', noteIdToUse);
+          
+          // If sessionNoteId is not set, try to find existing note
+          if (!noteIdToUse || noteIdToUse <= 0) {
+            console.log('[NOTE SAVE] sessionNoteId not set, searching for existing note');
+            // Get committeeAssignmentId for filtering
+            let assignmentId = committeeAssignmentId;
+            if (!assignmentId) {
+              try {
+                const assignmentIdRes = await committeeAssignmentsApi.getIdByLecturerIdAndSessionId(
+                  currentUserId,
+                  sessionId
+                );
+                assignmentId = assignmentIdRes.data;
+                console.log('[NOTE SAVE] Got assignmentId:', assignmentId);
+              } catch (error) {
+                console.log('[NOTE SAVE] Error getting assignmentId:', error);
+                // Continue without assignmentId
               }
             }
-          } catch (error: any) {
-            // Log error but continue with next student
-            const errorMsg = error?.message || "Failed to save note";
-            // Don't show error for each student to avoid spam
+            
+            // Find existing note if available
+            if (assignmentId) {
+              try {
+                console.log('[NOTE SAVE] Fetching existing notes for session:', sessionId);
+                const notesRes = await memberNotesApi.getBySessionId(sessionId);
+                const sessionNotes = Array.isArray(notesRes.data) ? notesRes.data : [];
+                console.log('[NOTE SAVE] Found notes:', sessionNotes.length);
+                
+                // Filter notes by committeeAssignmentId
+                const userNotes = sessionNotes.filter((note: MemberNoteDto) => 
+                  String(note.committeeAssignmentId) === String(assignmentId)
+                );
+                console.log('[NOTE SAVE] User notes after filter:', userNotes.length);
+                
+                // Get the most recent note if exists
+                if (userNotes.length > 0) {
+                  const sortedNotes = [...userNotes].sort((a, b) => {
+                    const dateA = new Date(a.createdAt || 0).getTime();
+                    const dateB = new Date(b.createdAt || 0).getTime();
+                    return dateB - dateA;
+                  });
+                  noteIdToUse = sortedNotes[0].id;
+                  console.log('[NOTE SAVE] Using existing note ID:', noteIdToUse);
+                  // Update sessionNoteId for next time
+                  setSessionNoteId(noteIdToUse);
+                }
+              } catch (error) {
+                console.log('[NOTE SAVE] Error finding existing note:', error);
+                // Continue - will create new note
+              }
+            }
           }
-        } else if (student.noteId && !studentNote && sessionId) {
-          // Delete note if content is empty
-          try {
-            await memberNotesApi.delete(student.noteId);
-            const updatedScores = [...studentScores];
-            const studentIndex = updatedScores.findIndex(s => s.id === student.id);
-            if (studentIndex >= 0) {
-              updatedScores[studentIndex].noteId = undefined;
-              setStudentScores(updatedScores);
-              // Also update groupData to keep it in sync
-              if (groupData) {
-                const updatedGroupStudents = [...groupData.students];
-                const groupStudentIndex = updatedGroupStudents.findIndex(s => s.id === student.id);
-                if (groupStudentIndex >= 0) {
-                  updatedGroupStudents[groupStudentIndex].noteId = undefined;
-                  setGroupData({
-                    ...groupData,
-                    students: updatedGroupStudents,
+          
+          // Now save: update if exists, create if not - ONLY 1 API CALL
+          if (noteIdToUse && noteIdToUse > 0) {
+            console.log('[NOTE SAVE] UPDATING existing note:', noteIdToUse);
+            // Update existing note - only 1 API call
+            await memberNotesApi.update(noteIdToUse, {
+              noteContent: sessionNoteContent,
             });
-                }
-              }
+            setSessionNoteId(noteIdToUse);
+            console.log('[NOTE SAVE] UPDATE completed');
+          } else {
+            console.log('[NOTE SAVE] CREATING new note');
+            // Create new note - only 1 API call
+            const noteRes = await memberNotesApi.create({
+              lecturerId: currentUserId,
+              sessionId: sessionId,
+              noteContent: sessionNoteContent,
+            });
+            if (noteRes.data && noteRes.data.id) {
+              console.log('[NOTE SAVE] CREATE completed, new note ID:', noteRes.data.id);
+              setSessionNoteId(noteRes.data.id);
+            } else {
+              console.log('[NOTE SAVE] CREATE failed - no ID returned');
             }
+          }
+        } catch (error: any) {
+          console.log('[NOTE SAVE] ERROR during save:', error);
+          // Error saving note - continue
+        } finally {
+          console.log('[NOTE SAVE] Resetting flags');
+          // Reset flags after save is complete
+          noteSavingRef.current = false;
+          noteSaveInProgressRef.current = false;
+        }
+      } else if (!sessionNoteContent && sessionId && sessionNoteId && sessionNoteId > 0) {
+        console.log('[NOTE SAVE] DELETING note:', sessionNoteId);
+        // Delete note if content is empty - only 1 API call
+        if (!noteSavingRef.current && !noteSaveInProgressRef.current) {
+          noteSavingRef.current = true;
+          noteSaveInProgressRef.current = true;
+          try {
+            await memberNotesApi.delete(sessionNoteId);
+            setSessionNoteId(null);
+            console.log('[NOTE SAVE] DELETE completed');
           } catch (error) {
+            console.log('[NOTE SAVE] DELETE error:', error);
             // Error deleting note - continue
+          } finally {
+            noteSavingRef.current = false;
+            noteSaveInProgressRef.current = false;
           }
         }
+      } else {
+        console.log('[NOTE SAVE] SKIPPED - Conditions not met:', {
+          hasContent: !!sessionNoteContent,
+          hasSessionId: !!sessionId,
+          hasUserId: !!currentUserId,
+          hasNoteId: !!sessionNoteId
+        });
       }
 
       Swal.close();
@@ -1064,75 +1134,68 @@ export default function GradeGroupPage() {
             })
           );
 
-          // Reload notes after save
-          if (sessionId && assignmentId) {
+          // Reload session note after save to display in form
+          let finalAssignmentId = assignmentId;
+          if (!finalAssignmentId && currentUserId && sessionId) {
+            try {
+              const assignmentIdRes = await committeeAssignmentsApi.getIdByLecturerIdAndSessionId(
+                currentUserId,
+                sessionId
+              );
+              finalAssignmentId = assignmentIdRes.data;
+          } catch (error) {
+              // Continue without assignmentId
+            }
+          }
+          
+          if (sessionId && finalAssignmentId) {
             try {
               const notesRes = await memberNotesApi.getBySessionId(sessionId);
               const sessionNotes = Array.isArray(notesRes.data) ? notesRes.data : [];
               
               // Filter notes by committeeAssignmentId
               const userNotes = sessionNotes.filter((note: MemberNoteDto) => 
-                String(note.committeeAssignmentId) === String(assignmentId)
+                String(note.committeeAssignmentId) === String(finalAssignmentId)
               );
               
-              // Map notes to students
-              const studentsWithNotes = updatedStudents.map((student) => {
-                // Try to find a note that matches this student
-                let matchingNote = userNotes.find((note: MemberNoteDto) => {
-                  const content = note.noteContent || "";
-                  return content.startsWith(`Note for ${student.name}:`) || 
-                         content.startsWith(`${student.name}:`);
+              // Get the most recent note (should be only 1 after save)
+              if (userNotes.length > 0) {
+                // Sort by createdAt descending to get the most recent note first
+                const sortedNotes = [...userNotes].sort((a, b) => {
+                  const dateA = new Date(a.createdAt || 0).getTime();
+                  const dateB = new Date(b.createdAt || 0).getTime();
+                  return dateB - dateA;
                 });
                 
-                // If no exact match, use the first note as general note
-                if (!matchingNote && userNotes.length > 0) {
-                  matchingNote = userNotes[0];
-                }
+                const mostRecentNote = sortedNotes[0];
+                setSessionNote(mostRecentNote.noteContent || "");
+                setSessionNoteId(mostRecentNote.id);
                 
-                if (matchingNote) {
-                  let noteContent = matchingNote.noteContent || "";
-                  // Extract content if it starts with "Note for {name}:"
-                  if (noteContent.includes(":")) {
-                    const parts = noteContent.split(":");
-                    if (parts.length > 1) {
-                      noteContent = parts.slice(1).join(":").trim();
+                // If somehow there are still duplicates, delete them
+                if (userNotes.length > 1) {
+                  for (let i = 1; i < sortedNotes.length; i++) {
+                    try {
+                      await memberNotesApi.delete(sortedNotes[i].id);
+                    } catch (error) {
+                      // Continue deleting other notes
                     }
                   }
-                  return {
-                    ...student,
-                    note: noteContent,
-                    noteId: matchingNote.id,
-                  };
                 }
-                return student;
-              });
-              
-              setStudentScores(studentsWithNotes);
-              // Also update groupData to keep it in sync
-              if (groupData) {
-                setGroupData({
-                  ...groupData,
-                  students: studentsWithNotes,
-                });
+              } else {
+                setSessionNote("");
+                setSessionNoteId(null);
               }
             } catch (error) {
-              // Error reloading notes - continue with updated students
-              setStudentScores(updatedStudents);
-              if (groupData) {
-                setGroupData({
-                  ...groupData,
-                  students: updatedStudents,
-                });
-              }
+              // Error reloading notes - continue
             }
-          } else {
-            setStudentScores(updatedStudents);
-            if (groupData) {
-              setGroupData({
-                ...groupData,
-                students: updatedStudents,
-              });
-            }
+          }
+          
+          setStudentScores(updatedStudents);
+          if (groupData) {
+            setGroupData({
+              ...groupData,
+              students: updatedStudents,
+            });
           }
         }
       } catch (error) {
@@ -1296,16 +1359,21 @@ export default function GradeGroupPage() {
 
               <button
                 onClick={(e) => {
-                  // Strict check for rubrics
-                  const hasNoRubrics = !hasRubrics;
-                  if (saving || hasNoRubrics) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    if (hasNoRubrics) {
-                      swalConfig.error("Error", "No grading criteria available");
-                    }
+                  e.preventDefault();
+                  e.stopPropagation();
+                  
+                  // Prevent multiple clicks
+                  if (saving || savingRef.current || noteSavingRef.current) {
                     return;
                   }
+                  
+                  // Strict check for rubrics
+                  const hasNoRubrics = !hasRubrics;
+                  if (hasNoRubrics) {
+                    swalConfig.error("Error", "No grading criteria available");
+                    return;
+                  }
+                  
                   handleSave();
                 }}
                 disabled={saving || !hasRubrics}
@@ -1555,54 +1623,6 @@ export default function GradeGroupPage() {
                                   </button>
                                 ))}
                               </div>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => toggleNoteVisibility(student.id)}
-                                className={`px-2 py-1 text-xs rounded border transition-colors ${
-                                  notesVisibility[student.id]
-                                    ? "bg-purple-100 border-purple-300 text-purple-700 hover:bg-purple-200"
-                                    : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"
-                                }`}
-                                title={
-                                  notesVisibility[student.id]
-                                    ? "Hide note"
-                                    : "Show note"
-                                }
-                              >
-                                {notesVisibility[student.id] ? "Hide Note" : "Note"}
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-
-                        {/* Note section - always visible */}
-                          <tr>
-                            <td
-                              colSpan={
-                                (rubrics.length > 0
-                                  ? rubrics.length
-                                  : criteria.length) + 3
-                              }
-                              className="py-3"
-                            >
-                              <div className="bg-gray-50 border rounded-md p-3">
-                              <div className="mb-2">
-                                <h4 className="text-sm font-semibold text-gray-700 mb-2">
-                                  Đánh giá cho {student.name}
-                                </h4>
-                                <textarea
-                                  className="w-full rounded-md border px-3 py-2 text-sm text-gray-700 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors resize-none"
-                                  rows={4}
-                                  placeholder="Nhập đánh giá cho sinh viên này..."
-                                  value={student.note || ""}
-                                  onChange={(e) => {
-                                    const studentIndex = studentScores.findIndex(s => s.id === student.id);
-                                    if (studentIndex >= 0) {
-                                      handleNoteChange(studentIndex, e.target.value);
-                                    }
-                                  }}
-                                />
                                 </div>
                               </div>
                             </td>
@@ -1613,59 +1633,22 @@ export default function GradeGroupPage() {
                 </table>
               </div>
 
-              {/* Member Notes Section - Display all notes for the session */}
+              {/* Session Note Section - One note for entire session */}
               {sessionId && (
                 <div className="mt-6 bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-base font-semibold text-gray-800">
-                      Member Notes
+                  <div className="mb-4">
+                    <h3 className="text-base font-semibold text-gray-800 mb-2">
+                      Note
                     </h3>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        // Toggle visibility of member notes section
-                        setNotesVisibility((prev) => ({
-                          ...prev,
-                          memberNotesSection: !prev.memberNotesSection,
-                        }));
-                      }}
-                      className="text-sm text-gray-600 hover:text-gray-800"
-                    >
-                      {notesVisibility.memberNotesSection ? "Hide" : "Show"}
-                    </button>
-                  </div>
                   
-                  {!notesVisibility.memberNotesSection && (
-                    <div className="space-y-3">
-                      {studentScores.map((student) => {
-                        if (!student.note || student.note.trim() === "") {
-                          return null;
-                        }
-                        return (
-                          <div
-                            key={student.id}
-                            className="bg-gray-50 border rounded-md p-3"
-                          >
-                            <div className="flex items-start justify-between mb-2">
-                              <span className="text-sm font-medium text-gray-700">
-                                {student.name}
-                              </span>
-                            </div>
-                            <p className="text-sm text-gray-600 whitespace-pre-wrap">
-                              {student.note}
-                            </p>
-                          </div>
-                        );
-                      })}
-                      {studentScores.every(
-                        (s) => !s.note || s.note.trim() === ""
-                      ) && (
-                        <p className="text-sm text-gray-500 italic text-center py-4">
-                          No notes available for this session.
-                        </p>
-                      )}
-                    </div>
-                  )}
+                  </div>
+                  <textarea
+                    className="w-full rounded-md border px-3 py-2 text-sm text-gray-700 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors resize-none"
+                    rows={6}
+                    placeholder="Enter note for the group..."
+                    value={sessionNote || ""}
+                    onChange={(e) => setSessionNote(e.target.value)}
+                  />
                 </div>
               )}
             </>
