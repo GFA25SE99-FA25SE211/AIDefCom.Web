@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { groupsApi } from "@/lib/api/groups";
 import { studentsApi } from "@/lib/api/students";
-import { notesApi } from "@/lib/api/notes";
+import { memberNotesApi } from "@/lib/api/member-notes";
 import { rubricsApi } from "@/lib/api/rubrics";
 import { majorRubricsApi } from "@/lib/api/major-rubrics";
 import { scoresApi, type ScoreReadDto } from "@/lib/api/scores";
@@ -26,7 +26,7 @@ import { useVoiceEnrollmentCheck } from "@/lib/hooks/useVoiceEnrollmentCheck";
 // import { useScoreRealTime } from "@/lib/hooks/useScoreRealTime"; // Không cần real-time ở trang grading - đã tự refresh sau khi save
 import { authUtils } from "@/lib/utils/auth";
 import Swal from "sweetalert2";
-import type { GroupDto, StudentDto, ScoreCreateDto, NoteDto } from "@/lib/models";
+import type { GroupDto, StudentDto, ScoreCreateDto, MemberNoteDto } from "@/lib/models";
 import { getWebSocketUrl } from "@/lib/config/api-urls";
 
 // --- (Code Icons giữ nguyên) ---
@@ -113,6 +113,7 @@ export default function ViewScorePage() {
   const [rubrics, setRubrics] = useState<any[]>([]);
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string>("");
+  const [committeeAssignmentId, setCommitteeAssignmentId] = useState<string>("");
   const [sessionNote, setSessionNote] = useState<string>("");
   const [sessionNoteId, setSessionNoteId] = useState<number | null>(null);
   const savingRef = useRef(false); // Ref để prevent redirect khi đang save
@@ -185,6 +186,22 @@ export default function ViewScorePage() {
 
         if (groupSession) {
           setSessionId(groupSession.id);
+          
+          // Get committeeAssignmentId for this session
+          if (currentUserId) {
+            try {
+              const assignmentIdRes = await committeeAssignmentsApi.getIdByLecturerIdAndSessionId(currentUserId, groupSession.id);
+              if (assignmentIdRes.data) {
+                setCommitteeAssignmentId(String(assignmentIdRes.data));
+              }
+            } catch (error: any) {
+              // Error getting assignment - continue without committeeAssignmentId
+              // Check if it's authentication error
+              if (error?.status === 401 || error?.status === 403) {
+                // Will be handled by API client
+              }
+            }
+          }
 
           // Lấy session role của user hiện tại
           if (currentUserId) {
@@ -401,14 +418,19 @@ export default function ViewScorePage() {
           setStudentScores(groupData.students);
 
           // Load session note
-          if (groupSession?.id) {
+          if (groupSession?.id && committeeAssignmentId) {
             try {
-              const notesRes = await notesApi.getBySessionId(groupSession.id);
-              const sessionNoteData = notesRes.data as NoteDto;
+              const notesRes = await memberNotesApi.getBySessionId(groupSession.id);
+              const sessionNotes = Array.isArray(notesRes.data) ? notesRes.data : [];
               
-              if (sessionNoteData) {
-                setSessionNote(sessionNoteData.content || "");
-                setSessionNoteId(sessionNoteData.id);
+              // Filter notes by committeeAssignmentId (notes belong to current user)
+              const userNote = sessionNotes.find((note: MemberNoteDto) => 
+                String(note.committeeAssignmentId) === String(committeeAssignmentId)
+              );
+              
+              if (userNote) {
+                setSessionNote(userNote.noteContent || "");
+                setSessionNoteId(userNote.id);
               } else {
                 setSessionNote("");
                 setSessionNoteId(null);
@@ -783,28 +805,46 @@ export default function ViewScorePage() {
           }
         }
 
+        // Get committeeAssignmentId if not already set
+        let assignmentId = committeeAssignmentId;
+        if (!assignmentId && sessionId && currentUserId) {
+          try {
+            const assignmentIdRes = await committeeAssignmentsApi.getIdByLecturerIdAndSessionId(currentUserId, sessionId);
+            if (assignmentIdRes.data) {
+              assignmentId = String(assignmentIdRes.data);
+              setCommitteeAssignmentId(assignmentId);
+            }
+          } catch (error: any) {
+            // Error getting assignment - continue without assignmentId
+          }
+        }
+
         // Save session note
-        if (sessionId) {
+        if (sessionId && currentUserId) {
           try {
             if (sessionNoteId && sessionNote.trim()) {
               // Update existing note
-              await notesApi.update(sessionNoteId, {
-                title: "Session Note",
-                content: sessionNote.trim(),
+              await memberNotesApi.update(sessionNoteId, {
+                noteContent: sessionNote.trim(),
               });
             } else if (sessionNote.trim()) {
               // Create new note
-              await notesApi.create({
+              const noteRes = await memberNotesApi.create({
+                lecturerId: currentUserId,
                 sessionId: sessionId,
-                title: "Session Note",
-                content: sessionNote.trim(),
-              });
+                noteContent: sessionNote.trim(),
+            });
+              if (noteRes.data) {
+                setSessionNoteId(noteRes.data.id);
+              }
             } else if (sessionNoteId && !sessionNote.trim()) {
               // Delete note if empty
-              await notesApi.delete(sessionNoteId);
+              await memberNotesApi.delete(sessionNoteId);
+              setSessionNoteId(null);
             }
-          } catch (error) {
-            // Error saving note - continue
+          } catch (error: any) {
+            // Error saving note - log but continue
+            const errorMsg = error?.message || "Failed to save note";
           }
         }
       }
@@ -1262,13 +1302,13 @@ export default function ViewScorePage() {
                                     <h4 className="text-sm font-semibold text-gray-700 mb-2">
                                       Member Notes
                                     </h4>
-                                    <textarea
+                                  <textarea
                                       className="w-full rounded-md border px-3 py-2 text-sm text-gray-700 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors resize-none"
                                       rows={6}
                                       placeholder="Nhập đánh giá cho session này..."
                                       value={sessionNote || ""}
                                       onChange={(e) => setSessionNote(e.target.value)}
-                                    />
+                                  />
                                   </div>
                                   <div className="text-right mt-2">
                                     <button

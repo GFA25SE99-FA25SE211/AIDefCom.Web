@@ -26,6 +26,10 @@ export const committeeAssignmentsApi = {
     return apiClient.get<CommitteeAssignmentDto[]>(`/api/committee-assignments/lecturer/${lecturerId}`);
   },
 
+  getIdByLecturerIdAndSessionId: async (lecturerId: string, sessionId: number) => {
+    return apiClient.get<string>(`/api/committee-assignments/lecturer/${lecturerId}/session/${sessionId}/id`);
+  },
+
   create: async (data: CommitteeAssignmentCreateDto) => {
     return apiClient.post<CommitteeAssignmentDto>('/api/committee-assignments', data);
   },

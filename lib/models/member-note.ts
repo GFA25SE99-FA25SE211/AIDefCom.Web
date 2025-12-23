@@ -9,11 +9,11 @@ export interface MemberNoteDto {
 }
 
 export interface MemberNoteCreateDto {
-  userId: string;
-  groupId: string;
-  content: string;
+  lecturerId: string;
+  sessionId: number;
+  noteContent?: string;
 }
 
 export interface MemberNoteUpdateDto {
-  content: string;
+  noteContent?: string;
 }

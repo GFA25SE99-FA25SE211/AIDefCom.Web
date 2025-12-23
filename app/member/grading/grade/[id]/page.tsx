@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { groupsApi } from "@/lib/api/groups";
 import { studentsApi } from "@/lib/api/students";
-import { notesApi } from "@/lib/api/notes";
+import { memberNotesApi } from "@/lib/api/member-notes";
 import { rubricsApi } from "@/lib/api/rubrics";
 import { majorRubricsApi } from "@/lib/api/major-rubrics";
 import { scoresApi, type ScoreReadDto } from "@/lib/api/scores";
@@ -26,7 +26,7 @@ import { useVoiceEnrollmentCheck } from "@/lib/hooks/useVoiceEnrollmentCheck";
 // import { useScoreRealTime } from "@/lib/hooks/useScoreRealTime"; // Không cần real-time ở trang grading - đã tự refresh sau khi save
 import { authUtils } from "@/lib/utils/auth";
 import Swal from "sweetalert2";
-import type { GroupDto, StudentDto, ScoreCreateDto, NoteDto } from "@/lib/models";
+import type { GroupDto, StudentDto, ScoreCreateDto, MemberNoteDto } from "@/lib/models";
 import { getWebSocketUrl } from "@/lib/config/api-urls";
 
 interface StudentScore {
@@ -120,6 +120,7 @@ export default function GradeGroupPage() {
     rubrics.every((r) => r && (r.id || r.rubricName));
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string>("");
+  const [committeeAssignmentId, setCommitteeAssignmentId] = useState<string>("");
   const savingRef = useRef(false); // Ref để prevent redirect khi đang save
 
   // Get sessionId from URL if available
@@ -375,6 +376,18 @@ export default function GradeGroupPage() {
           setCurrentUserId(userId);
         }
 
+        // Fetch committeeAssignmentId for this session if available
+        if (groupSession?.id && userId) {
+          try {
+            const assignmentIdRes = await committeeAssignmentsApi.getIdByLecturerIdAndSessionId(userId, groupSession.id);
+            if (assignmentIdRes.data) {
+              setCommitteeAssignmentId(String(assignmentIdRes.data));
+            }
+          } catch (error) {
+            // Error fetching committee assignment - continue without it
+          }
+        }
+
         // Kiểm tra committee-assignments/lecturer trước để xem có rubrics không
         let shouldShowRubrics = true;
         if (userId) {
@@ -607,23 +620,59 @@ export default function GradeGroupPage() {
             project: projectTitle,
             students: studentsWithScores,
           };
-          // Load existing notes for this session (one note per student)
-          if (groupSession?.id) {
+          // Load existing notes for this session (one note per student per committee assignment)
+          // Fetch committeeAssignmentId if not already set
+          let finalAssignmentId = committeeAssignmentId;
+          if (groupSession?.id && userId && !finalAssignmentId) {
             try {
-              // Get all notes and filter by sessionId
-              const allNotesRes = await notesApi.getAll();
-              const allNotes = allNotesRes.data || [];
-              const sessionNotes = allNotes.filter((note: NoteDto) => note.sessionId === groupSession.id);
+              const assignmentIdRes = await committeeAssignmentsApi.getIdByLecturerIdAndSessionId(userId, groupSession.id);
+              if (assignmentIdRes.data) {
+                finalAssignmentId = String(assignmentIdRes.data);
+                setCommitteeAssignmentId(finalAssignmentId);
+              }
+            } catch (error) {
+              // Error fetching committee assignment - continue without loading notes
+            }
+          }
+          
+          if (groupSession?.id && finalAssignmentId) {
+            try {
+              const notesRes = await memberNotesApi.getBySessionId(groupSession.id);
+              const sessionNotes = Array.isArray(notesRes.data) ? notesRes.data : [];
               
-              // Map notes to students by matching title (format: "Note for {studentName}")
+              // Filter notes by committeeAssignmentId (notes belong to current user)
+              const userNotes = sessionNotes.filter((note: MemberNoteDto) => 
+                String(note.committeeAssignmentId) === String(finalAssignmentId)
+              );
+              
+              // Map notes to students by matching student name in noteContent
+              // Format: "Note for {studentName}: {content}" or just "{content}" if it's a general note
               const updatedStudents = studentsWithScores.map((student) => {
-                const matchingNote = sessionNotes.find((note: NoteDto) => 
-                  note.title.includes(student.name) || note.title === `Note for ${student.name}`
-                );
+                // Try to find a note that matches this student
+                // First, try exact match with "Note for {name}:"
+                let matchingNote = userNotes.find((note: MemberNoteDto) => {
+                  const content = note.noteContent || "";
+                  return content.startsWith(`Note for ${student.name}:`) || 
+                         content.startsWith(`${student.name}:`);
+                });
+                
+                // If no exact match, use the first note as general note for all students
+                if (!matchingNote && userNotes.length > 0) {
+                  matchingNote = userNotes[0];
+                }
+                
                 if (matchingNote) {
+                  let noteContent = matchingNote.noteContent || "";
+                  // Extract content if it starts with "Note for {name}:"
+                  if (noteContent.includes(":")) {
+                    const parts = noteContent.split(":");
+                    if (parts.length > 1) {
+                      noteContent = parts.slice(1).join(":").trim();
+                    }
+                  }
                   return {
                     ...student,
-                    note: matchingNote.content || "",
+                    note: noteContent,
                     noteId: matchingNote.id,
                   };
                 }
@@ -779,6 +828,21 @@ export default function GradeGroupPage() {
       return;
     }
 
+    // Get committeeAssignmentId if not already set (needed for filtering notes when loading)
+    let assignmentId = committeeAssignmentId;
+    if (!assignmentId && sessionId && currentUserId) {
+      try {
+        const assignmentIdRes = await committeeAssignmentsApi.getIdByLecturerIdAndSessionId(currentUserId, sessionId);
+        if (assignmentIdRes.data) {
+          assignmentId = String(assignmentIdRes.data);
+          setCommitteeAssignmentId(assignmentId);
+        }
+        // Note: Don't return error if assignmentId not found - we can still save notes with lecturerId
+      } catch (error: any) {
+        // Continue without assignmentId - we can still save notes with lecturerId
+      }
+    }
+
     // Additional safety check - verify rubrics before proceeding
     if (!hasRubrics) {
       await swalConfig.error("Error", "Cannot save scores without grading criteria");
@@ -883,33 +947,75 @@ export default function GradeGroupPage() {
           }
         }
 
-        // Save note for this student (one note per student per session)
+        // Save note for this student
+        // Store student name in noteContent to identify which student the note belongs to
         const studentNote = student.note?.trim();
-        if (studentNote && sessionId) {
+        if (studentNote && sessionId && currentUserId) {
           try {
+            const noteContentWithStudentName = `Note for ${student.name}: ${studentNote}`;
             if (student.noteId && student.noteId > 0) {
               // Update existing note
-              await notesApi.update(student.noteId, {
-                title: `Note for ${student.name}`,
-                content: studentNote,
+              await memberNotesApi.update(student.noteId, {
+                noteContent: noteContentWithStudentName,
               });
             } else {
               // Create new note
-              const noteRes = await notesApi.create({
+              const noteRes = await memberNotesApi.create({
+                lecturerId: currentUserId,
                 sessionId: sessionId,
-                title: `Note for ${student.name}`,
-                content: studentNote,
+                noteContent: noteContentWithStudentName,
               });
               // Update student's noteId for future updates
-              const updatedScores = [...studentScores];
-              const studentIndex = updatedScores.findIndex(s => s.id === student.id);
-              if (studentIndex >= 0 && noteRes.data) {
-                updatedScores[studentIndex].noteId = noteRes.data.id;
-                setStudentScores(updatedScores);
+              if (noteRes.data && noteRes.data.id) {
+                const updatedScores = [...studentScores];
+                const studentIndex = updatedScores.findIndex(s => s.id === student.id);
+                if (studentIndex >= 0) {
+                  updatedScores[studentIndex].noteId = noteRes.data.id;
+                  setStudentScores(updatedScores);
+                  // Also update groupData to keep it in sync
+                  if (groupData) {
+                    const updatedGroupStudents = [...groupData.students];
+                    const groupStudentIndex = updatedGroupStudents.findIndex(s => s.id === student.id);
+                    if (groupStudentIndex >= 0) {
+                      updatedGroupStudents[groupStudentIndex].noteId = noteRes.data.id;
+                      setGroupData({
+                        ...groupData,
+                        students: updatedGroupStudents,
+                      });
+          }
+        }
+                }
+              }
+            }
+          } catch (error: any) {
+            // Log error but continue with next student
+            const errorMsg = error?.message || "Failed to save note";
+            // Don't show error for each student to avoid spam
+          }
+        } else if (student.noteId && !studentNote && sessionId) {
+          // Delete note if content is empty
+          try {
+            await memberNotesApi.delete(student.noteId);
+            const updatedScores = [...studentScores];
+            const studentIndex = updatedScores.findIndex(s => s.id === student.id);
+            if (studentIndex >= 0) {
+              updatedScores[studentIndex].noteId = undefined;
+              setStudentScores(updatedScores);
+              // Also update groupData to keep it in sync
+              if (groupData) {
+                const updatedGroupStudents = [...groupData.students];
+                const groupStudentIndex = updatedGroupStudents.findIndex(s => s.id === student.id);
+                if (groupStudentIndex >= 0) {
+                  updatedGroupStudents[groupStudentIndex].noteId = undefined;
+                  setGroupData({
+                    ...groupData,
+                    students: updatedGroupStudents,
+            });
+                }
               }
             }
           } catch (error) {
-            // Error saving note - continue with next student
+            // Error deleting note - continue
           }
         }
       }
@@ -958,7 +1064,76 @@ export default function GradeGroupPage() {
             })
           );
 
-          setStudentScores(updatedStudents);
+          // Reload notes after save
+          if (sessionId && assignmentId) {
+            try {
+              const notesRes = await memberNotesApi.getBySessionId(sessionId);
+              const sessionNotes = Array.isArray(notesRes.data) ? notesRes.data : [];
+              
+              // Filter notes by committeeAssignmentId
+              const userNotes = sessionNotes.filter((note: MemberNoteDto) => 
+                String(note.committeeAssignmentId) === String(assignmentId)
+              );
+              
+              // Map notes to students
+              const studentsWithNotes = updatedStudents.map((student) => {
+                // Try to find a note that matches this student
+                let matchingNote = userNotes.find((note: MemberNoteDto) => {
+                  const content = note.noteContent || "";
+                  return content.startsWith(`Note for ${student.name}:`) || 
+                         content.startsWith(`${student.name}:`);
+                });
+                
+                // If no exact match, use the first note as general note
+                if (!matchingNote && userNotes.length > 0) {
+                  matchingNote = userNotes[0];
+                }
+                
+                if (matchingNote) {
+                  let noteContent = matchingNote.noteContent || "";
+                  // Extract content if it starts with "Note for {name}:"
+                  if (noteContent.includes(":")) {
+                    const parts = noteContent.split(":");
+                    if (parts.length > 1) {
+                      noteContent = parts.slice(1).join(":").trim();
+                    }
+                  }
+                  return {
+                    ...student,
+                    note: noteContent,
+                    noteId: matchingNote.id,
+                  };
+                }
+                return student;
+              });
+              
+              setStudentScores(studentsWithNotes);
+              // Also update groupData to keep it in sync
+              if (groupData) {
+                setGroupData({
+                  ...groupData,
+                  students: studentsWithNotes,
+                });
+              }
+            } catch (error) {
+              // Error reloading notes - continue with updated students
+              setStudentScores(updatedStudents);
+              if (groupData) {
+                setGroupData({
+                  ...groupData,
+                  students: updatedStudents,
+                });
+              }
+            }
+          } else {
+            setStudentScores(updatedStudents);
+            if (groupData) {
+              setGroupData({
+                ...groupData,
+                students: updatedStudents,
+              });
+            }
+          }
         }
       } catch (error) {
         // Error refreshing scores after save
@@ -1347,39 +1522,39 @@ export default function GradeGroupPage() {
 
                           <td className="py-3 px-3 align-top">
                             <div className="flex flex-col gap-2">
-                              <div className="flex flex-col gap-1">
-                                <span className="text-xs text-gray-500">
-                                  Set All:
-                                </span>
-                                <div className="flex gap-1">
-                                  {[7, 8, 9].map((score) => (
-                                    <button
-                                      key={score}
-                                      type="button"
-                                      disabled={rubrics.length === 0}
-                                      onClick={() => {
-                                        const newScores = [...studentScores];
-                                        newScores[studentIndex].scores =
-                                          newScores[studentIndex].scores.map(
-                                            () => score
-                                          );
-                                        setStudentScores(newScores);
-                                      }}
-                                      className={`px-1.5 py-0.5 text-xs rounded border transition-colors ${
-                                        rubrics.length === 0
-                                          ? "bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed opacity-50"
-                                          : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"
-                                      }`}
-                                      title={
-                                        rubrics.length === 0
-                                          ? "Please add grading criteria"
-                                          : `Set all scores to ${score}`
-                                      }
-                                    >
-                                      {score}
-                                    </button>
-                                  ))}
-                                </div>
+                            <div className="flex flex-col gap-1">
+                              <span className="text-xs text-gray-500">
+                                Set All:
+                              </span>
+                              <div className="flex gap-1">
+                                {[7, 8, 9].map((score) => (
+                                  <button
+                                    key={score}
+                                    type="button"
+                                    disabled={rubrics.length === 0}
+                                    onClick={() => {
+                                      const newScores = [...studentScores];
+                                      newScores[studentIndex].scores =
+                                        newScores[studentIndex].scores.map(
+                                          () => score
+                                        );
+                                      setStudentScores(newScores);
+                                    }}
+                                    className={`px-1.5 py-0.5 text-xs rounded border transition-colors ${
+                                      rubrics.length === 0
+                                        ? "bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed opacity-50"
+                                        : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"
+                                    }`}
+                                    title={
+                                      rubrics.length === 0
+                                        ? "Please add grading criteria"
+                                        : `Set all scores to ${score}`
+                                    }
+                                  >
+                                    {score}
+                                  </button>
+                                ))}
+                              </div>
                               </div>
                               <button
                                 type="button"
@@ -1402,16 +1577,16 @@ export default function GradeGroupPage() {
                         </tr>
 
                         {/* Note section - always visible */}
-                        <tr>
-                          <td
-                            colSpan={
-                              (rubrics.length > 0
-                                ? rubrics.length
-                                : criteria.length) + 3
-                            }
-                            className="py-3"
-                          >
-                            <div className="bg-gray-50 border rounded-md p-3">
+                          <tr>
+                            <td
+                              colSpan={
+                                (rubrics.length > 0
+                                  ? rubrics.length
+                                  : criteria.length) + 3
+                              }
+                              className="py-3"
+                            >
+                              <div className="bg-gray-50 border rounded-md p-3">
                               <div className="mb-2">
                                 <h4 className="text-sm font-semibold text-gray-700 mb-2">
                                   Đánh giá cho {student.name}
@@ -1428,10 +1603,10 @@ export default function GradeGroupPage() {
                                     }
                                   }}
                                 />
+                                </div>
                               </div>
-                            </div>
-                          </td>
-                        </tr>
+                            </td>
+                          </tr>
                       </React.Fragment>
                     ))}
                   </tbody>

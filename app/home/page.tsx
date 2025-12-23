@@ -181,7 +181,7 @@ export default function HomePage() {
               const displayName = getGroupDisplayName(group);
               const projectTitle = getProjectTitle(group);
 
-              // Sử dụng status từ API thay vì tính theo ngày
+              // Sử dụng status từ API - giữ nguyên status từ backend
               let displayStatus: SessionStatus = "Scheduled";
               const apiStatus = session.status?.toLowerCase();
               if (apiStatus === "completed") {
@@ -189,17 +189,10 @@ export default function HomePage() {
               } else if (apiStatus === "inprogress") {
                 displayStatus = "InProgress";
               } else if (apiStatus === "scheduled") {
-                // Nếu scheduled nhưng ngày defense đã đến/qua thì hiện Upcoming
-                const sessionDate = new Date(session.defenseDate);
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                if (sessionDate >= today) {
-                  displayStatus = "Upcoming";
-                } else {
-                  displayStatus = "Scheduled";
-                }
+                // Giữ nguyên status "Scheduled" từ backend
+                displayStatus = "Scheduled";
               } else {
-                // Fallback: nếu không có status, dùng logic cũ
+                // Fallback: nếu không có status hoặc status không hợp lệ, dùng logic cũ
                 const sessionDate = new Date(session.defenseDate);
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);

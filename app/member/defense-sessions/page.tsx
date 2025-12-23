@@ -207,13 +207,13 @@ function DefenseSessionsContent() {
   const getStatusColor = (status: SessionCard["status"]) => {
     switch (status) {
       case "Completed":
-        return "bg-green-50 text-green-700 border-green-200";
+        return "bg-blue-100 text-blue-700";
       case "InProgress":
-        return "bg-blue-50 text-blue-700 border-blue-200";
+        return "bg-orange-100 text-orange-700";
       case "Scheduled":
-        return "bg-yellow-50 text-yellow-700 border-yellow-200";
+        return "bg-green-100 text-green-700";
       default:
-        return "bg-gray-50 text-gray-700 border-gray-200";
+        return "bg-gray-100 text-gray-700";
     }
   };
 
@@ -244,8 +244,8 @@ function DefenseSessionsContent() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Scheduled Card */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex items-center gap-4">
-          <div className="w-12 h-12 rounded-lg bg-yellow-100 flex items-center justify-center flex-shrink-0">
-            <Clock className="w-6 h-6 text-yellow-600" />
+          <div className="w-12 h-12 rounded-lg bg-green-100 flex items-center justify-center flex-shrink-0">
+            <Clock className="w-6 h-6 text-green-600" />
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-2xl font-bold text-gray-800">
@@ -257,8 +257,8 @@ function DefenseSessionsContent() {
 
         {/* In Progress Card */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex items-center gap-4">
-          <div className="w-12 h-12 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
-            <Clock className="w-6 h-6 text-blue-600" />
+          <div className="w-12 h-12 rounded-lg bg-orange-100 flex items-center justify-center flex-shrink-0">
+            <Clock className="w-6 h-6 text-orange-600" />
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-2xl font-bold text-gray-800">
@@ -270,8 +270,8 @@ function DefenseSessionsContent() {
 
         {/* Completed Card */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex items-center gap-4">
-          <div className="w-12 h-12 rounded-lg bg-green-100 flex items-center justify-center flex-shrink-0">
-            <CheckCircle className="w-6 h-6 text-green-600" />
+          <div className="w-12 h-12 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
+            <CheckCircle className="w-6 h-6 text-blue-600" />
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-2xl font-bold text-gray-800">
@@ -299,7 +299,7 @@ function DefenseSessionsContent() {
                 {/* Status Badge */}
                 <div className="flex justify-between items-start mb-4">
                   <span
-                    className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(
+                    className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(
                       session.status
                     )}`}
                   >
