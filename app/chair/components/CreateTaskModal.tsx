@@ -186,11 +186,14 @@ export default function CreateTaskModal({
                 >
                   <option value="">👤 Select a member...</option>
                   {lecturers
-                    .filter((l) => l.id !== currentUserId)
+                    .filter(
+                      (l) =>
+                        l.id !== currentUserId &&
+                        l.role?.toLowerCase() === "member"
+                    )
                     .map((lecturer) => (
                       <option key={lecturer.id} value={lecturer.id}>
-                        {lecturer.fullName || lecturer.userName} (
-                        {lecturer.role || "Member"})
+                        {lecturer.fullName || lecturer.userName}
                       </option>
                     ))}
                 </select>

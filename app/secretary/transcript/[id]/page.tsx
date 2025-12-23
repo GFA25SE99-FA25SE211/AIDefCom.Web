@@ -1777,7 +1777,10 @@ export default function TranscriptPage({
                     <span className="text-xs font-semibold mb-1 block text-purple-700">
                       Question {questionResults.length - i}
                     </span>
-                    <p className="text-sm text-gray-800 whitespace-pre-line">
+                    <p
+                      className="text-sm text-gray-800 whitespace-pre-line"
+                      style={{ fontFamily: "'Times New Roman', Times, serif" }}
+                    >
                       {q.question_text || q.text || "(Empty)"}
                     </p>
                   </div>
