@@ -221,6 +221,12 @@ export default function SecretaryReportDashboard() {
     try {
       setUploadingReportId(report.id);
 
+      // Get access token for authorization
+      const accessToken = localStorage.getItem("accessToken");
+      if (!accessToken) {
+        throw new Error("Please login to upload files.");
+      }
+
       // Step 1: Upload file to get new filePath
       const formData = new FormData();
       formData.append("file", file);
@@ -229,6 +235,9 @@ export default function SecretaryReportDashboard() {
         `${BACKEND_API_URL}/api/defense-reports/upload-pdf`,
         {
           method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
           body: formData,
           // Don't set Content-Type header - browser will set it automatically with boundary
         }
@@ -257,7 +266,8 @@ export default function SecretaryReportDashboard() {
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
-            accept: "*/*",
+            Accept: "*/*",
+            Authorization: `Bearer ${accessToken}`,
           },
           body: JSON.stringify({
             sessionId: report.sessionId,
@@ -347,13 +357,37 @@ export default function SecretaryReportDashboard() {
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">
-          📊 Manage Reports
-        </h1>
-        <p className="text-gray-600">
-          Download and collect completed reports from groups
-        </p>
+      <div className="mb-8 flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            📊 Manage Reports
+          </h1>
+          <p className="text-gray-600">
+            Download and collect completed reports from groups
+          </p>
+        </div>
+        <button
+          onClick={fetchReports}
+          disabled={loading}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Refresh reports"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            strokeWidth={2}
+            stroke="currentColor"
+            className={`w-5 h-5 ${loading ? "animate-spin" : ""}`}
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"
+            />
+          </svg>
+          {loading ? "Refreshing..." : "Refresh"}
+        </button>
       </div>
 
       {/* Stats Section */}

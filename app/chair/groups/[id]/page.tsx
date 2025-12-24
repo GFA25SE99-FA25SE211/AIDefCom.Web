@@ -277,10 +277,24 @@ export default function GroupDetailsPage() {
       setTotalScoreInput("");
     } catch (err: any) {
       console.error("Failed to update total score:", err);
-      swalConfig.error(
-        "Update Failed",
-        err.message || "Failed to update total score. Please try again."
-      );
+
+      // Check if error is about session status conflict
+      const errorMessage = err.message || "";
+      if (
+        errorMessage.includes("conflict") ||
+        errorMessage.includes("409") ||
+        errorMessage.includes("state")
+      ) {
+        swalConfig.error(
+          "Cannot Update Score",
+          "Total score can only be updated for sessions with 'Completed' status. Please complete the session first."
+        );
+      } else {
+        swalConfig.error(
+          "Update Failed",
+          errorMessage || "Failed to update total score. Please try again."
+        );
+      }
     } finally {
       setSavingTotalScore(false);
     }
@@ -448,8 +462,10 @@ export default function GroupDetailsPage() {
   }, [students, selectedStudentId]);
 
   // Function to fetch scores for selected student (using ref to avoid stale closure)
-  const fetchScoresForStudentRef = useRef<((studentId: string) => Promise<void>) | null>(null);
-  
+  const fetchScoresForStudentRef = useRef<
+    ((studentId: string) => Promise<void>) | null
+  >(null);
+
   const fetchScoresForStudent = async (studentId: string) => {
     if (!studentId) return;
     try {
@@ -479,9 +495,9 @@ export default function GroupDetailsPage() {
     studentIds: selectedStudentId ? [selectedStudentId] : [],
     onScoreUpdate: (update) => {
       console.log("📊 Real-time score update received in chair page:", update);
-      
+
       // Check if update is relevant to current student or session
-      const isRelevant = 
+      const isRelevant =
         (update.studentId && update.studentId === selectedStudentId) ||
         (update.sessionId && update.sessionId === defenseSession?.id);
 
@@ -794,7 +810,9 @@ export default function GroupDetailsPage() {
                     <div className="flex items-center gap-2 text-white/90 text-sm">
                       <div
                         className={`w-2 h-2 rounded-full ${
-                          isConnected ? "bg-green-300 animate-pulse" : "bg-red-300"
+                          isConnected
+                            ? "bg-green-300 animate-pulse"
+                            : "bg-red-300"
                         }`}
                       />
                       <span className="text-xs">
@@ -1062,136 +1080,135 @@ export default function GroupDetailsPage() {
                 )}
               </div>
             </div>
-          </div>
 
-          {/* Status Card */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-            <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-4">
-              <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  strokeWidth={2}
-                  stroke="currentColor"
-                  className="w-5 h-5"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z"
-                  />
-                </svg>
-                Status & Scoring
-              </h2>
-            </div>
-            <div className="p-6 space-y-5">
-              {/* Total Score Display */}
-              <div className="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl p-5 border border-emerald-100">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-emerald-700 font-medium mb-1">
-                      Total Score
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      Final grade for this defense
-                    </p>
-                  </div>
-                  <div className="w-16 h-16 rounded-full bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center shadow-lg">
-                    <span className="text-2xl font-bold text-white">
-                      {displayedTotalScore !== null
-                        ? displayedTotalScore
-                        : group.totalScore !== null &&
-                          group.totalScore !== undefined
-                        ? group.totalScore
-                        : "—"}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Chair: Input Total Score */}
-              {isChair && defenseSession && (
-                <div className="bg-purple-50 border border-purple-100 rounded-xl p-4">
-                  <p className="text-xs font-semibold text-purple-700 mb-3 flex items-center gap-1">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      strokeWidth={2}
-                      stroke="currentColor"
-                      className="w-4 h-4"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125"
-                      />
-                    </svg>
-                    Update Score (0-10)
-                  </p>
-                  <div className="flex gap-2">
-                    <input
-                      type="number"
-                      min="0"
-                      max="10"
-                      step="0.1"
-                      value={totalScoreInput}
-                      onChange={(e) => setTotalScoreInput(e.target.value)}
-                      placeholder="Enter score..."
-                      className="flex-1 px-4 py-2.5 border border-purple-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent transition bg-white"
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-4">
+                <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth={2}
+                    stroke="currentColor"
+                    className="w-5 h-5"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z"
                     />
-                    <button
-                      onClick={handleSubmitTotalScore}
-                      disabled={savingTotalScore || !totalScoreInput}
-                      className="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-sm font-semibold rounded-xl hover:from-purple-700 hover:to-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-sm"
-                    >
-                      {savingTotalScore ? (
-                        <>
-                          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                          Saving...
-                        </>
-                      ) : (
-                        <>
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            strokeWidth={2}
-                            stroke="currentColor"
-                            className="w-4 h-4"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              d="M4.5 12.75l6 6 9-13.5"
-                            />
-                          </svg>
-                          Submit
-                        </>
-                      )}
-                    </button>
+                  </svg>
+                  Scoring
+                </h2>
+              </div>
+              <div className="p-6 space-y-5">
+                {/* Total Score Display */}
+                <div className="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl p-5 border border-emerald-100">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-emerald-700 font-medium mb-1">
+                        Total Score
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        Final grade for this defense
+                      </p>
+                    </div>
+                    <div className="w-16 h-16 rounded-full bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center shadow-lg">
+                      <span className="text-2xl font-bold text-white">
+                        {displayedTotalScore !== null
+                          ? displayedTotalScore
+                          : group.totalScore !== null &&
+                            group.totalScore !== undefined
+                          ? group.totalScore
+                          : "—"}
+                      </span>
+                    </div>
                   </div>
                 </div>
-              )}
 
-              {/* Info Section */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="p-4 bg-gray-50 rounded-xl">
-                  <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">
-                    Semester
-                  </p>
-                  <p className="font-semibold text-gray-900">
-                    {group.semesterName}
-                  </p>
-                </div>
-                <div className="p-4 bg-gray-50 rounded-xl">
-                  <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">
-                    Major
-                  </p>
-                  <p className="font-semibold text-gray-900">
-                    {group.majorName}
-                  </p>
+                {/* Chair: Input Total Score */}
+                {isChair && defenseSession && (
+                  <div className="bg-purple-50 border border-purple-100 rounded-xl p-4">
+                    <p className="text-xs font-semibold text-purple-700 mb-3 flex items-center gap-1">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        strokeWidth={2}
+                        stroke="currentColor"
+                        className="w-4 h-4"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125"
+                        />
+                      </svg>
+                      Update Score (0-10)
+                    </p>
+                    <div className="flex gap-2">
+                      <input
+                        type="number"
+                        min="0"
+                        max="10"
+                        step="0.1"
+                        value={totalScoreInput}
+                        onChange={(e) => setTotalScoreInput(e.target.value)}
+                        placeholder="Enter score..."
+                        className="flex-1 px-4 py-2.5 border border-purple-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent transition bg-white"
+                      />
+                      <button
+                        onClick={handleSubmitTotalScore}
+                        disabled={savingTotalScore || !totalScoreInput}
+                        className="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-sm font-semibold rounded-xl hover:from-purple-700 hover:to-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-sm"
+                      >
+                        {savingTotalScore ? (
+                          <>
+                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            Saving...
+                          </>
+                        ) : (
+                          <>
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              strokeWidth={2}
+                              stroke="currentColor"
+                              className="w-4 h-4"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M4.5 12.75l6 6 9-13.5"
+                              />
+                            </svg>
+                            Submit
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Info Section */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-4 bg-gray-50 rounded-xl">
+                    <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">
+                      Semester
+                    </p>
+                    <p className="font-semibold text-gray-900">
+                      {group.semesterName}
+                    </p>
+                  </div>
+                  <div className="p-4 bg-gray-50 rounded-xl">
+                    <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">
+                      Major
+                    </p>
+                    <p className="font-semibold text-gray-900">
+                      {group.majorName}
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
