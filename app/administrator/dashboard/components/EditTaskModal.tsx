@@ -10,7 +10,11 @@ interface Task {
   title: string;
   description: string;
   assignedBy: string;
+  assignedByName?: string;
   assignedTo: string;
+  assignedToName?: string;
+  rubricId?: number;
+  sessionId?: number;
   status: "Pending" | "Completed" | "Inprogress";
 }
 
@@ -19,11 +23,13 @@ interface EditTaskModalProps {
   onClose: () => void;
   onSubmit: (
     id: number,
-    data: Omit<Task, "id" | "assignedBy" | "assignedTo">
+    data: Omit<Task, "id" | "assignedBy" | "assignedTo" | "status">
   ) => void;
   taskData: Task | null;
   userOptions?: { id: string; name: string }[];
   existingTasks?: { title: string }[];
+  rubricOptions?: { id: number; name: string }[];
+  sessionOptions?: { id: number; name: string }[];
 }
 
 const EditTaskModal: React.FC<EditTaskModalProps> = ({
@@ -33,14 +39,15 @@ const EditTaskModal: React.FC<EditTaskModalProps> = ({
   taskData,
   userOptions = [],
   existingTasks = [],
+  rubricOptions = [],
+  sessionOptions = [],
 }) => {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [rubricId, setRubricId] = useState("");
+  const [sessionId, setSessionId] = useState("");
   const [assignedBy, setAssignedBy] = useState("");
   const [assignedTo, setAssignedTo] = useState("");
-  const [status, setStatus] = useState<"Pending" | "Completed" | "Inprogress">(
-    "Pending"
-  );
   const [titleError, setTitleError] = useState("");
   const [isCheckingTitle, setIsCheckingTitle] = useState(false);
   const debounceTimer = useRef<NodeJS.Timeout | null>(null);
@@ -49,17 +56,19 @@ const EditTaskModal: React.FC<EditTaskModalProps> = ({
     if (taskData) {
       setTitle(taskData.title);
       setDescription(taskData.description);
+      setRubricId(taskData.rubricId ? String(taskData.rubricId) : "");
+      setSessionId(taskData.sessionId ? String(taskData.sessionId) : "");
       setAssignedBy(taskData.assignedBy);
       setAssignedTo(taskData.assignedTo);
-      setStatus(taskData.status);
       setTitleError("");
       setIsCheckingTitle(false);
     } else {
       setTitle("");
       setDescription("");
+      setRubricId("");
+      setSessionId("");
       setAssignedBy("");
       setAssignedTo("");
-      setStatus("Pending");
       setTitleError("");
       setIsCheckingTitle(false);
     }
@@ -131,23 +140,32 @@ const EditTaskModal: React.FC<EditTaskModalProps> = ({
       return;
     }
 
+    if (!rubricId || !sessionId) {
+      swalConfig.error(
+        "Missing fields",
+        "Please select Rubric and Defense Session."
+      );
+      return;
+    }
+
     onSubmit(taskData.id, {
       title,
       description,
-      status,
+      rubricId: Number(rubricId),
+      sessionId: Number(sessionId),
     });
     onClose();
   };
 
   if (!taskData) return null;
 
-  // Get assigned by name from userOptions
+  // Get assigned by name - prioritize assignedByName from taskData, then userOptions, then fallback to ID
   const assignedByUser = userOptions.find((u) => u.id === taskData.assignedBy);
-  const assignedByDisplayName = assignedByUser?.name || taskData.assignedBy;
+  const assignedByDisplayName = taskData.assignedByName || assignedByUser?.name || taskData.assignedBy;
 
-  // Get assigned to name from userOptions
+  // Get assigned to name - prioritize assignedToName from taskData, then userOptions, then fallback to ID
   const assignedToUser = userOptions.find((u) => u.id === taskData.assignedTo);
-  const assignedToDisplayName = assignedToUser?.name || taskData.assignedTo;
+  const assignedToDisplayName = taskData.assignedToName || assignedToUser?.name || taskData.assignedTo;
 
   const assignedToOptions =
     userOptions.length > 0
@@ -156,11 +174,6 @@ const EditTaskModal: React.FC<EditTaskModalProps> = ({
           { id: "chair", name: "Chair (No users found)" },
           { id: "secretary", name: "Secretary (No users found)" },
         ];
-  const statusOptions: ("Pending" | "Completed" | "Inprogress")[] = [
-    "Pending",
-    "Inprogress",
-    "Completed",
-  ];
 
   const footer = (
     <div className="modal-footer">
@@ -218,7 +231,7 @@ const EditTaskModal: React.FC<EditTaskModalProps> = ({
           )}
         </div>
 
-        <div className="form-group">
+        <div className="form-group col-span-2">
           <label htmlFor="task-description">Description</label>
           <textarea
             id="task-description"
@@ -255,20 +268,38 @@ const EditTaskModal: React.FC<EditTaskModalProps> = ({
         </div>
 
         <div className="form-group">
-          <label htmlFor="task-status">Status</label>
+          <label htmlFor="task-rubric">Rubric</label>
           <select
-            id="task-status"
-            value={status}
-            onChange={(e) =>
-              setStatus(
-                e.target.value as "Pending" | "Completed" | "Inprogress"
-              )
-            }
+            id="task-rubric"
+            value={rubricId}
+            onChange={(e) => setRubricId(e.target.value)}
             required
           >
-            {statusOptions.map((s) => (
-              <option key={s} value={s}>
-                {s}
+            <option value="" disabled>
+              Select rubric
+            </option>
+            {rubricOptions.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="form-group">
+          <label htmlFor="task-session">Defense Session</label>
+          <select
+            id="task-session"
+            value={sessionId}
+            onChange={(e) => setSessionId(e.target.value)}
+            required
+          >
+            <option value="" disabled>
+              Select defense session
+            </option>
+            {sessionOptions.map((session) => (
+              <option key={session.id} value={session.id}>
+                {session.name}
               </option>
             ))}
           </select>
