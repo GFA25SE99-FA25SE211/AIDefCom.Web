@@ -6,6 +6,7 @@ import { useAudioRecorder } from "@/lib/hooks/useAudioRecorder";
 import { useVoiceEnrollmentCheck } from "@/lib/hooks/useVoiceEnrollmentCheck";
 import { useSessionRoleCheck } from "@/lib/hooks/useSessionRoleCheck";
 import { swalConfig, closeSwal } from "@/lib/utils/sweetAlert";
+import Swal from "sweetalert2";
 // import { useSTTWebSocket, STTEvent } from "@/lib/hooks/useSTTWebSocket";
 import { defenseSessionsApi } from "@/lib/api/defense-sessions";
 import { transcriptsApi } from "@/lib/api/transcripts";
@@ -579,11 +580,12 @@ export default function TranscriptPage({
       swalConfig.info("Recording question");
       // Reset flag when starting new question
       setHasQuestionFinalText(false);
-    } else if (
-      eventType === "question_mode_result" ||
-      eventType === "question_mode_ended"
-    ) {
-      // Kết quả câu hỏi của CHÍNH MÌNH (thư ký tự đặt)
+    } else if (eventType === "question_mode_ended") {
+      // question_mode_ended arrives FIRST but WITHOUT proper is_duplicate flag
+      // Only use this to clear loading state, DO NOT add to questionResults
+      console.log(
+        "[QUESTION EVENT] question_mode_ended - clearing loading state only"
+      );
 
       // Clear timeout and reset waiting flag
       if (questionTimeoutRef.current) {
@@ -595,18 +597,49 @@ export default function TranscriptPage({
       // Close loading popup if open
       closeSwal();
 
-      // Reset flag after getting result
+      // Reset flag
       setHasQuestionFinalText(false);
 
+      // DO NOT add to questionResults - wait for question_mode_result
+    } else if (eventType === "question_mode_result") {
+      // question_mode_result has the CORRECT is_duplicate flag from backend
+      // This is the ONLY event that should add to questionResults
       const questionText = msg.question_text || msg.text || "";
 
+      // DEBUG: Log event details
+      console.log("[QUESTION EVENT] question_mode_result:", {
+        is_duplicate: msg.is_duplicate,
+        question_text: questionText?.substring(0, 50),
+      });
+
+      // Clear timeout if not already cleared
+      if (questionTimeoutRef.current) {
+        clearTimeout(questionTimeoutRef.current);
+        questionTimeoutRef.current = null;
+      }
+      waitingForQuestionResult.current = false;
+      closeSwal();
+      setHasQuestionFinalText(false);
+
+      // Check is_duplicate from backend
       if (msg.is_duplicate) {
-        swalConfig.warning(
-          "Duplicate Question",
-          "This question has already been recorded."
+        console.log(
+          "[QUESTION EVENT] Backend says DUPLICATE - NOT adding to list"
         );
+        // Show toast with longer duration
+        Swal.fire({
+          toast: true,
+          position: "top-end",
+          icon: "warning",
+          title: "Duplicate Question - This question was already recorded.",
+          showConfirmButton: false,
+          timer: 5000,
+          timerProgressBar: true,
+        });
+        // DO NOT add to questionResults
       } else {
-        // Thêm vào danh sách câu hỏi
+        console.log("[QUESTION EVENT] Backend says VALID - adding to list");
+        // Backend says it's a valid new question - add to list
         if (questionText) {
           setQuestionResults((prev) => [{ ...msg }, ...prev]);
         }
@@ -710,9 +743,8 @@ export default function TranscriptPage({
       ) {
         return;
       }
-      const speakerName = msg.speaker_name || msg.speaker || "Member";
-      // Toast notification
-      swalConfig.toast.info(`${speakerName} is asking a question...`);
+      // Toast notification - without speaker name
+      swalConfig.toast.info("A member is asking a question...");
     } else if (eventType === "broadcast_question_processing") {
       // Member kết thúc đặt câu hỏi, đang xử lý
       // Dùng toast để thư ký biết nhưng KHÔNG bị chặn làm việc
@@ -722,9 +754,8 @@ export default function TranscriptPage({
       ) {
         return;
       }
-      const speakerName = msg.speaker_name || msg.speaker || "Member";
-      // Toast notification
-      swalConfig.toast.info(`Processing question from ${speakerName}...`);
+      // Toast notification - without speaker name
+      swalConfig.toast.info("Processing question...");
     } else if (eventType === "broadcast_question_result") {
       // Kết quả câu hỏi từ MEMBER (không phải từ chính mình)
       if (
@@ -734,43 +765,34 @@ export default function TranscriptPage({
         return; // Bỏ qua broadcast từ chính mình
       }
 
-      // Tạo unique ID cho question để tránh duplicate
-      const questionId = `${msg.source_session_id}_${
-        msg.question_text || ""
-      }`.trim();
-      if (processedQuestionIdsRef.current.has(questionId)) {
-        return;
-      }
-      processedQuestionIdsRef.current.add(questionId);
-      // Auto-clear sau 10 giây
-      setTimeout(
-        () => processedQuestionIdsRef.current.delete(questionId),
-        10000
-      );
+      // Tạo unique ID cho question để tránh duplicate - dùng text only
+      const questionText = msg.question_text || "";
 
       // Đóng loading popup
       closeSwal();
 
-      const speakerName = msg.speaker_name || msg.speaker || "Member";
-      const questionText = msg.question_text || "";
-
+      // Simply check if backend says it's duplicate - no text comparison needed
       if (msg.is_duplicate) {
-        swalConfig.warning(
-          "Duplicate Question",
-          `Question from ${speakerName} was already recorded.`
-        );
+        // Show toast with longer duration using direct Swal call
+        Swal.fire({
+          toast: true,
+          position: "top-end",
+          icon: "warning",
+          title: "Duplicate Question - This question was already recorded.",
+          showConfirmButton: false,
+          timer: 5000,
+          timerProgressBar: true,
+        });
+        // DO NOT add to questionResults
       } else {
-        // Thêm vào danh sách và hiện popup thành công
+        // Backend says it's a valid new question - add to list
         if (questionText) {
           setQuestionResults((prev) => [
-            { ...msg, from_member: true, speaker: speakerName },
+            { ...msg, from_member: true },
             ...prev,
           ]);
         }
-        swalConfig.success(
-          "Valid Question",
-          `Question from ${speakerName} has been recorded.`
-        );
+        swalConfig.success("Valid Question", "New question has been recorded.");
       }
     } else if (eventType === "connected") {
       // Lưu session_id của mình để filter broadcast

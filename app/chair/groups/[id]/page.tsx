@@ -138,8 +138,7 @@ export default function GroupDetailsPage() {
       ) {
         return;
       }
-      const speakerName = msg.speaker_name || msg.speaker || "Member";
-      swalConfig.toast.info(`${speakerName} is asking a question...`);
+      swalConfig.toast.info("A member is asking a question...");
     } else if (eventType === "broadcast_question_processing") {
       // Người khác kết thúc đặt câu hỏi, đang xử lý - dùng toast nhẹ
       if (
@@ -148,8 +147,7 @@ export default function GroupDetailsPage() {
       ) {
         return;
       }
-      const speakerName = msg.speaker_name || msg.speaker || "Member";
-      swalConfig.toast.info(`Processing question from ${speakerName}...`);
+      swalConfig.toast.info("Processing question...");
     } else if (eventType === "broadcast_question_result") {
       // Kết quả câu hỏi từ người khác
       if (
@@ -158,21 +156,18 @@ export default function GroupDetailsPage() {
       ) {
         return;
       }
-      const speakerName = msg.speaker_name || msg.speaker || "Member";
       const questionText = msg.question_text || "";
 
       if (msg.is_duplicate) {
-        swalConfig.toast.info(`Question from ${speakerName} is duplicate`);
+        swalConfig.toast.info("This question is duplicate");
       } else {
         if (questionText) {
           setQuestionResults((prev) => [
-            { ...msg, from_broadcast: true, speaker: speakerName },
+            { ...msg, from_broadcast: true },
             ...prev,
           ]);
         }
-        swalConfig.toast.success(
-          `Question from ${speakerName} has been recorded`
-        );
+        swalConfig.toast.success("New question has been recorded");
       }
     } else if (eventType === "connected") {
       console.log(

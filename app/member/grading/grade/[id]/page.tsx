@@ -1,6 +1,12 @@
 "use client";
 
-import React, { useState, useEffect, Suspense, useRef, useCallback } from "react";
+import React, {
+  useState,
+  useEffect,
+  Suspense,
+  useRef,
+  useCallback,
+} from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -26,7 +32,12 @@ import { useVoiceEnrollmentCheck } from "@/lib/hooks/useVoiceEnrollmentCheck";
 // import { useScoreRealTime } from "@/lib/hooks/useScoreRealTime"; // Không cần real-time ở trang grading - đã tự refresh sau khi save
 import { authUtils } from "@/lib/utils/auth";
 import Swal from "sweetalert2";
-import type { GroupDto, StudentDto, ScoreCreateDto, MemberNoteDto } from "@/lib/models";
+import type {
+  GroupDto,
+  StudentDto,
+  ScoreCreateDto,
+  MemberNoteDto,
+} from "@/lib/models";
 import { getWebSocketUrl } from "@/lib/config/api-urls";
 
 interface StudentScore {
@@ -120,7 +131,8 @@ export default function GradeGroupPage() {
     rubrics.every((r) => r && (r.id || r.rubricName));
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string>("");
-  const [committeeAssignmentId, setCommitteeAssignmentId] = useState<string>("");
+  const [committeeAssignmentId, setCommitteeAssignmentId] =
+    useState<string>("");
   const [sessionNote, setSessionNote] = useState<string>(""); // Note chung cho toàn bộ session
   const [sessionNoteId, setSessionNoteId] = useState<number | null>(null); // ID của note chung
   const savingRef = useRef(false); // Ref để prevent redirect khi đang save
@@ -198,8 +210,7 @@ export default function GradeGroupPage() {
       ) {
         return;
       }
-      const speakerName = msg.speaker_name || msg.speaker || "Member";
-      swalConfig.toast.info(`${speakerName} is asking a question...`);
+      swalConfig.toast.info("A member is asking a question...");
     } else if (eventType === "broadcast_question_processing") {
       // Người khác kết thúc đặt câu hỏi, đang xử lý - dùng toast nhẹ
       if (
@@ -208,8 +219,7 @@ export default function GradeGroupPage() {
       ) {
         return;
       }
-      const speakerName = msg.speaker_name || msg.speaker || "Member";
-      swalConfig.toast.info(`Processing question from ${speakerName}...`);
+      swalConfig.toast.info("Processing question...");
     } else if (eventType === "broadcast_question_result") {
       // Kết quả câu hỏi từ người khác
       if (
@@ -218,21 +228,18 @@ export default function GradeGroupPage() {
       ) {
         return;
       }
-      const speakerName = msg.speaker_name || msg.speaker || "Member";
       const questionText = msg.question_text || "";
 
       if (msg.is_duplicate) {
-        swalConfig.toast.info(`Question from ${speakerName} is duplicate`);
+        swalConfig.toast.info("This question is duplicate");
       } else {
         if (questionText) {
           setQuestionResults((prev) => [
-            { ...msg, from_broadcast: true, speaker: speakerName },
+            { ...msg, from_broadcast: true },
             ...prev,
           ]);
         }
-        swalConfig.toast.success(
-          `Question from ${speakerName} has been recorded`
-        );
+        swalConfig.toast.success("New question has been recorded");
       }
     } else if (eventType === "connected") {
       // Lưu session_id của mình
@@ -383,7 +390,11 @@ export default function GradeGroupPage() {
         // Fetch committeeAssignmentId for this session if available
         if (groupSession?.id && userId) {
           try {
-            const assignmentIdRes = await committeeAssignmentsApi.getIdByLecturerIdAndSessionId(userId, groupSession.id);
+            const assignmentIdRes =
+              await committeeAssignmentsApi.getIdByLecturerIdAndSessionId(
+                userId,
+                groupSession.id
+              );
             if (assignmentIdRes.data) {
               setCommitteeAssignmentId(String(assignmentIdRes.data));
             }
@@ -402,7 +413,6 @@ export default function GradeGroupPage() {
             const assignments = Array.isArray(assignmentRes.data)
               ? assignmentRes.data
               : [];
-
 
             // Kiểm tra nếu assignment có rubrics null hoặc không có rubrics
             if (assignments.length > 0) {
@@ -444,14 +454,12 @@ export default function GradeGroupPage() {
         // Ưu tiên 1: Lấy rubrics từ API theo lecturer và session
         if (groupSession && userId) {
           try {
-
             // Gọi API mới để lấy danh sách tên rubrics
             const rubricsRes =
               await projectTasksApi.getRubricsByLecturerAndSession(
                 userId,
                 groupSession.id
               );
-
 
             if (
               rubricsRes.data &&
@@ -629,7 +637,11 @@ export default function GradeGroupPage() {
           let finalAssignmentId = committeeAssignmentId;
           if (groupSession?.id && userId && !finalAssignmentId) {
             try {
-              const assignmentIdRes = await committeeAssignmentsApi.getIdByLecturerIdAndSessionId(userId, groupSession.id);
+              const assignmentIdRes =
+                await committeeAssignmentsApi.getIdByLecturerIdAndSessionId(
+                  userId,
+                  groupSession.id
+                );
               if (assignmentIdRes.data) {
                 finalAssignmentId = String(assignmentIdRes.data);
                 setCommitteeAssignmentId(finalAssignmentId);
@@ -638,17 +650,23 @@ export default function GradeGroupPage() {
               // Error fetching committee assignment - continue without loading notes
             }
           }
-          
+
           if (groupSession?.id && finalAssignmentId) {
             try {
-              const notesRes = await memberNotesApi.getBySessionId(groupSession.id);
-              const sessionNotes = Array.isArray(notesRes.data) ? notesRes.data : [];
-              
-              // Filter notes by committeeAssignmentId (notes belong to current user)
-              const userNotes = sessionNotes.filter((note: MemberNoteDto) => 
-                String(note.committeeAssignmentId) === String(finalAssignmentId)
+              const notesRes = await memberNotesApi.getBySessionId(
+                groupSession.id
               );
-              
+              const sessionNotes = Array.isArray(notesRes.data)
+                ? notesRes.data
+                : [];
+
+              // Filter notes by committeeAssignmentId (notes belong to current user)
+              const userNotes = sessionNotes.filter(
+                (note: MemberNoteDto) =>
+                  String(note.committeeAssignmentId) ===
+                  String(finalAssignmentId)
+              );
+
               // Get the first note as session note (one note per session)
               // If there are multiple notes, keep only the most recent one and delete others
               if (userNotes.length > 0) {
@@ -658,11 +676,11 @@ export default function GradeGroupPage() {
                   const dateB = new Date(b.createdAt || 0).getTime();
                   return dateB - dateA;
                 });
-                
+
                 const mostRecentNote = sortedNotes[0];
                 setSessionNote(mostRecentNote.noteContent || "");
                 setSessionNoteId(mostRecentNote.id);
-                
+
                 // Delete duplicate notes (keep only the most recent one)
                 if (userNotes.length > 1) {
                   for (let i = 1; i < sortedNotes.length; i++) {
@@ -788,24 +806,23 @@ export default function GradeGroupPage() {
     setStudentScores(newScores);
   };
 
-
   const handleSave = async () => {
-    console.log('[HANDLE SAVE] ========== CALLED ==========', {
+    console.log("[HANDLE SAVE] ========== CALLED ==========", {
       timestamp: new Date().toISOString(),
       savingRef: savingRef.current,
       saving,
       noteSavingRef: noteSavingRef.current,
       noteSaveInProgressRef: noteSaveInProgressRef.current,
-      stackTrace: new Error().stack?.split('\n').slice(1, 4).join('\n')
+      stackTrace: new Error().stack?.split("\n").slice(1, 4).join("\n"),
     });
-    
+
     // CRITICAL: Prevent multiple simultaneous saves - check at the very beginning
     if (savingRef.current || saving || noteSavingRef.current) {
-      console.log('[HANDLE SAVE] BLOCKED - Already saving, returning early');
+      console.log("[HANDLE SAVE] BLOCKED - Already saving, returning early");
       return; // Already saving, skip completely
     }
-    
-    console.log('[HANDLE SAVE] PROCEEDING with save operation');
+
+    console.log("[HANDLE SAVE] PROCEEDING with save operation");
 
     // Triple check - prevent save if no rubrics (check for undefined, null, or empty)
     if (!hasRubrics) {
@@ -827,7 +844,11 @@ export default function GradeGroupPage() {
     let assignmentId = committeeAssignmentId;
     if (!assignmentId && sessionId && currentUserId) {
       try {
-        const assignmentIdRes = await committeeAssignmentsApi.getIdByLecturerIdAndSessionId(currentUserId, sessionId);
+        const assignmentIdRes =
+          await committeeAssignmentsApi.getIdByLecturerIdAndSessionId(
+            currentUserId,
+            sessionId
+          );
         if (assignmentIdRes.data) {
           assignmentId = String(assignmentIdRes.data);
           setCommitteeAssignmentId(assignmentId);
@@ -840,7 +861,10 @@ export default function GradeGroupPage() {
 
     // Additional safety check - verify rubrics before proceeding
     if (!hasRubrics) {
-      await swalConfig.error("Error", "Cannot save scores without grading criteria");
+      await swalConfig.error(
+        "Error",
+        "Cannot save scores without grading criteria"
+      );
       return;
     }
 
@@ -858,7 +882,7 @@ export default function GradeGroupPage() {
       setSaving(true);
       savingRef.current = true; // Set flag để prevent redirect
       noteSaveInProgressRef.current = false; // Reset note save progress flag for this save
-      
+
       const loadingSwal = swalConfig.loading(
         "Saving scores...",
         "Please wait while we save your scores and notes."
@@ -925,7 +949,14 @@ export default function GradeGroupPage() {
               }
 
               // Validate all required fields before creating score
-              if (!currentUserId || !student.id || !sessionId || sessionId === 0 || !rubricId || rubricId === 0) {
+              if (
+                !currentUserId ||
+                !student.id ||
+                !sessionId ||
+                sessionId === 0 ||
+                !rubricId ||
+                rubricId === 0
+              ) {
                 continue;
               }
 
@@ -950,67 +981,79 @@ export default function GradeGroupPage() {
       // CRITICAL: This must run EXACTLY ONCE per handleSave call
       // FINAL FIX: Use a combination of refs and immediate execution check
       const sessionNoteContent = sessionNote?.trim();
-      
-      console.log('[NOTE SAVE] Starting note save check:', {
+
+      console.log("[NOTE SAVE] Starting note save check:", {
         sessionNoteContent: sessionNoteContent?.substring(0, 20),
         sessionId,
         currentUserId: currentUserId?.substring(0, 10),
         sessionNoteId,
         noteSavingRef: noteSavingRef.current,
         noteSaveInProgressRef: noteSaveInProgressRef.current,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
-      
+
       // CRITICAL: Multiple checks to prevent ANY duplicate saves
       if (noteSavingRef.current || noteSaveInProgressRef.current) {
-        console.log('[NOTE SAVE] SKIPPED - Already saving note');
+        console.log("[NOTE SAVE] SKIPPED - Already saving note");
         // Already saving - skip completely
       } else if (sessionNoteContent && sessionId && currentUserId) {
-        console.log('[NOTE SAVE] PROCEEDING - Setting flags and saving note');
+        console.log("[NOTE SAVE] PROCEEDING - Setting flags and saving note");
         // Set flags IMMEDIATELY before any async operations
         noteSavingRef.current = true;
         noteSaveInProgressRef.current = true;
-        
+
         try {
           // Strategy: Always check for existing note first, then update or create
           // This ensures we never create duplicates
           let noteIdToUse = sessionNoteId;
-          
-          console.log('[NOTE SAVE] Current noteIdToUse:', noteIdToUse);
-          
+
+          console.log("[NOTE SAVE] Current noteIdToUse:", noteIdToUse);
+
           // If sessionNoteId is not set, try to find existing note
           if (!noteIdToUse || noteIdToUse <= 0) {
-            console.log('[NOTE SAVE] sessionNoteId not set, searching for existing note');
+            console.log(
+              "[NOTE SAVE] sessionNoteId not set, searching for existing note"
+            );
             // Get committeeAssignmentId for filtering
             let assignmentId = committeeAssignmentId;
             if (!assignmentId) {
               try {
-                const assignmentIdRes = await committeeAssignmentsApi.getIdByLecturerIdAndSessionId(
-                  currentUserId,
-                  sessionId
-                );
+                const assignmentIdRes =
+                  await committeeAssignmentsApi.getIdByLecturerIdAndSessionId(
+                    currentUserId,
+                    sessionId
+                  );
                 assignmentId = assignmentIdRes.data;
-                console.log('[NOTE SAVE] Got assignmentId:', assignmentId);
+                console.log("[NOTE SAVE] Got assignmentId:", assignmentId);
               } catch (error) {
-                console.log('[NOTE SAVE] Error getting assignmentId:', error);
+                console.log("[NOTE SAVE] Error getting assignmentId:", error);
                 // Continue without assignmentId
               }
             }
-            
+
             // Find existing note if available
             if (assignmentId) {
               try {
-                console.log('[NOTE SAVE] Fetching existing notes for session:', sessionId);
-                const notesRes = await memberNotesApi.getBySessionId(sessionId);
-                const sessionNotes = Array.isArray(notesRes.data) ? notesRes.data : [];
-                console.log('[NOTE SAVE] Found notes:', sessionNotes.length);
-                
-                // Filter notes by committeeAssignmentId
-                const userNotes = sessionNotes.filter((note: MemberNoteDto) => 
-                  String(note.committeeAssignmentId) === String(assignmentId)
+                console.log(
+                  "[NOTE SAVE] Fetching existing notes for session:",
+                  sessionId
                 );
-                console.log('[NOTE SAVE] User notes after filter:', userNotes.length);
-                
+                const notesRes = await memberNotesApi.getBySessionId(sessionId);
+                const sessionNotes = Array.isArray(notesRes.data)
+                  ? notesRes.data
+                  : [];
+                console.log("[NOTE SAVE] Found notes:", sessionNotes.length);
+
+                // Filter notes by committeeAssignmentId
+                const userNotes = sessionNotes.filter(
+                  (note: MemberNoteDto) =>
+                    String(note.committeeAssignmentId) === String(assignmentId)
+                );
+                console.log(
+                  "[NOTE SAVE] User notes after filter:",
+                  userNotes.length
+                );
+
                 // Get the most recent note if exists
                 if (userNotes.length > 0) {
                   const sortedNotes = [...userNotes].sort((a, b) => {
@@ -1019,28 +1062,31 @@ export default function GradeGroupPage() {
                     return dateB - dateA;
                   });
                   noteIdToUse = sortedNotes[0].id;
-                  console.log('[NOTE SAVE] Using existing note ID:', noteIdToUse);
+                  console.log(
+                    "[NOTE SAVE] Using existing note ID:",
+                    noteIdToUse
+                  );
                   // Update sessionNoteId for next time
                   setSessionNoteId(noteIdToUse);
                 }
               } catch (error) {
-                console.log('[NOTE SAVE] Error finding existing note:', error);
+                console.log("[NOTE SAVE] Error finding existing note:", error);
                 // Continue - will create new note
               }
             }
           }
-          
+
           // Now save: update if exists, create if not - ONLY 1 API CALL
           if (noteIdToUse && noteIdToUse > 0) {
-            console.log('[NOTE SAVE] UPDATING existing note:', noteIdToUse);
+            console.log("[NOTE SAVE] UPDATING existing note:", noteIdToUse);
             // Update existing note - only 1 API call
             await memberNotesApi.update(noteIdToUse, {
               noteContent: sessionNoteContent,
             });
             setSessionNoteId(noteIdToUse);
-            console.log('[NOTE SAVE] UPDATE completed');
+            console.log("[NOTE SAVE] UPDATE completed");
           } else {
-            console.log('[NOTE SAVE] CREATING new note');
+            console.log("[NOTE SAVE] CREATING new note");
             // Create new note - only 1 API call
             const noteRes = await memberNotesApi.create({
               lecturerId: currentUserId,
@@ -1048,23 +1094,31 @@ export default function GradeGroupPage() {
               noteContent: sessionNoteContent,
             });
             if (noteRes.data && noteRes.data.id) {
-              console.log('[NOTE SAVE] CREATE completed, new note ID:', noteRes.data.id);
+              console.log(
+                "[NOTE SAVE] CREATE completed, new note ID:",
+                noteRes.data.id
+              );
               setSessionNoteId(noteRes.data.id);
             } else {
-              console.log('[NOTE SAVE] CREATE failed - no ID returned');
+              console.log("[NOTE SAVE] CREATE failed - no ID returned");
             }
           }
         } catch (error: any) {
-          console.log('[NOTE SAVE] ERROR during save:', error);
+          console.log("[NOTE SAVE] ERROR during save:", error);
           // Error saving note - continue
         } finally {
-          console.log('[NOTE SAVE] Resetting flags');
+          console.log("[NOTE SAVE] Resetting flags");
           // Reset flags after save is complete
           noteSavingRef.current = false;
           noteSaveInProgressRef.current = false;
         }
-      } else if (!sessionNoteContent && sessionId && sessionNoteId && sessionNoteId > 0) {
-        console.log('[NOTE SAVE] DELETING note:', sessionNoteId);
+      } else if (
+        !sessionNoteContent &&
+        sessionId &&
+        sessionNoteId &&
+        sessionNoteId > 0
+      ) {
+        console.log("[NOTE SAVE] DELETING note:", sessionNoteId);
         // Delete note if content is empty - only 1 API call
         if (!noteSavingRef.current && !noteSaveInProgressRef.current) {
           noteSavingRef.current = true;
@@ -1072,9 +1126,9 @@ export default function GradeGroupPage() {
           try {
             await memberNotesApi.delete(sessionNoteId);
             setSessionNoteId(null);
-            console.log('[NOTE SAVE] DELETE completed');
+            console.log("[NOTE SAVE] DELETE completed");
           } catch (error) {
-            console.log('[NOTE SAVE] DELETE error:', error);
+            console.log("[NOTE SAVE] DELETE error:", error);
             // Error deleting note - continue
           } finally {
             noteSavingRef.current = false;
@@ -1082,16 +1136,16 @@ export default function GradeGroupPage() {
           }
         }
       } else {
-        console.log('[NOTE SAVE] SKIPPED - Conditions not met:', {
+        console.log("[NOTE SAVE] SKIPPED - Conditions not met:", {
           hasContent: !!sessionNoteContent,
           hasSessionId: !!sessionId,
           hasUserId: !!currentUserId,
-          hasNoteId: !!sessionNoteId
+          hasNoteId: !!sessionNoteId,
         });
       }
 
       Swal.close();
-      
+
       // Reload lại data trước khi hiển thị success message
       // Để đảm bảo data được refresh ngay lập tức
       try {
@@ -1138,26 +1192,31 @@ export default function GradeGroupPage() {
           let finalAssignmentId = assignmentId;
           if (!finalAssignmentId && currentUserId && sessionId) {
             try {
-              const assignmentIdRes = await committeeAssignmentsApi.getIdByLecturerIdAndSessionId(
-                currentUserId,
-                sessionId
-              );
+              const assignmentIdRes =
+                await committeeAssignmentsApi.getIdByLecturerIdAndSessionId(
+                  currentUserId,
+                  sessionId
+                );
               finalAssignmentId = assignmentIdRes.data;
-          } catch (error) {
+            } catch (error) {
               // Continue without assignmentId
             }
           }
-          
+
           if (sessionId && finalAssignmentId) {
             try {
               const notesRes = await memberNotesApi.getBySessionId(sessionId);
-              const sessionNotes = Array.isArray(notesRes.data) ? notesRes.data : [];
-              
+              const sessionNotes = Array.isArray(notesRes.data)
+                ? notesRes.data
+                : [];
+
               // Filter notes by committeeAssignmentId
-              const userNotes = sessionNotes.filter((note: MemberNoteDto) => 
-                String(note.committeeAssignmentId) === String(finalAssignmentId)
+              const userNotes = sessionNotes.filter(
+                (note: MemberNoteDto) =>
+                  String(note.committeeAssignmentId) ===
+                  String(finalAssignmentId)
               );
-              
+
               // Get the most recent note (should be only 1 after save)
               if (userNotes.length > 0) {
                 // Sort by createdAt descending to get the most recent note first
@@ -1166,11 +1225,11 @@ export default function GradeGroupPage() {
                   const dateB = new Date(b.createdAt || 0).getTime();
                   return dateB - dateA;
                 });
-                
+
                 const mostRecentNote = sortedNotes[0];
                 setSessionNote(mostRecentNote.noteContent || "");
                 setSessionNoteId(mostRecentNote.id);
-                
+
                 // If somehow there are still duplicates, delete them
                 if (userNotes.length > 1) {
                   for (let i = 1; i < sortedNotes.length; i++) {
@@ -1189,7 +1248,7 @@ export default function GradeGroupPage() {
               // Error reloading notes - continue
             }
           }
-          
+
           setStudentScores(updatedStudents);
           if (groupData) {
             setGroupData({
@@ -1201,7 +1260,7 @@ export default function GradeGroupPage() {
       } catch (error) {
         // Error refreshing scores after save
       }
-      
+
       // Hiển thị success message sau khi đã refresh data
       // KHÔNG redirect - chỉ hiển thị thông báo và ở lại trang hiện tại
       // Sử dụng SweetAlert2 modal (alert2)
@@ -1209,7 +1268,7 @@ export default function GradeGroupPage() {
         "Success",
         "Scores and notes saved successfully!"
       );
-      
+
       // Đảm bảo không có redirect nào được thực hiện
       // Return ngay để tránh bất kỳ logic nào khác có thể trigger redirect
       return;
@@ -1361,19 +1420,19 @@ export default function GradeGroupPage() {
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  
+
                   // Prevent multiple clicks
                   if (saving || savingRef.current || noteSavingRef.current) {
                     return;
                   }
-                  
+
                   // Strict check for rubrics
                   const hasNoRubrics = !hasRubrics;
                   if (hasNoRubrics) {
                     swalConfig.error("Error", "No grading criteria available");
                     return;
                   }
-                  
+
                   handleSave();
                 }}
                 disabled={saving || !hasRubrics}
@@ -1590,43 +1649,43 @@ export default function GradeGroupPage() {
 
                           <td className="py-3 px-3 align-top">
                             <div className="flex flex-col gap-2">
-                            <div className="flex flex-col gap-1">
-                              <span className="text-xs text-gray-500">
-                                Set All:
-                              </span>
-                              <div className="flex gap-1">
-                                {[7, 8, 9].map((score) => (
-                                  <button
-                                    key={score}
-                                    type="button"
-                                    disabled={rubrics.length === 0}
-                                    onClick={() => {
-                                      const newScores = [...studentScores];
-                                      newScores[studentIndex].scores =
-                                        newScores[studentIndex].scores.map(
-                                          () => score
-                                        );
-                                      setStudentScores(newScores);
-                                    }}
-                                    className={`px-1.5 py-0.5 text-xs rounded border transition-colors ${
-                                      rubrics.length === 0
-                                        ? "bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed opacity-50"
-                                        : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"
-                                    }`}
-                                    title={
-                                      rubrics.length === 0
-                                        ? "Please add grading criteria"
-                                        : `Set all scores to ${score}`
-                                    }
-                                  >
-                                    {score}
-                                  </button>
-                                ))}
-                              </div>
+                              <div className="flex flex-col gap-1">
+                                <span className="text-xs text-gray-500">
+                                  Set All:
+                                </span>
+                                <div className="flex gap-1">
+                                  {[7, 8, 9].map((score) => (
+                                    <button
+                                      key={score}
+                                      type="button"
+                                      disabled={rubrics.length === 0}
+                                      onClick={() => {
+                                        const newScores = [...studentScores];
+                                        newScores[studentIndex].scores =
+                                          newScores[studentIndex].scores.map(
+                                            () => score
+                                          );
+                                        setStudentScores(newScores);
+                                      }}
+                                      className={`px-1.5 py-0.5 text-xs rounded border transition-colors ${
+                                        rubrics.length === 0
+                                          ? "bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed opacity-50"
+                                          : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"
+                                      }`}
+                                      title={
+                                        rubrics.length === 0
+                                          ? "Please add grading criteria"
+                                          : `Set all scores to ${score}`
+                                      }
+                                    >
+                                      {score}
+                                    </button>
+                                  ))}
                                 </div>
                               </div>
-                            </td>
-                          </tr>
+                            </div>
+                          </td>
+                        </tr>
                       </React.Fragment>
                     ))}
                   </tbody>
@@ -1640,7 +1699,6 @@ export default function GradeGroupPage() {
                     <h3 className="text-base font-semibold text-gray-800 mb-2">
                       Note
                     </h3>
-                  
                   </div>
                   <textarea
                     className="w-full rounded-md border px-3 py-2 text-sm text-gray-700 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors resize-none"

@@ -301,48 +301,38 @@ export default function GroupDetailsPage() {
                     String(currentUid).toLowerCase()
                 );
 
-                // Update user name and role from session if available
-                if (currentUserInSession) {
-                  if (
-                    currentUserInSession.fullName ||
-                    currentUserInSession.userName
-                  ) {
-                    setUserName(
-                      currentUserInSession.fullName ||
-                        currentUserInSession.userName
-                    );
-                  }
-                  if (currentUserInSession.role) {
-                    const sessionRoleValue =
-                      currentUserInSession.role.toLowerCase();
-                    setUserRole(sessionRoleValue);
-                    // Lưu session role vào sessionStorage để sidebar hiển thị
-                    sessionStorage.setItem("sessionRole", sessionRoleValue);
+                // Redirect to role-specific page based on session role
+                if (currentUserInSession && currentUserInSession.role) {
+                  const sessionRoleValue =
+                    currentUserInSession.role.toLowerCase();
+                  sessionStorage.setItem("sessionRole", sessionRoleValue);
+
+                  // Redirect to the appropriate page based on role
+                  if (sessionRoleValue === "chair" || isSystemChair) {
+                    // Redirect Chair to chair groups page
+                    router.push(`/chair/groups/${id}`);
+                    return;
+                  } else if (sessionRoleValue === "secretary") {
+                    // Redirect Secretary to transcript page
+                    router.push(`/secretary/transcript/${session.id}`);
+                    return;
+                  } else if (sessionRoleValue === "member") {
+                    // Redirect Member to grading page
+                    router.push(`/member/grading/view/${id}`);
+                    return;
                   }
                 }
 
-                // Only allow access if user is Chair (system role or council role)
-                let isUserChair = false;
+                // If system chair but not in session, still redirect to chair page
                 if (isSystemChair) {
-                  isUserChair = true;
-                  setIsChair(true);
-                } else if (
-                  currentUserInSession &&
-                  currentUserInSession.role &&
-                  currentUserInSession.role.toLowerCase() === "chair"
-                ) {
-                  isUserChair = true;
-                  setIsChair(true);
-                }
-
-                if (isUserChair) {
-                  setHasAccess(true);
-                } else {
-                  // Not a chair, redirect silently
-                  setHasAccess(false);
-                  router.push("/home");
+                  router.push(`/chair/groups/${id}`);
                   return;
                 }
+
+                // Unknown role or no role - redirect to home
+                setHasAccess(false);
+                router.push("/home");
+                return;
               } else {
                 // No user ID, redirect silently
                 setHasAccess(false);
