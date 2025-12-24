@@ -58,9 +58,9 @@ const ROLE_ALIASES: Record<string, string> = {
 const allRoles = [
   "All Roles",
   "Administrator",
+  "Moderator",
   "Lecturer",
   "Student",
-  "Moderator",
 ];
 
 const PAGE_SIZE = 8;
@@ -279,21 +279,15 @@ export default function AccountManagementPage() {
     const counts: { [key: string]: number } = {
       Total: users.length,
       Administrator: 0,
-      Lecturer: 0,
       Moderator: 0,
-      Chair: 0,
-      Member: 0,
-      Secretary: 0,
+      Lecturer: 0,
       Student: 0,
     };
     users.forEach((user) => {
       user.roles.forEach((role) => {
         if (role === "Administrator") counts.Administrator++;
-        else if (role === "Lecturer") counts.Lecturer++;
         else if (role === "Moderator") counts.Moderator++;
-        else if (role === "Chair") counts.Chair++;
-        else if (role === "Member") counts.Member++;
-        else if (role === "Secretary") counts.Secretary++;
+        else if (role === "Lecturer") counts.Lecturer++;
         else if (role === "Student") counts.Student++;
       });
     });

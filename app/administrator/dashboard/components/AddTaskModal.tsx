@@ -9,8 +9,10 @@ import { projectTasksApi } from "@/lib/api/project-tasks";
 interface AddTaskData {
   title: string;
   description: string;
-  assignedTo: string;
-  sessionId: string;
+  assignedById: string; // LecturerId
+  assignedToId: string; // LecturerId
+  rubricId: number;
+  sessionId: number;
   status: "Pending" | "Completed" | "InProgress";
 }
 interface AddTaskModalProps {
@@ -20,6 +22,7 @@ interface AddTaskModalProps {
   userOptions?: { id: string; name: string }[];
   existingTasks?: { title: string }[];
   sessionOptions?: { id: number; name: string }[];
+  rubricOptions?: { id: number; name: string }[];
 }
 
 const AddTaskModal: React.FC<AddTaskModalProps> = ({
@@ -29,10 +32,13 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({
   userOptions = [],
   existingTasks = [],
   sessionOptions = [],
+  rubricOptions = [],
 }) => {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [assignedTo, setAssignedTo] = useState("");
+  const [assignedById, setAssignedById] = useState("");
+  const [assignedToId, setAssignedToId] = useState("");
+  const [rubricId, setRubricId] = useState("");
   const [sessionId, setSessionId] = useState("");
   const [status, setStatus] = useState<
     "Pending" | "Completed" | "InProgress" | ""
@@ -55,7 +61,9 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({
     if (isOpen) {
       setTitle("");
       setDescription("");
-      setAssignedTo("");
+      setAssignedById("");
+      setAssignedToId("");
+      setRubricId("");
       setSessionId("");
       setStatus("");
       setTitleError("");
@@ -120,18 +128,20 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({
       return;
     }
 
-    if (!assignedTo || !status || !sessionId) {
+    if (!assignedById || !assignedToId || !rubricId || !sessionId || !status) {
       swalConfig.error(
         "Missing fields",
-        "Please select 'Assigned To', 'Defense Session', and 'Status' before saving."
+        "Please fill in all required fields: Assigned By, Assigned To, Rubric, Defense Session, and Status."
       );
       return;
     }
     onSubmit({
       title,
       description,
-      assignedTo,
-      sessionId,
+      assignedById,
+      assignedToId,
+      rubricId: Number(rubricId),
+      sessionId: Number(sessionId),
       status: status as "Pending" | "Completed" | "InProgress",
     });
     onClose();
@@ -193,7 +203,7 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({
           )}
         </div>
 
-        <div className="form-group">
+        <div className="form-group col-span-2">
           <label htmlFor="task-description">Description</label>
           <textarea
             id="task-description"
@@ -208,21 +218,29 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({
         <div className="flex gap-4">
           <div className="form-group flex-1">
             <label htmlFor="task-assigned-by">Assigned By</label>
-            <input
+            <select
               id="task-assigned-by"
-              type="text"
-              value="Admin"
-              disabled
-              className="bg-gray-50 cursor-not-allowed"
-            />
+              value={assignedById}
+              onChange={(e) => setAssignedById(e.target.value)}
+              required
+            >
+              <option value="" disabled>
+                Select assigner
+              </option>
+              {assignees.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="form-group flex-1">
             <label htmlFor="task-assigned-to">Assigned To</label>
             <select
               id="task-assigned-to"
-              value={assignedTo}
-              onChange={(e) => setAssignedTo(e.target.value)}
+              value={assignedToId}
+              onChange={(e) => setAssignedToId(e.target.value)}
               required
             >
               <option value="" disabled>
@@ -235,6 +253,25 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({
               ))}
             </select>
           </div>
+        </div>
+
+        <div className="form-group">
+          <label htmlFor="task-rubric">Rubric</label>
+          <select
+            id="task-rubric"
+            value={rubricId}
+            onChange={(e) => setRubricId(e.target.value)}
+            required
+          >
+            <option value="" disabled>
+              Select rubric
+            </option>
+            {rubricOptions.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div className="form-group">

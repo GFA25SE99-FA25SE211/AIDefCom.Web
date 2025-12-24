@@ -1790,8 +1790,6 @@ export default function DataManagementPage() {
                 <th className="px-3 py-2">ID</th>
                 <th className="px-3 py-2">Name</th>
                 <th className="px-3 py-2">Group</th>
-                <th className="px-3 py-2">DOB</th>
-                <th className="px-3 py-2">Gender</th>
                 <th className="px-3 py-2">Role</th>
                 <th className="px-3 py-2 text-center">Actions</th>
               </tr>
@@ -1806,8 +1804,6 @@ export default function DataManagementPage() {
                       {s.groupName}
                     </span>
                   </td>
-                  <td className="px-3 py-2">{s.dob}</td>
-                  <td className="px-3 py-2">{s.gender}</td>
                   <td className="px-3 py-2">
                     <span className="px-2 py-1 rounded-full text-xs bg-gray-100 text-gray-700">
                       {s.role}

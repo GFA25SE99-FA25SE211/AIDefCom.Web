@@ -12,6 +12,7 @@ import { councilsApi } from "@/lib/api/councils";
 import { councilRolesApi } from "@/lib/api/council-roles";
 import { authApi } from "@/lib/api/auth";
 import { memberNotesApi } from "@/lib/api/member-notes";
+import { notesApi } from "@/lib/api/notes";
 import { reportsApi } from "@/lib/api/reports";
 import { defenseSessionsApi } from "@/lib/api/defense-sessions";
 import { swalConfig } from "@/lib/utils/sweetAlert";
@@ -27,6 +28,7 @@ import type {
   CouncilDto,
   UserDto,
   MemberNoteDto,
+  NoteDto,
   ReportDto,
   DefenseSessionDto,
 } from "@/lib/models";
@@ -54,6 +56,7 @@ import EditRubricModal from "../dashboard/components/EditRubricModal";
 import EditAssignmentModal from "../dashboard/components/EditAssignmentModal";
 import EditGroupModal from "../../moderator/create-sessions/components/EditGroupModal";
 import EditReportModal from "../dashboard/components/EditReportModal";
+import EditNoteModal from "../dashboard/components/EditNoteModal";
 
 import {
   ClipboardList,
@@ -74,7 +77,11 @@ interface Task {
   title: string;
   description: string;
   assignedBy: string;
+  assignedByName?: string;
   assignedTo: string;
+  assignedToName?: string;
+  rubricId?: number;
+  sessionId?: number;
   status: "Pending" | "Completed" | "Inprogress";
 }
 // Note interface removed - using MemberNoteDto from models
@@ -126,7 +133,6 @@ const adminTabs: {
   { key: "rubrics", label: "Rubrics", icon: BookOpen },
   { key: "notes", label: "Notes", icon: StickyNote },
   { key: "reports", label: "Reports", icon: BookOpen },
-  { key: "assignments", label: "Assignments", icon: Users },
 ];
 
 const PAGE_SIZE = 16;
@@ -151,7 +157,7 @@ export default function AdminDataManagementPage() {
   const [editingAssignment, setEditingAssignment] =
     useState<CommitteeAssignmentDto | null>(null);
   const [editingGroup, setEditingGroup] = useState<GroupDto | null>(null);
-  const [editingNote, setEditingNote] = useState<MemberNoteDto | null>(null);
+  const [editingNote, setEditingNote] = useState<NoteDto | null>(null);
   const [editingReport, setEditingReport] = useState<ReportDto | null>(null);
 
   /* ============ State data ============ */
@@ -186,7 +192,7 @@ export default function AdminDataManagementPage() {
     },
   ]);
   const [rubrics, setRubrics] = useState<RubricDto[]>([]);
-  const [notes, setNotes] = useState<MemberNoteDto[]>([]);
+  const [notes, setNotes] = useState<NoteDto[]>([]);
   const [reports, setReports] = useState<ReportDto[]>([]);
   const [assignments, setAssignments] = useState<CommitteeAssignmentDto[]>([]);
   const [users, setUsers] = useState<UserDto[]>([]);
@@ -306,7 +312,7 @@ export default function AdminDataManagementPage() {
           committeeAssignmentsApi.getAll().catch(() => ({ data: [] })),
           councilsApi.getAll(false).catch(() => ({ data: [] })),
           authApi.getAllUsers().catch(() => ({ data: [] })),
-          memberNotesApi.getAll().catch(() => ({ data: [] })),
+          notesApi.getAll().catch(() => ({ data: [] })),
           reportsApi.getAll().catch(() => ({ data: [] })),
           defenseSessionsApi.getAll().catch(() => ({ data: [] })),
         ]);
@@ -359,7 +365,11 @@ export default function AdminDataManagementPage() {
             title: t.title,
             description: t.description || "",
             assignedBy: t.assignedById,
+            assignedByName: t.assignedByName,
             assignedTo: t.assignedToId,
+            assignedToName: t.assignedToName,
+            rubricId: t.rubricId,
+            sessionId: t.sessionId,
             status: (t.status === "Completed"
               ? "Completed"
               : t.status === "InProgress"
@@ -456,7 +466,7 @@ export default function AdminDataManagementPage() {
     () =>
       getFilteredData(
         notes,
-        ["noteContent", "committeeAssignmentId", "groupId", "userName"],
+        ["title", "content", "sessionId"],
         searchQuery
       ),
     [notes, searchQuery]
@@ -590,71 +600,23 @@ export default function AdminDataManagementPage() {
   const handleAddTask = async (data: {
     title: string;
     description: string;
-    assignedTo: string;
+    assignedById: string; // LecturerId
+    assignedToId: string; // LecturerId
+    rubricId: number;
+    sessionId: number;
     status: "Pending" | "Completed" | "InProgress";
   }) => {
     try {
-      // Find CommitteeAssignment for assignedTo (user ID -> lecturer ID -> committee assignment)
-      const assignedToUser = users.find((u) => u.id === data.assignedTo);
-      if (!assignedToUser) {
-        await swalConfig.error(
-          "Error",
-          "Selected user not found. Please select a valid user."
-        );
-        return;
-      }
-
-      // Find CommitteeAssignment by LecturerId (which should match user ID if user is a lecturer)
-      const assignedToAssignment = assignments.find(
-        (a) => a.lecturerId === assignedToUser.id
-      );
-
-      if (!assignedToAssignment) {
-        await swalConfig.error(
-          "Error",
-          "Selected user does not have a committee assignment. Please select a user with a committee assignment."
-        );
-        return;
-      }
-
-      // Get assignedBy - find admin user's committee assignment or use first assignment
-      const adminUser =
-        users.find((u) => u.role === "Administrator") || users[0];
-      const assignedByAssignment = adminUser
-        ? assignments.find((a) => a.lecturerId === adminUser.id) ||
-          assignments[0]
-        : assignments[0];
-
-      if (!assignedByAssignment) {
-        await swalConfig.error(
-          "Error",
-          "No committee assignment available. Please ensure committee assignments are loaded."
-        );
-        return;
-      }
-
-      // Get first available rubric or default to 1
-      const firstRubric = rubrics.length > 0 ? rubrics[0].id : 1;
-
-      if (!firstRubric) {
-        await swalConfig.error(
-          "Error",
-          "No rubric available. Please create a rubric first."
-        );
-        return;
-      }
-
-      // Map frontend status to backend format (modal uses "InProgress", backend expects "InProgress")
-      const backendStatus: string = data.status;
-
+      // Backend expects LecturerId, not CommitteeAssignmentId
+      // Backend will automatically find CommitteeAssignment by LecturerId and SessionId
       await projectTasksApi.create({
         title: data.title,
         description: data.description,
-        assignedById: String(assignedByAssignment.id),
-        assignedToId: String(assignedToAssignment.id),
-        rubricId: firstRubric,
-        status: backendStatus,
-        sessionId: 0, // Default sessionId value
+        assignedById: data.assignedById, // LecturerId
+        assignedToId: data.assignedToId, // LecturerId
+        rubricId: data.rubricId,
+        sessionId: data.sessionId,
+        status: data.status,
       });
       const response = await projectTasksApi.getAll();
       const transformedTasks = (response.data || []).map(
@@ -663,7 +625,10 @@ export default function AdminDataManagementPage() {
           title: t.title,
           description: t.description || "",
           assignedBy: t.assignedById,
+          assignedByName: t.assignedByName,
           assignedTo: t.assignedToId,
+          assignedToName: t.assignedToName,
+          rubricId: t.rubricId,
           status: (t.status === "Completed"
             ? "Completed"
             : t.status === "InProgress"
@@ -687,33 +652,55 @@ export default function AdminDataManagementPage() {
 
   const handleEditTask = async (
     id: number | string,
-    data: Omit<Task, "id" | "assignedBy" | "assignedTo">
+    data: Omit<Task, "id" | "assignedBy" | "assignedTo" | "status"> & {
+      rubricId?: number;
+      sessionId?: number;
+    }
   ) => {
     try {
-      if (!data.title || !data.status) {
+      if (!data.title) {
         await swalConfig.error(
           "Invalid Task",
-          "Title and status are required."
+          "Title is required."
         );
         return;
       }
 
-      // Get both assignedBy and assignedTo from original task data since they're not editable
+      // Get original task data
       const originalTask = tasks.find((t) => t.id === Number(id));
+      if (!originalTask) {
+        await swalConfig.error("Error", "Task not found");
+        return;
+      }
 
-      // Map frontend status to backend expected format
-      const backendStatus = data.status;
+      // Find LecturerId from CommitteeAssignmentId
+      // assignedBy and assignedTo in Task are CommitteeAssignmentIds
+      const assignedByAssignment = assignments.find(
+        (a) => String(a.id) === originalTask.assignedBy
+      );
+      const assignedToAssignment = assignments.find(
+        (a) => String(a.id) === originalTask.assignedTo
+      );
+
+      if (!assignedByAssignment || !assignedToAssignment) {
+        await swalConfig.error(
+          "Error",
+          "Cannot find lecturer information for this task."
+        );
+        return;
+      }
+
+      // Keep the original status when updating
+      const backendStatus = originalTask.status || "Pending";
 
       const updatePayload = {
         title: data.title,
-        description: data.description,
-        assignedById:
-          originalTask?.assignedBy || "18D005EB-D9DB-4C84-9AD3-459C209708FE", // Keep original assignedBy
-        assignedToId:
-          originalTask?.assignedTo || "18D005EB-D9DB-4C84-9AD3-459C209708FE", // Keep original assignedTo
-        rubricId: 1, // Default rubric ID - you may want to make this configurable
+        description: data.description || "",
+        assignedById: assignedByAssignment.lecturerId, // LecturerId
+        assignedToId: assignedToAssignment.lecturerId, // LecturerId
+        rubricId: data.rubricId || originalTask.rubricId || 1,
+        sessionId: data.sessionId || originalTask.sessionId || 0,
         status: backendStatus,
-        sessionId: 0, // Default sessionId value for update
       };
 
       await projectTasksApi.update(Number(id), updatePayload);
@@ -725,7 +712,10 @@ export default function AdminDataManagementPage() {
           title: t.title,
           description: t.description || "",
           assignedBy: t.assignedById,
+          assignedByName: t.assignedByName,
           assignedTo: t.assignedToId,
+          assignedToName: t.assignedToName,
+          rubricId: t.rubricId,
           status: (t.status === "Completed"
             ? "Completed"
             : t.status === "InProgress"
@@ -1172,10 +1162,10 @@ export default function AdminDataManagementPage() {
     }
   };
 
-  const handleEditNote = async (id: number, content: string) => {
+  const handleEditNote = async (id: number, data: { title: string; content: string }) => {
     try {
-      await memberNotesApi.update(id, { noteContent: content });
-      const response = await memberNotesApi.getAll();
+      await notesApi.update(id, { title: data.title, content: data.content });
+      const response = await notesApi.getAll();
       setNotes(response.data || []);
       setEditingNote(null);
       await swalConfig.success(
@@ -1199,8 +1189,8 @@ export default function AdminDataManagementPage() {
 
     if (result.isConfirmed) {
       try {
-        await memberNotesApi.delete(id);
-        const response = await memberNotesApi.getAll();
+        await notesApi.delete(id);
+        const response = await notesApi.getAll();
         setNotes(response.data || []);
         await swalConfig.success(
           "Success",
@@ -1429,32 +1419,16 @@ export default function AdminDataManagementPage() {
             [
               "ID",
               "Title",
-              "Description",
               "Assigned By",
               "Assigned To",
-              "Status",
               "Actions",
             ],
             paginatedTasks.map((t) => (
               <tr key={t.id}>
                 <td>{t.id}</td>
                 <td>{t.title}</td>
-                <td>{t.description}</td>
-                <td>{userMap.get(t.assignedBy) || t.assignedBy}</td>
-                <td>{userMap.get(t.assignedTo) || t.assignedTo}</td>
-                <td>
-                  <span
-                    className={`badge ${
-                      t.status === "Completed"
-                        ? "badge-success"
-                        : t.status === "Pending"
-                        ? "badge-warning"
-                        : "badge-info"
-                    }`}
-                  >
-                    {t.status}
-                  </span>
-                </td>
+                <td>{t.assignedByName || userMap.get(t.assignedBy) || t.assignedBy}</td>
+                <td>{t.assignedToName || userMap.get(t.assignedTo) || t.assignedTo}</td>
                 <td className="text-center align-middle">
                   <div className="flex gap-2 justify-center items-center">
                     <button
@@ -1651,66 +1625,33 @@ export default function AdminDataManagementPage() {
 
       {activeTab === "notes" && (
         <>
-          {renderHeader("Member Notes")}
+          {renderHeader("Notes")}
           {renderSearch("Search notes...")}
           {renderTable(
             [
               "ID",
-              "Assignment",
-              "Group",
-              "Note Content",
+              "Session",
+              "Title",
+              "Content",
               "Created At",
               "Actions",
             ],
             paginatedNotes.map((n) => {
-              // Find assignment by committeeAssignmentId
-              const assignment = assignments.find(
-                (a) => String(a.id) === String(n.committeeAssignmentId)
-              );
-              
-              // Find lecturer name from assignment
-              let assignmentName = n.committeeAssignmentId || "N/A";
-              if (assignment) {
-                const lecturer = users.find((u) => u.id === assignment.lecturerId);
-                const roleName = assignment.roleName || assignment.role || "";
-                assignmentName = lecturer
-                  ? `${lecturer.fullName || lecturer.email || assignment.lecturerId} (${roleName})`
-                  : `${assignment.lecturerId} (${roleName})`;
-              }
-
-              // Find group from session
-              let groupName = "N/A";
-              const session = defenseSessions.find((s) => s.id === n.sessionId);
-              if (session) {
-                const group = groups.find((g) => g.id === session.groupId);
-                groupName = group
-                  ? group.groupName || group.projectCode || group.topicTitle_EN || session.groupId
-                  : session.groupId;
-              }
+              // Get session name from sessionMap to match modal display
+              const sessionName = sessionMap.get(n.sessionId) || `Session ${n.sessionId}`;
 
               return (
                 <tr key={n.id}>
                   <td>{n.id}</td>
-                  <td>{assignmentName}</td>
-                  <td>{groupName}</td>
-                  <td className="max-w-md truncate">{n.noteContent}</td>
+                  <td>{sessionName}</td>
+                  <td className="max-w-md truncate">{n.title}</td>
+                  <td className="max-w-md truncate">{n.content}</td>
                   <td>{new Date(n.createdAt).toLocaleString()}</td>
                   <td className="text-center align-middle">
                     <div className="flex gap-2 justify-center items-center">
                       <button
                         className="btn-subtle"
-                        onClick={() => {
-                          const newContent = prompt(
-                            "Edit note content:",
-                            n.noteContent
-                          );
-                          if (
-                            newContent !== null &&
-                            newContent !== n.noteContent
-                          ) {
-                            handleEditNote(n.id, newContent);
-                          }
-                        }}
+                        onClick={() => setEditingNote(n)}
                       >
                         <Pencil className="w-4 h-4" />
                       </button>
@@ -1780,52 +1721,6 @@ export default function AdminDataManagementPage() {
         </>
       )}
 
-      {activeTab === "assignments" && (
-        <>
-          {renderHeader("Committee Assignments")}
-          {renderTable(
-            ["ID", "Lecturer", "Council Name", "Role", "Actions"],
-            paginatedAssignments.map((a) => (
-              <tr key={a.id}>
-                <td>{a.id}</td>
-                <td>
-                  {userMap.get(a.lecturerId) ||
-                    (a as any).lecturerName ||
-                    a.lecturerId}
-                </td>
-                <td>
-                  {councilMap.get(a.councilId) || `Council ${a.councilId}`}
-                </td>
-                <td>{(a as any).roleName || a.role}</td>
-                <td>
-                  <div className="flex items-center gap-2">
-                    <button
-                      className="btn-subtle p-1"
-                      onClick={() => setEditingAssignment(a)}
-                      title="Edit"
-                    >
-                      <Pencil className="w-4 h-4" />
-                    </button>
-                    <button
-                      className="btn-subtle p-1 text-red-600 hover:bg-red-50"
-                      onClick={() => handleDeleteAssignment(a.id)}
-                      title="Delete"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))
-          )}
-          {renderPagination(
-            assignmentPage,
-            assignmentTotalPages,
-            setAssignmentPage
-          )}
-        </>
-      )}
-
       <footer className="page-footer">
         © 2025 AIDefCom - Smart Graduation Defense
       </footer>
@@ -1856,6 +1751,10 @@ export default function AdminDataManagementPage() {
           }
           return { id: s.id, name: sessionName };
         })}
+        rubricOptions={rubrics.map((r) => ({
+          id: r.id,
+          name: r.rubricName,
+        }))}
       />
       <AddSemesterModal
         isOpen={isAddSemesterModalOpen}
@@ -1896,6 +1795,20 @@ export default function AdminDataManagementPage() {
               );
             })
             .map((u) => ({ id: u.id, name: u.fullName }))}
+          rubricOptions={rubrics.map((r) => ({
+            id: r.id,
+            name: r.rubricName,
+          }))}
+          sessionOptions={defenseSessions.map((s) => {
+            let sessionName = s.topicTitle_VN || s.topicTitle_EN;
+            if (!sessionName && s.defenseDate) {
+              sessionName = `Session ${new Date(s.defenseDate).toLocaleDateString("vi-VN")}`;
+            }
+            if (!sessionName) {
+              sessionName = `Session ${s.id}`;
+            }
+            return { id: s.id, name: sessionName };
+          })}
         />
       )}
       {editingSemester && (
@@ -2010,6 +1923,18 @@ export default function AdminDataManagementPage() {
           sessionName={
             sessionMap.get(editingReport.sessionId) ||
             `Session ${editingReport.sessionId}`
+          }
+        />
+      )}
+      {editingNote && (
+        <EditNoteModal
+          isOpen
+          onClose={() => setEditingNote(null)}
+          onSubmit={(id, data) => handleEditNote(id, data)}
+          noteData={editingNote}
+          sessionName={
+            sessionMap.get(editingNote.sessionId) ||
+            `Session ${editingNote.sessionId}`
           }
         />
       )}

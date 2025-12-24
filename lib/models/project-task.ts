@@ -4,8 +4,11 @@ export interface ProjectTaskDto {
   title: string;
   description?: string;
   assignedById: string;
+  assignedByName?: string;
   assignedToId: string;
+  assignedToName?: string;
   rubricId?: number;
+  sessionId?: number;
   status: string;
 }
 
