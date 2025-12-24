@@ -1,6 +1,12 @@
 "use client";
 
-import React, { useState, useEffect, Suspense, useRef, useCallback } from "react";
+import React, {
+  useState,
+  useEffect,
+  Suspense,
+  useRef,
+  useCallback,
+} from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -26,7 +32,12 @@ import { useVoiceEnrollmentCheck } from "@/lib/hooks/useVoiceEnrollmentCheck";
 // import { useScoreRealTime } from "@/lib/hooks/useScoreRealTime"; // Không cần real-time ở trang grading - đã tự refresh sau khi save
 import { authUtils } from "@/lib/utils/auth";
 import Swal from "sweetalert2";
-import type { GroupDto, StudentDto, ScoreCreateDto, MemberNoteDto } from "@/lib/models";
+import type {
+  GroupDto,
+  StudentDto,
+  ScoreCreateDto,
+  MemberNoteDto,
+} from "@/lib/models";
 import { getWebSocketUrl } from "@/lib/config/api-urls";
 
 // --- (Code Icons giữ nguyên) ---
@@ -113,7 +124,8 @@ export default function ViewScorePage() {
   const [rubrics, setRubrics] = useState<any[]>([]);
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string>("");
-  const [committeeAssignmentId, setCommitteeAssignmentId] = useState<string>("");
+  const [committeeAssignmentId, setCommitteeAssignmentId] =
+    useState<string>("");
   const [sessionNote, setSessionNote] = useState<string>("");
   const [sessionNoteId, setSessionNoteId] = useState<number | null>(null);
   const savingRef = useRef(false); // Ref để prevent redirect khi đang save
@@ -186,11 +198,15 @@ export default function ViewScorePage() {
 
         if (groupSession) {
           setSessionId(groupSession.id);
-          
+
           // Get committeeAssignmentId for this session
           if (currentUserId) {
             try {
-              const assignmentIdRes = await committeeAssignmentsApi.getIdByLecturerIdAndSessionId(currentUserId, groupSession.id);
+              const assignmentIdRes =
+                await committeeAssignmentsApi.getIdByLecturerIdAndSessionId(
+                  currentUserId,
+                  groupSession.id
+                );
               if (assignmentIdRes.data) {
                 setCommitteeAssignmentId(String(assignmentIdRes.data));
               }
@@ -420,14 +436,20 @@ export default function ViewScorePage() {
           // Load session note
           if (groupSession?.id && committeeAssignmentId) {
             try {
-              const notesRes = await memberNotesApi.getBySessionId(groupSession.id);
-              const sessionNotes = Array.isArray(notesRes.data) ? notesRes.data : [];
-              
-              // Filter notes by committeeAssignmentId (notes belong to current user)
-              const userNote = sessionNotes.find((note: MemberNoteDto) => 
-                String(note.committeeAssignmentId) === String(committeeAssignmentId)
+              const notesRes = await memberNotesApi.getBySessionId(
+                groupSession.id
               );
-              
+              const sessionNotes = Array.isArray(notesRes.data)
+                ? notesRes.data
+                : [];
+
+              // Filter notes by committeeAssignmentId (notes belong to current user)
+              const userNote = sessionNotes.find(
+                (note: MemberNoteDto) =>
+                  String(note.committeeAssignmentId) ===
+                  String(committeeAssignmentId)
+              );
+
               if (userNote) {
                 setSessionNote(userNote.noteContent || "");
                 setSessionNoteId(userNote.id);
@@ -530,8 +552,7 @@ export default function ViewScorePage() {
       ) {
         return;
       }
-      const speakerName = msg.speaker_name || msg.speaker || "Member";
-      swalConfig.toast.info(`${speakerName} is asking a question`);
+      swalConfig.toast.info("A member is asking a question...");
     } else if (eventType === "broadcast_question_processing") {
       // Người khác kết thúc đặt câu hỏi, đang xử lý - dùng toast nhẹ
       if (
@@ -540,8 +561,7 @@ export default function ViewScorePage() {
       ) {
         return;
       }
-      const speakerName = msg.speaker_name || msg.speaker || "Member";
-      swalConfig.toast.info(`Processing question from ${speakerName}...`);
+      swalConfig.toast.info("Processing question...");
     } else if (eventType === "broadcast_question_result") {
       // Kết quả câu hỏi từ người khác
       if (
@@ -550,19 +570,18 @@ export default function ViewScorePage() {
       ) {
         return;
       }
-      const speakerName = msg.speaker_name || msg.speaker || "Member";
       const questionText = msg.question_text || "";
 
       if (msg.is_duplicate) {
-        swalConfig.toast.info(`Question from ${speakerName} is duplicate`);
+        swalConfig.toast.info("This question is duplicate");
       } else {
         if (questionText) {
           setQuestionResults((prev) => [
-            { ...msg, from_broadcast: true, speaker: speakerName },
+            { ...msg, from_broadcast: true },
             ...prev,
           ]);
         }
-        swalConfig.toast.success(`Question from ${speakerName} recorded`);
+        swalConfig.toast.success("New question has been recorded");
       }
     } else if (eventType === "connected") {
       // Lưu session_id của mình
@@ -698,7 +717,7 @@ export default function ViewScorePage() {
     if (savingRef.current || saving) {
       return; // Already saving, skip completely
     }
-    
+
     if (!sessionId) {
       swalConfig.error("Error", "Defense session not found");
       return;
@@ -810,7 +829,11 @@ export default function ViewScorePage() {
       let assignmentId = committeeAssignmentId;
       if (!assignmentId && sessionId && currentUserId) {
         try {
-          const assignmentIdRes = await committeeAssignmentsApi.getIdByLecturerIdAndSessionId(currentUserId, sessionId);
+          const assignmentIdRes =
+            await committeeAssignmentsApi.getIdByLecturerIdAndSessionId(
+              currentUserId,
+              sessionId
+            );
           if (assignmentIdRes.data) {
             assignmentId = String(assignmentIdRes.data);
             setCommitteeAssignmentId(assignmentId);
@@ -850,7 +873,7 @@ export default function ViewScorePage() {
       }
 
       Swal.close();
-      
+
       // Reload lại data trước khi hiển thị success message
       // Để đảm bảo data được refresh ngay lập tức
       try {
@@ -898,7 +921,7 @@ export default function ViewScorePage() {
       } catch (error) {
         // Error refreshing scores after save
       }
-      
+
       // Hiển thị success message sau khi đã refresh data
       // KHÔNG redirect - chỉ hiển thị thông báo và ở lại trang hiện tại
       // Sử dụng SweetAlert2 modal (alert2)
@@ -906,7 +929,7 @@ export default function ViewScorePage() {
         "Success",
         "Scores and notes saved successfully!"
       );
-      
+
       // Đảm bảo không có redirect nào được thực hiện
       // Return ngay để tránh bất kỳ logic nào khác có thể trigger redirect
       return;
@@ -1057,12 +1080,12 @@ export default function ViewScorePage() {
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  
+
                   // Prevent multiple clicks
                   if (saving || savingRef.current) {
                     return;
                   }
-                  
+
                   handleSave();
                 }}
                 disabled={saving}
@@ -1309,7 +1332,6 @@ export default function ViewScorePage() {
                     <h3 className="text-base font-semibold text-gray-800 mb-2">
                       Note
                     </h3>
-                   
                   </div>
                   <textarea
                     className="w-full rounded-md border px-3 py-2 text-sm text-gray-700 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors resize-none"
