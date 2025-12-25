@@ -47,6 +47,7 @@ export default function MeetingMinutesForm({
       question: string;
       respondent: string;
       answer: string;
+      councilDiscussion: string;
     }[],
     assessments: {
       layout: "",
@@ -119,6 +120,7 @@ export default function MeetingMinutesForm({
       question: q.question,
       respondent: q.respondent,
       answer: q.answerContent,
+      councilDiscussion: q.councilDiscussion || "",
     }));
 
     // Map students to official grades
@@ -775,6 +777,27 @@ export default function MeetingMinutesForm({
                               className="w-full min-h-[80px] outline-none resize-none bg-transparent"
                               placeholder="Nội dung trả lời..."
                             />
+                            {/* Council Discussion - Nhận xét của Hội đồng */}
+                            <div className="mt-3 pt-3 border-t border-gray-200">
+                              <div className="mb-1">
+                                <span className="text-sm font-semibold text-blue-700">
+                                  Nhận xét của Hội đồng /{" "}
+                                  <span className="italic font-normal">
+                                    Council Discussion:
+                                  </span>
+                                </span>
+                              </div>
+                              <textarea
+                                value={item.councilDiscussion}
+                                onChange={(e) => {
+                                  const newQA = [...formData.qa];
+                                  newQA[idx].councilDiscussion = e.target.value;
+                                  handleInputChange("qa", newQA);
+                                }}
+                                className="w-full min-h-[60px] outline-none resize-none bg-blue-50/50 rounded p-2 text-sm border border-blue-100 focus:border-blue-300"
+                                placeholder="Nhận xét về câu trả lời của sinh viên..."
+                              />
+                            </div>
                           </td>
                         </tr>
                       ))}
