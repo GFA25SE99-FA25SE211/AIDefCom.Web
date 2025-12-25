@@ -394,6 +394,16 @@ export default function DataManagementPage() {
             ? groupMap.get(actualGroupId) || `Group ${studentGroupId}`
             : "No Group Assigned";
 
+          // Extract and normalize the role from API data
+          const rawRole = (s as any).groupRole || (s as any).GroupRole;
+          const normalizedRole: "Leader" | "Member" = rawRole
+            ? rawRole.toLowerCase().includes("leader")
+              ? ("Leader" as const)
+              : ("Member" as const)
+            : index === 0
+            ? ("Leader" as const)
+            : ("Member" as const);
+
           return {
             id: s.id, // Use real ID from API instead of index + 1
             displayId: index + 1, // Add display ID for table
@@ -406,7 +416,7 @@ export default function DataManagementPage() {
             groupName: groupDisplayName,
             dob: s.dateOfBirth ? s.dateOfBirth.split("T")[0] : "", // Format to yyyy-MM-dd
             gender: s.gender || "",
-            role: index === 0 ? ("Leader" as const) : ("Member" as const),
+            role: normalizedRole,
           };
         }
       );
