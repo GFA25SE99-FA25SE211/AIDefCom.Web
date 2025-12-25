@@ -215,7 +215,18 @@ export default function MeetingMinutesForm({
         mapApiDataToForm(result.data);
         swalConfig.success("Success", "Data loaded successfully!");
       } else {
-        swalConfig.error("Error", result.message || "Failed to load data");
+        // Check for 404/transcript not found error
+        const responseMessage = result.message || "";
+        const responseCode = result.code;
+        if (
+          responseCode === 404 ||
+          responseMessage.includes("Item not found") ||
+          responseMessage.includes("not found")
+        ) {
+          swalConfig.error("Error", "No transcript found for defense session");
+        } else {
+          swalConfig.error("Error", responseMessage || "Failed to load data");
+        }
       }
     } catch (error: any) {
       console.error("Fill data error:", error);

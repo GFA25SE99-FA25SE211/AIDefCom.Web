@@ -1176,8 +1176,8 @@ export default function TranscriptPage({
     try {
       setSaving(true);
 
-      // Filter out entries with unknown speakers ("Guest", "Unknown", "Identifying")
-      const unknownSpeakers = ["Guest", "unknown", "identifying"];
+      // Filter out entries with unknown speakers ("Guest", "Khách", "Unknown", "Identifying")
+      const unknownSpeakers = ["guest", "khách", "unknown", "identifying"];
 
       // Check if there are any entries with unknown speakers - block saving if so
       const entriesWithUnknownSpeaker = transcript.filter((item) => {
