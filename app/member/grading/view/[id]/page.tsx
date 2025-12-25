@@ -1256,7 +1256,7 @@ export default function ViewScorePage() {
                                     <textarea
                                       className="w-full rounded-md border px-2 py-1 text-xs text-gray-700 focus:ring-1 focus:ring-purple-500 focus:border-purple-500 transition-colors"
                                       rows={2}
-                                      placeholder="Nhận xét mục này..."
+                                      placeholder="Comment on ..."
                                       value={
                                         student.criterionComments[
                                           criterionIndex

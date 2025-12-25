@@ -1618,7 +1618,7 @@ export default function GradeGroupPage() {
                                       : ""
                                   }`}
                                   rows={2}
-                                  placeholder="Nhận xét mục này..."
+                                  placeholder="Comment on ..."
                                   value={
                                     student.criterionComments[criterionIndex] ||
                                     ""

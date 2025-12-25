@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import CreateCouncilForm, {
   CouncilFormData,
 } from "../create-sessions/components/CreateCouncilForm";
@@ -12,7 +12,7 @@ import { committeeAssignmentsApi } from "@/lib/api/committee-assignments";
 import { authApi } from "@/lib/api/auth";
 import { majorsApi } from "@/lib/api/majors";
 import type { CouncilDto, CommitteeAssignmentDto } from "@/lib/models";
-import { Plus, Shield, Users, UserCircle2, Edit, Trash2 } from "lucide-react";
+import { Plus, Shield, Users, UserCircle2, Edit, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 import { swalConfig } from "@/lib/utils/sweetAlert";
 import { authUtils } from "@/lib/utils/auth";
 
@@ -46,6 +46,8 @@ interface CouncilWithMembers extends CouncilDto {
   }>;
 }
 
+const PAGE_SIZE = 8;
+
 export default function ManageCouncilPage() {
   const [isFormVisible, setIsFormVisible] = useState(false);
   const [councils, setCouncils] = useState<CouncilWithMembers[]>([]);
@@ -69,6 +71,7 @@ export default function ManageCouncilPage() {
   const [roleMapping, setRoleMapping] = useState<Map<string, number>>(
     new Map()
   );
+  const [currentPage, setCurrentPage] = useState(1);
 
   const fetchCouncils = async () => {
     try {
@@ -200,6 +203,7 @@ export default function ManageCouncilPage() {
       );
 
       setCouncils(councilsWithMembers);
+      setCurrentPage(1); // Reset to first page when councils change
     } catch (error: any) {
       // Check if it's an authentication error
       if (error?.message?.includes("Authentication required") || 
@@ -213,6 +217,15 @@ export default function ManageCouncilPage() {
       setLoading(false);
     }
   };
+
+  // Paginated councils
+  const paginatedCouncils = useMemo(() => {
+    const startIndex = (currentPage - 1) * PAGE_SIZE;
+    const endIndex = startIndex + PAGE_SIZE;
+    return councils.slice(startIndex, endIndex);
+  }, [councils, currentPage]);
+
+  const totalPages = Math.ceil(councils.length / PAGE_SIZE);
 
   useEffect(() => {
     fetchCouncils();
@@ -565,7 +578,7 @@ export default function ManageCouncilPage() {
             <>
               <h2 className="text-lg font-semibold mb-3">Existing Councils</h2>
               <div className="space-y-4">
-                {councils.map((council) => (
+                {paginatedCouncils.map((council) => (
                   <div
                     key={council.id}
                     className="bg-white rounded-lg shadow p-4 border border-gray-100"
@@ -610,9 +623,11 @@ export default function ManageCouncilPage() {
                             </div>
                             <div>
                               <h4 className="font-medium">{member.name}</h4>
-                              <p className="text-gray-500">
-                                {member.department}
-                              </p>
+                              {member.department && member.department !== "N/A" && (
+                                <p className="text-gray-500">
+                                  {member.department}
+                                </p>
+                              )}
                               <p className="text-gray-400 text-xs">
                                 {member.email}
                               </p>
@@ -664,6 +679,75 @@ export default function ManageCouncilPage() {
                   </div>
                 ))}
               </div>
+
+              {/* Pagination Controls */}
+              {councils.length > PAGE_SIZE && (
+                <div className="mt-6 flex items-center justify-between">
+                  {/* Page Info */}
+                  <div className="text-sm text-gray-600">
+                    Showing {(currentPage - 1) * PAGE_SIZE + 1} to{" "}
+                    {Math.min(currentPage * PAGE_SIZE, councils.length)} of{" "}
+                    {councils.length} councils
+                  </div>
+
+                  {/* Pagination Buttons */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      className="px-3 py-1.5 rounded-lg border border-gray-200 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 transition"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+
+                    {/* Page Numbers */}
+                    <div className="flex items-center gap-1">
+                      {Array.from({ length: totalPages }, (_, i) => i + 1)
+                        .filter((page) => {
+                          // Show first page, last page, current page, and pages around current
+                          return (
+                            page === 1 ||
+                            page === totalPages ||
+                            Math.abs(page - currentPage) <= 1
+                          );
+                        })
+                        .map((page, index, array) => {
+                          // Add ellipsis if there's a gap
+                          const prevPage = array[index - 1];
+                          const showEllipsis = prevPage && page - prevPage > 1;
+
+                          return (
+                            <React.Fragment key={page}>
+                              {showEllipsis && (
+                                <span className="px-2 text-gray-400">...</span>
+                              )}
+                              <button
+                                onClick={() => setCurrentPage(page)}
+                                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+                                  currentPage === page
+                                    ? "bg-gradient-to-r from-purple-600 to-blue-500 text-white"
+                                    : "border border-gray-200 hover:bg-gray-50"
+                                }`}
+                              >
+                                {page}
+                              </button>
+                            </React.Fragment>
+                          );
+                        })}
+                    </div>
+
+                    <button
+                      onClick={() =>
+                        setCurrentPage((p) => Math.min(totalPages, p + 1))
+                      }
+                      disabled={currentPage === totalPages}
+                      className="px-3 py-1.5 rounded-lg border border-gray-200 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 transition"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
             </>
           )}
         </>
