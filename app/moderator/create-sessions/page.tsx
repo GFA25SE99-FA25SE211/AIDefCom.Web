@@ -1,7 +1,7 @@
 // app/moderator/create-sessions/page.tsx
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   Plus,
   Calendar,
@@ -12,6 +12,9 @@ import {
   Download,
   Upload,
   X,
+  Eye,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import CreateSessionForm, {
   SessionFormData,
@@ -56,6 +59,8 @@ const normalizeGroup = (group: GroupDto): GroupDto => ({
     "No project title",
 });
 
+const PAGE_SIZE = 8;
+
 export default function CreateSessionsPage() {
   const [isFormVisible, setIsFormVisible] = useState(false);
   const [sessions, setSessions] = useState<DefenseSessionDto[]>([]);
@@ -65,6 +70,11 @@ export default function CreateSessionsPage() {
   const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
+  
+  // Pagination state
+  const [scheduledPage, setScheduledPage] = useState(1);
+  const [inProgressPage, setInProgressPage] = useState(1);
+  const [completedPage, setCompletedPage] = useState(1);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -146,39 +156,35 @@ export default function CreateSessionsPage() {
             `Successfully imported ${successCount} defense session(s)`
           );
         } else {
-          // Build error message with details, grouping duplicate errors
-          let errorDetails = `Success: ${successCount}, Failed: ${failureCount} out of ${totalRows} rows.\n\n`;
+          // Build concise error message
+          let errorDetails = `Success: ${successCount}, Failed: ${failureCount}/${totalRows}\n\n`;
           
           if (result.errors && result.errors.length > 0) {
-            // Separate duplicate errors from other errors
+            // Group duplicate errors
             const duplicateErrors = result.errors.filter((err: any) => 
               err.errorMessage?.toLowerCase().includes("duplicate") ||
-              err.errorMessage?.toLowerCase().includes("already exists") ||
-              err.errorMessage?.toLowerCase().includes("trùng") ||
-              err.errorMessage?.toLowerCase().includes("đã tồn tại")
+              err.errorMessage?.toLowerCase().includes("already") ||
+              err.errorMessage?.toLowerCase().includes("active session")
             );
+            
+            if (duplicateErrors.length > 0) {
+              const uniqueGroups = new Set(duplicateErrors.map((e: any) => 
+                e.errorMessage?.match(/Group '([^']+)'/)?.[1] || 'Unknown'
+              ));
+              errorDetails += `${duplicateErrors.length} duplicate(s): ${Array.from(uniqueGroups).slice(0, 3).join(', ')}${uniqueGroups.size > 3 ? '...' : ''}\n`;
+            }
+            
             const otherErrors = result.errors.filter((err: any) => 
               !duplicateErrors.includes(err)
             );
             
-            if (duplicateErrors.length > 0) {
-              errorDetails += `⚠️ Duplicate Errors (${duplicateErrors.length}):\n`;
-              duplicateErrors.slice(0, 10).forEach((err: any, idx: number) => {
-                errorDetails += `${idx + 1}. Row ${err.row}, ${err.field}: ${err.errorMessage}\n`;
-              });
-              if (duplicateErrors.length > 10) {
-                errorDetails += `... and ${duplicateErrors.length - 10} more duplicate errors\n`;
-              }
-              errorDetails += "\n";
-            }
-            
             if (otherErrors.length > 0) {
-              errorDetails += `Other Errors (${otherErrors.length}):\n`;
-              otherErrors.slice(0, 10).forEach((err: any, idx: number) => {
-                errorDetails += `${idx + 1}. Row ${err.row}, ${err.field}: ${err.errorMessage}\n`;
+              errorDetails += `\nOther errors (${otherErrors.length}):\n`;
+              otherErrors.slice(0, 3).forEach((err: any, idx: number) => {
+                errorDetails += `${idx + 1}. Row ${err.row}: ${err.errorMessage?.substring(0, 60)}...\n`;
               });
-              if (otherErrors.length > 10) {
-                errorDetails += `... and ${otherErrors.length - 10} more errors`;
+              if (otherErrors.length > 3) {
+                errorDetails += `... +${otherErrors.length - 3} more`;
               }
             }
           }
@@ -195,53 +201,37 @@ export default function CreateSessionsPage() {
       const errorData = error?.errorData || error?.data || error?.response?.data;
       let errorMessage = "File upload failed";
       
-      if (errorData) {
-        if (errorData.data) {
-          // DefenseSessionImportResultDto with errors
-          const result = errorData.data;
-          if (result.errors && result.errors.length > 0) {
-            // Separate duplicate errors from other errors
-            const duplicateErrors = result.errors.filter((err: any) => 
-              err.errorMessage?.toLowerCase().includes("duplicate") ||
-              err.errorMessage?.toLowerCase().includes("already exists") ||
-              err.errorMessage?.toLowerCase().includes("trùng") ||
-              err.errorMessage?.toLowerCase().includes("đã tồn tại") ||
-              err.errorMessage?.toLowerCase().includes("active session")
-            );
-            const otherErrors = result.errors.filter((err: any) => 
-              !duplicateErrors.includes(err)
-            );
-            
-            errorMessage = `Import failed: ${result.failureCount || 0} error(s) found.\n\n`;
-            
-            if (duplicateErrors.length > 0) {
-              errorMessage += `⚠️ Duplicate/Conflict Errors (${duplicateErrors.length}):\n`;
-              duplicateErrors.slice(0, 10).forEach((err: any, idx: number) => {
-                errorMessage += `${idx + 1}. Row ${err.row}, ${err.field}: ${err.errorMessage}\n`;
-              });
-              if (duplicateErrors.length > 10) {
-                errorMessage += `... and ${duplicateErrors.length - 10} more duplicate errors\n`;
-              }
-              errorMessage += "\n";
+      if (errorData?.data) {
+        const result = errorData.data;
+        if (result.errors && result.errors.length > 0) {
+          const duplicateErrors = result.errors.filter((err: any) => 
+            err.errorMessage?.toLowerCase().includes("duplicate") ||
+            err.errorMessage?.toLowerCase().includes("already") ||
+            err.errorMessage?.toLowerCase().includes("active session")
+          );
+          
+          errorMessage = `Import failed: ${result.failureCount || 0} error(s)\n\n`;
+          
+          if (duplicateErrors.length > 0) {
+            const uniqueGroups = new Set(duplicateErrors.map((e: any) => 
+              e.errorMessage?.match(/Group '([^']+)'/)?.[1] || 'Unknown'
+            ));
+            const groupList = Array.from(uniqueGroups).slice(0, 5).join(', ');
+            errorMessage += `${duplicateErrors.length} row(s): ${groupList}${uniqueGroups.size > 5 ? '...' : ''} already have sessions\n\nRemove these groups from Excel`;
+          } else if (result.errors.length > 0) {
+            errorMessage += `Errors:\n`;
+            result.errors.slice(0, 3).forEach((err: any, idx: number) => {
+              errorMessage += `${idx + 1}. Row ${err.row}: ${err.errorMessage?.substring(0, 60)}...\n`;
+            });
+            if (result.errors.length > 3) {
+              errorMessage += `... +${result.errors.length - 3} more`;
             }
-            
-            if (otherErrors.length > 0) {
-              errorMessage += `Other Errors (${otherErrors.length}):\n`;
-              otherErrors.slice(0, 10).forEach((err: any, idx: number) => {
-                errorMessage += `${idx + 1}. Row ${err.row}, ${err.field}: ${err.errorMessage}\n`;
-              });
-              if (otherErrors.length > 10) {
-                errorMessage += `... and ${otherErrors.length - 10} more errors`;
-              }
-            }
-          } else if (result.message) {
-            errorMessage = result.message;
           }
-        } else if (errorData.message) {
-          errorMessage = errorData.message;
-        } else if (errorData.details) {
-          errorMessage = errorData.details;
+        } else if (result.message) {
+          errorMessage = result.message;
         }
+      } else if (errorData?.message) {
+        errorMessage = errorData.message;
       } else if (error?.message) {
         errorMessage = error.message;
       }
@@ -384,6 +374,26 @@ export default function CreateSessionsPage() {
     completed: completedSessions.length,
   };
 
+  // Paginated sessions
+  const paginatedScheduledSessions = useMemo(() => {
+    const start = (scheduledPage - 1) * PAGE_SIZE;
+    return scheduledSessions.slice(start, start + PAGE_SIZE);
+  }, [scheduledSessions, scheduledPage]);
+
+  const paginatedInProgressSessions = useMemo(() => {
+    const start = (inProgressPage - 1) * PAGE_SIZE;
+    return inProgressSessions.slice(start, start + PAGE_SIZE);
+  }, [inProgressSessions, inProgressPage]);
+
+  const paginatedCompletedSessions = useMemo(() => {
+    const start = (completedPage - 1) * PAGE_SIZE;
+    return completedSessions.slice(start, start + PAGE_SIZE);
+  }, [completedSessions, completedPage]);
+
+  const scheduledTotalPages = Math.ceil(scheduledSessions.length / PAGE_SIZE);
+  const inProgressTotalPages = Math.ceil(inProgressSessions.length / PAGE_SIZE);
+  const completedTotalPages = Math.ceil(completedSessions.length / PAGE_SIZE);
+
   return (
     <div className="max-w-[1100px] mx-auto">
       {/* header */}
@@ -487,7 +497,7 @@ export default function CreateSessionsPage() {
           <section className="mb-6">
             <h2 className="text-lg font-semibold mb-3">Scheduled Sessions</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {scheduledSessions.map((s) => (
+              {paginatedScheduledSessions.map((s) => (
                 <div
                   key={s.id}
                   className="bg-white rounded-lg shadow p-4 relative"
@@ -518,13 +528,44 @@ export default function CreateSessionsPage() {
                 </div>
               ))}
             </div>
+            {scheduledTotalPages > 1 && (
+              <div className="mt-4 flex items-center justify-center gap-2">
+                <button
+                  onClick={() => setScheduledPage(p => Math.max(1, p - 1))}
+                  disabled={scheduledPage === 1}
+                  className="px-3 py-1.5 rounded-lg border text-sm disabled:opacity-50"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                {Array.from({ length: scheduledTotalPages }, (_, i) => i + 1).map(page => (
+                  <button
+                    key={page}
+                    onClick={() => setScheduledPage(page)}
+                    className={`px-3 py-1.5 rounded-lg text-sm ${
+                      scheduledPage === page
+                        ? "bg-gradient-to-r from-purple-600 to-blue-500 text-white"
+                        : "border hover:bg-gray-50"
+                    }`}
+                  >
+                    {page}
+                  </button>
+                ))}
+                <button
+                  onClick={() => setScheduledPage(p => Math.min(scheduledTotalPages, p + 1))}
+                  disabled={scheduledPage === scheduledTotalPages}
+                  className="px-3 py-1.5 rounded-lg border text-sm disabled:opacity-50"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            )}
           </section>
 
           {/* in progress list */}
           <section className="mb-6">
             <h2 className="text-lg font-semibold mb-3">In Progress Sessions</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {inProgressSessions.map((s) => (
+              {paginatedInProgressSessions.map((s) => (
                 <div
                   key={s.id}
                   className="bg-white rounded-lg shadow p-4 relative"
@@ -561,7 +602,7 @@ export default function CreateSessionsPage() {
           <section className="mb-10">
             <h2 className="text-lg font-semibold mb-3">Completed Sessions</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {completedSessions.map((s) => (
+              {paginatedCompletedSessions.map((s) => (
                 <div
                   key={s.id}
                   className="bg-white rounded-lg shadow p-4 relative"

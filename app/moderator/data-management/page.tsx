@@ -587,14 +587,68 @@ export default function DataManagementPage() {
         Number(councilImportMajorId),
         file
       );
+      
+      // Check for API error response (this usually comes from request function)
+      if (!result || (typeof result.code === 'number' && result.code >= 400) || (typeof result.code === 'string' && parseInt(result.code) >= 400)) {
+        setIsImportingCouncil(false);
+        const errorMsg = result?.message || "Import failed. Please try again.";
+        await swalConfig.error("Import Failed", errorMsg);
+        event.target.value = "";
+        return;
+      }
+      
       const data = result?.data || result;
+      
+      // Check if import actually succeeded
+      const councilCount = (data as any)?.createdCouncilIds?.length || 0;
+      const assignmentCount = (data as any)?.createdCommitteeAssignmentIds?.length || 0;
+      const errors = (data as any)?.errors || [];
+      const hasErrors = errors.length > 0;
+      const failureCount = (data as any)?.failureCount || 0;
+      const successCount = (data as any)?.successCount || 0;
+      
+      // Import is considered failed if:
+      // 1. No councils created AND no assignments created (total failure)
+      const importFailed = councilCount === 0 && successCount === 0;
+      
+      // Partial success: some things were created but there were errors
+      const partialSuccess = (councilCount > 0 || successCount > 0) && hasErrors;
+      
+      if (importFailed) {
+        setIsImportingCouncil(false);
+        let errorMsg = "";
+        if (hasErrors) {
+          const firstError = errors[0];
+          errorMsg = `Import failed. ${failureCount} rows failed.\n\nFirst error (Row ${firstError.row}): ${firstError.errorMessage || 'Unknown error'}`;
+        } else {
+          errorMsg = (data as any)?.message || "Import failed. No councils or assignments were created. Please check your file format and data.";
+        }
+        await swalConfig.error("Import Failed", errorMsg);
+        event.target.value = "";
+        return;
+      }
+      
+      if (partialSuccess) {
+        setIsImportingCouncil(false);
+        let warningMsg = `Import completed with issues.\n\nSuccess: ${successCount} assignment(s)\nFailed: ${failureCount} row(s)\nCreated councils: ${councilCount}\n\n`;
+        
+        if (errors.length > 0) {
+          const firstError = errors[0];
+          warningMsg += `Example error (Row ${firstError.row}): ${firstError.errorMessage || 'Unknown error'}`;
+        }
+        
+        await swalConfig.warning("Partial Success", warningMsg);
+        await fetchData();
+        setIsCouncilImportModalOpen(false);
+        setCouncilImportMajorId("");
+        event.target.value = "";
+        return;
+      }
+      
+      // Show success with details
       const message =
         (data as any)?.message ||
-        `Successfully imported. Councils: ${
-          (data as any)?.createdCouncilIds?.length || 0
-        }, Assignments: ${
-          (data as any)?.createdCommitteeAssignmentIds?.length || 0
-        }`;
+        `Successfully imported. Councils: ${councilCount}, Assignments: ${assignmentCount}`;
       await swalConfig.success("Import Complete", message);
       await fetchData();
       setIsCouncilImportModalOpen(false);
@@ -602,10 +656,19 @@ export default function DataManagementPage() {
       event.target.value = "";
     } catch (error: any) {
       setIsImportingCouncil(false);
-      await swalConfig.error(
-        "Import Failed",
-        getSimpleErrorMessage(error, "Unable to import councils.")
-      );
+      
+      // Try to extract detailed message if available
+      let detailMsg = getSimpleErrorMessage(error, "Unable to import councils.");
+      const errorData = error.errorData || (error as any).data;
+      
+      if (errorData?.errors && Array.isArray(errorData.errors) && errorData.errors.length > 0) {
+        const firstErr = errorData.errors[0];
+        detailMsg = `Import failed. Row ${firstErr.row}: ${firstErr.errorMessage}`;
+      } else if (errorData?.message) {
+        detailMsg = errorData.message;
+      }
+
+      await swalConfig.error("Import Failed", detailMsg);
       event.target.value = "";
     } finally {
       setIsImportingCouncil(false);
@@ -781,10 +844,28 @@ export default function DataManagementPage() {
 
       const result = await studentsApi.import(file);
       const data = result?.data || result;
+      
+      // Check if import actually succeeded
+      const successCount = (data as any)?.successCount || 0;
+      const failureCount = (data as any)?.failureCount || 0;
+      
+      // If all imports failed or no students were imported, show error
+      if (successCount === 0) {
+        setIsImportingStudent(false);
+        const errorMsg = (data as any)?.message || 
+          (failureCount > 0 
+            ? `Import failed. All ${failureCount} student(s) could not be imported.` 
+            : "Import failed. No students were imported.");
+        await swalConfig.error("Import Failed", errorMsg);
+        event.target.value = "";
+        return;
+      }
+      
+      // Show success with details
       const message =
         (data as any)?.message ||
-        `Successfully imported ${data?.successCount || 0} student(s).${
-          data?.failureCount ? ` Failed: ${data.failureCount}` : ""
+        `Successfully imported ${successCount} student(s).${
+          failureCount ? ` Failed: ${failureCount}` : ""
         }`;
       await swalConfig.success("Import Complete", message);
       await fetchData();

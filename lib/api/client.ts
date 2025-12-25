@@ -15,12 +15,12 @@ class ApiClient {
     if (typeof window === "undefined") return null;
     // Get accessToken from localStorage
     const token = localStorage.getItem("accessToken");
-    
+
     // Skip dummy tokens - they're not valid for API calls
     if (token === "dummy-token-chair" || !token || token.trim() === "") {
       return null;
     }
-    
+
     return token;
   }
 
@@ -38,7 +38,7 @@ class ApiClient {
       const payload = JSON.parse(atob(token.split(".")[1]));
       return (
         payload[
-          "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"
+        "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"
         ] ||
         payload.sub ||
         payload.userId ||
@@ -133,10 +133,10 @@ class ApiClient {
     };
 
     // Check if endpoint requires authentication (most endpoints do, except login/register)
-    const requiresAuth = !endpoint.includes("/auth/login") && 
-                         !endpoint.includes("/auth/register") &&
-                         !endpoint.includes("/auth/password/forgot") &&
-                         !endpoint.includes("/auth/password/reset");
+    const requiresAuth = !endpoint.includes("/auth/login") &&
+      !endpoint.includes("/auth/register") &&
+      !endpoint.includes("/auth/password/forgot") &&
+      !endpoint.includes("/auth/password/reset");
 
     if (requiresAuth && !token) {
       // No token available for authenticated endpoint - redirect to login
@@ -218,7 +218,7 @@ class ApiClient {
 
         // Check if this is an expected error (403, 404) that should be handled silently
         const isExpectedError = response.status === 403 || response.status === 404;
-        
+
         // Provide concise error messages based on status code
         let userFriendlyMessage = errorMessage;
         if (response.status === 404) {
@@ -406,9 +406,6 @@ Please check:
         } else if (errorMessage.includes("duplicate")) {
           errorMessage = "Duplicate data found";
         }
-
-        // Keep error messages short - only use first 50 characters
-        errorMessage = errorMessage.substring(0, 50);
 
         console.error(`API FormData Error [${endpoint}]:`, {
           status: response.status,

@@ -2,14 +2,15 @@
 
 import React, { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
-import { Search, Users } from "lucide-react";
-import { studentsApi } from "@/lib/api/students";
+import { Search, Users, FolderOpen } from "lucide-react";
 import { defenseSessionsApi } from "@/lib/api/defense-sessions";
+import { groupsApi } from "@/lib/api/groups";
 import { useVoiceEnrollmentCheck } from "@/lib/hooks/useVoiceEnrollmentCheck";
-import type { StudentDto } from "@/lib/models";
+import type { DefenseSessionDto, GroupDto } from "@/lib/models";
 
-interface StudentWithHistory extends StudentDto {
-  failedDefenses: number;
+interface GroupWithSession extends GroupDto {
+  sessionDate?: string;
+  sessionStatus?: string;
 }
 
 const PAGE_SIZE = 10;
@@ -18,53 +19,73 @@ export default function StudentHistoryListPage() {
   // Voice enrollment check - must be enrolled to access this page
   const { isChecking: checkingVoice } = useVoiceEnrollmentCheck();
 
-  const [students, setStudents] = useState<StudentWithHistory[]>([]);
+  const [groups, setGroups] = useState<GroupWithSession[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
-    const fetchStudents = async () => {
+    const fetchGroups = async () => {
       try {
         setLoading(true);
-        const [studentsRes, sessionsRes] = await Promise.all([
-          studentsApi.getAll().catch(() => ({ data: [] })),
-          defenseSessionsApi.getAll().catch(() => ({ data: [] })),
-        ]);
+        
+        // Get current user's lecturer ID from accessToken (same as home page)
+        let lecturerId: string | null = null;
+        try {
+          const { authUtils } = await import("@/lib/utils/auth");
+          lecturerId = authUtils.getCurrentUserId();
+        } catch (err) {
+          console.error("Error getting userId from token:", err);
+        }
+        
+        if (!lecturerId) {
+          console.error("Lecturer ID not found for current user");
+          setLoading(false);
+          return;
+        }
 
-        const studentsData = studentsRes.data || [];
+        // Fetch defense sessions for this lecturer only
+        const sessionsRes = await defenseSessionsApi.getByLecturerId(lecturerId).catch(() => ({ data: [] }));
         const sessions = sessionsRes.data || [];
 
-        // Calculate failed defenses for each student
-        const studentsWithHistory: StudentWithHistory[] = studentsData.map(
-          (student: StudentDto) => {
-            // This is a simplified calculation - you may need to adjust based on actual score data
-            const failedDefenses = 0; // TODO: Calculate from scores when score API is available
-            return {
-              ...student,
-              failedDefenses,
-            };
-          }
-        );
+        // Extract unique group IDs from sessions
+        const groupIds = [...new Set(sessions.map((s: DefenseSessionDto) => s.groupId))];
 
-        setStudents(studentsWithHistory);
+        // Fetch group details for each group
+        const groupPromises = groupIds.map(id => groupsApi.getById(id).catch(() => null));
+        const groupResults = await Promise.all(groupPromises);
+
+        // Combine group data with session info
+        const groupsWithSessions: GroupWithSession[] = groupResults
+          .filter(res => res?.data)
+          .map(res => {
+            const group = res!.data;
+            const session = sessions.find((s: DefenseSessionDto) => s.groupId === group.id);
+            return {
+              ...group,
+              sessionDate: session?.defenseDate,
+              sessionStatus: session?.status,
+            };
+          });
+
+        setGroups(groupsWithSessions);
       } catch (error) {
-        // Error fetching students
+        console.error("Error fetching groups:", error);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchStudents();
+    fetchGroups();
   }, []);
 
-  const filteredStudents = students.filter((student) => {
+  const filteredGroups = groups.filter((group) => {
     const searchLower = searchTerm.toLowerCase();
     return (
-      student.studentCode?.toLowerCase().includes(searchLower) ||
-      student.fullName?.toLowerCase().includes(searchLower) ||
-      student.userName?.toLowerCase().includes(searchLower) ||
-      student.email?.toLowerCase().includes(searchLower)
+      group.id?.toLowerCase().includes(searchLower) ||
+      group.projectCode?.toLowerCase().includes(searchLower) ||
+      group.topicTitle_EN?.toLowerCase().includes(searchLower) ||
+      group.topicTitle_VN?.toLowerCase().includes(searchLower)
     );
   });
 
@@ -74,14 +95,14 @@ export default function StudentHistoryListPage() {
   }, [searchTerm]);
 
   // Pagination calculations
-  const paginatedStudents = useMemo(() => {
+  const paginatedGroups = useMemo(() => {
     const startIndex = (currentPage - 1) * PAGE_SIZE;
-    return filteredStudents.slice(startIndex, startIndex + PAGE_SIZE);
-  }, [filteredStudents, currentPage]);
+    return filteredGroups.slice(startIndex, startIndex + PAGE_SIZE);
+  }, [filteredGroups, currentPage]);
 
   const totalPages = Math.max(
     1,
-    Math.ceil(filteredStudents.length / PAGE_SIZE)
+    Math.ceil(filteredGroups.length / PAGE_SIZE)
   );
 
   // Pagination component helper
@@ -120,6 +141,7 @@ export default function StudentHistoryListPage() {
       </div>
     );
   };
+
   return (
     <>
       <main className="main-content">
@@ -130,7 +152,7 @@ export default function StudentHistoryListPage() {
               Student Defense History
             </h1>
             <p className="text-gray-500 text-sm">
-              View past defense sessions and performance history
+              View groups from your assigned defense sessions
             </p>
           </div>
         </header>
@@ -141,7 +163,7 @@ export default function StudentHistoryListPage() {
             <Search className="w-5 h-5 text-gray-400" />
             <input
               type="text"
-              placeholder="Search by name, student ID, or email..."
+              placeholder="Search by group ID, project code, or topic..."
               className="flex-1 outline-none text-sm text-gray-700 placeholder-gray-400"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -149,84 +171,92 @@ export default function StudentHistoryListPage() {
           </div>
         </div>
 
-        {/* Students table */}
+        {/* Groups table */}
         <div className="bg-white border border-gray-100 rounded-xl shadow-sm p-5">
           <div className="flex items-center gap-2 mb-4">
-            <Users className="w-5 h-5 text-blue-600" />
+            <FolderOpen className="w-5 h-5 text-blue-600" />
             <h2 className="text-lg font-semibold text-gray-800">
-              Students ({filteredStudents.length})
+              Groups ({filteredGroups.length})
             </h2>
           </div>
 
           {loading ? (
             <div className="text-center py-8 text-gray-500">
-              Loading students...
+              Loading groups...
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead>
                   <tr className="text-gray-600 border-b">
-                    <th className="text-left py-3 px-4">Student ID</th>
-                    <th className="text-left py-3 px-4">Name</th>
-                    <th className="text-left py-3 px-4">Email</th>
-                    <th className="text-center py-3 px-4">Failed Defenses</th>
+                    <th className="text-left py-3 px-4">Group ID</th>
+                    <th className="text-left py-3 px-4">Project Code</th>
+                    <th className="text-left py-3 px-4">Topic</th>
+                    <th className="text-center py-3 px-4">Session Status</th>
                     <th className="text-right py-3 px-4">Actions</th>
                   </tr>
                 </thead>
 
                 <tbody>
-                  {paginatedStudents.map((student) => (
+                  {paginatedGroups.map((group) => (
                     <tr
-                      key={student.id}
+                      key={group.id}
                       className="border-b last:border-0 hover:bg-gray-50 transition"
                     >
                       <td className="py-3 px-4 font-medium text-gray-800">
-                        {student.studentCode || student.id}
-                      </td>
-
-                      <td className="py-3 px-4">
-                        <Link
-                          href={`/member/student-history/${student.id}`}
-                          className="text-indigo-600 hover:underline font-medium"
-                        >
-                          {student.fullName || student.userName || "Unknown"}
-                        </Link>
+                        {group.id}
                       </td>
 
                       <td className="py-3 px-4 text-gray-700">
-                        {student.email || "N/A"}
+                        {group.projectCode || "N/A"}
+                      </td>
+
+                      <td className="py-3 px-4">
+                        <div className="max-w-md">
+                          <p className="font-medium text-gray-800 truncate">
+                            {group.topicTitle_EN || "No title"}
+                          </p>
+                          {group.topicTitle_VN && (
+                            <p className="text-xs text-gray-500 truncate">
+                              {group.topicTitle_VN}
+                            </p>
+                          )}
+                        </div>
                       </td>
 
                       <td className="py-3 px-4 text-center">
                         <span
                           className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${
-                            student.failedDefenses > 0
-                              ? "bg-red-50 text-red-700"
-                              : "bg-green-50 text-green-700"
+                            group.sessionStatus === "Completed"
+                              ? "bg-blue-100 text-blue-700"
+                              : group.sessionStatus === "InProgress"
+                              ? "bg-orange-100 text-orange-700"
+                              : "bg-green-100 text-green-700"
                           }`}
                         >
-                          {student.failedDefenses}
+                          {group.sessionStatus === "InProgress" 
+                            ? "In Progress" 
+                            : (group.sessionStatus || "Scheduled")}
                         </span>
                       </td>
 
                       <td className="py-3 px-4 text-right">
                         <Link
-                          href={`/member/student-history/${student.id}`}
+                          href={`/member/student-history/group/${group.id}`}
                           className="inline-flex items-center justify-center px-3 py-1.5 rounded-md text-sm font-semibold text-white bg-gradient-to-r from-purple-600 to-blue-500 shadow-md hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-purple-500 transition whitespace-nowrap"
                         >
-                          View History
+                          View Students
                         </Link>
                       </td>
                     </tr>
                   ))}
-                  {paginatedStudents.length === 0 && (
+                  {paginatedGroups.length === 0 && (
                     <tr>
                       <td
                         colSpan={5}
                         className="text-center py-8 text-gray-400"
                       >
-                        No students found.
+                        No groups found.
                       </td>
                     </tr>
                   )}
