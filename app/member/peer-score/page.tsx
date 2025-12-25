@@ -606,7 +606,7 @@ export default function PeerScoresPage() {
                             </div>
                             {member.comment && (
                               <p className="mt-1 pl-11 text-xs text-gray-600 italic">
-                                Nhận xét: {member.comment}
+                                Comment: {member.comment}
                               </p>
                             )}
                           </div>
@@ -695,10 +695,10 @@ export default function PeerScoresPage() {
                   <Users className="w-8 h-8 text-gray-400" />
                 </div>
                 <h3 className="text-lg font-medium text-gray-800 mb-2">
-                  Chưa có điểm số
+                  No Scores Available
                 </h3>
                 <p className="text-gray-500 text-sm">
-                  Hiện tại chưa có điểm số nào từ các thành viên hội đồng.
+                  There are currently no scores from committee members.
                   <br />
                   Please return after the grading process is complete.
                 </p>
