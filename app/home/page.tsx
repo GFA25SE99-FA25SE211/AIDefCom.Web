@@ -33,6 +33,10 @@ export default function HomePage() {
   const [sessionsData, setSessionsData] = useState<SessionWithGroup[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 6;
+
   // Xóa session role khi vào trang danh sách (không phải detail)
   useEffect(() => {
     sessionStorage.removeItem("sessionRole");
@@ -190,7 +194,7 @@ export default function HomePage() {
                 displayStatus = "InProgress";
               } else if (apiStatus === "scheduled") {
                 // Giữ nguyên status "Scheduled" từ backend
-                  displayStatus = "Scheduled";
+                displayStatus = "Scheduled";
               } else {
                 // Fallback: nếu không có status hoặc status không hợp lệ, dùng logic cũ
                 const sessionDate = new Date(session.defenseDate);
@@ -248,6 +252,17 @@ export default function HomePage() {
 
   const totalCount = sessionsData.length;
 
+  // Pagination calculations
+  const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const paginatedSessions = sessionsData.slice(startIndex, endIndex);
+
+  // Reset to page 1 when data changes
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [totalCount]);
+
   return (
     <div className="space-y-6">
       <Header totalCount={totalCount} />
@@ -267,23 +282,85 @@ export default function HomePage() {
           No defense sessions found.
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
-          {sessionsData.map((session) => (
-            <SessionCard
-              key={session.id}
-              sessionId={session.id}
-              groupId={session.groupId}
-              groupName={session.groupName}
-              projectTitle={session.projectTitle}
-              location={session.location}
-              defenseDate={session.defenseDate}
-              startTime={session.startTime}
-              endTime={session.endTime}
-              status={session.displayStatus}
-              members={session.members}
-            />
-          ))}
-        </div>
+        <>
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
+            {paginatedSessions.map((session) => (
+              <SessionCard
+                key={session.id}
+                sessionId={session.id}
+                groupId={session.groupId}
+                groupName={session.groupName}
+                projectTitle={session.projectTitle}
+                location={session.location}
+                defenseDate={session.defenseDate}
+                startTime={session.startTime}
+                endTime={session.endTime}
+                status={session.displayStatus}
+                members={session.members}
+              />
+            ))}
+          </div>
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-2 mt-6">
+              {/* Previous Button */}
+              <button
+                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  currentPage === 1
+                    ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                    : "bg-white text-gray-700 hover:bg-gray-50 border border-gray-300 shadow-sm"
+                }`}
+              >
+                ← Previous
+              </button>
+
+              {/* Page Numbers */}
+              <div className="flex items-center gap-1">
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(
+                  (page) => (
+                    <button
+                      key={page}
+                      onClick={() => setCurrentPage(page)}
+                      className={`w-10 h-10 rounded-lg text-sm font-medium transition-colors ${
+                        currentPage === page
+                          ? "bg-purple-600 text-white shadow-md"
+                          : "bg-white text-gray-700 hover:bg-gray-50 border border-gray-300"
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  )
+                )}
+              </div>
+
+              {/* Next Button */}
+              <button
+                onClick={() =>
+                  setCurrentPage((prev) => Math.min(prev + 1, totalPages))
+                }
+                disabled={currentPage === totalPages}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  currentPage === totalPages
+                    ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                    : "bg-white text-gray-700 hover:bg-gray-50 border border-gray-300 shadow-sm"
+                }`}
+              >
+                Next →
+              </button>
+            </div>
+          )}
+
+          {/* Page Info */}
+          {totalPages > 1 && (
+            <div className="text-center text-sm text-gray-500">
+              Showing {startIndex + 1}-{Math.min(endIndex, totalCount)} of{" "}
+              {totalCount} sessions
+            </div>
+          )}
+        </>
       )}
 
       {/* Footer */}

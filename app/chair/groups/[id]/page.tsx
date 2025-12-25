@@ -563,7 +563,7 @@ export default function GroupDetailsPage() {
         {/* Header with Back Button */}
         <div className="flex items-center gap-4 mb-8">
           <button
-            onClick={() => router.back()}
+            onClick={() => router.push("/home")}
             className="p-2 hover:bg-white rounded-lg transition-colors shadow-sm border border-gray-200"
           >
             <svg
