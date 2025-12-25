@@ -7,9 +7,10 @@ export default function MemberSidebar() {
   // Cấu hình các liên kết dành cho Member
   const links = [
     {
-      href: "/member/defense-sessions",
+      href: "/home",
       label: "Defense Sessions",
       icon: Calendar,
+      matchPath: "/member",
     },
     {
       href: "/member/peer-score",

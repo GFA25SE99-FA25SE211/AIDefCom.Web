@@ -4,7 +4,7 @@ import { Users, FileText } from "lucide-react";
 
 export default function ChairSidebar() {
   const links = [
-    { href: "/chair", label: "My Groups", icon: Users },
+    { href: "/home", label: "My Groups", icon: Users, matchPath: "/chair" },
     { href: "/chair/report", label: "Report Status", icon: FileText },
   ];
 

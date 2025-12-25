@@ -14,7 +14,12 @@ interface SidebarBaseProps {
     | "Member"
     | "Administrator"
     | "Lecturer";
-  links: { href: string; label: string; icon: React.ElementType }[];
+  links: {
+    href: string;
+    label: string;
+    icon: React.ElementType;
+    matchPath?: string;
+  }[];
 }
 
 export default function SidebarBase({ role, links }: SidebarBaseProps) {
@@ -93,7 +98,15 @@ export default function SidebarBase({ role, links }: SidebarBaseProps) {
 
   // Kiểm tra route active
 
-  const isActive = (href: string) => {
+  const isActive = (link: { href: string; matchPath?: string }) => {
+    const { href, matchPath } = link;
+
+    // If matchPath is provided, check it first (for cases where href and active path differ)
+    if (matchPath) {
+      if (pathname === matchPath) return true;
+      if (pathname.startsWith(matchPath + "/")) return true;
+    }
+
     if (pathname === href) return true;
 
     if (pathname.startsWith(href)) {
@@ -101,10 +114,10 @@ export default function SidebarBase({ role, links }: SidebarBaseProps) {
 
       if (isSubPath) {
         const betterMatch = links.find(
-          (link) =>
-            link.href !== href &&
-            pathname.startsWith(link.href) &&
-            link.href.length > href.length
+          (l) =>
+            l.href !== href &&
+            pathname.startsWith(l.href) &&
+            l.href.length > href.length
         );
 
         if (betterMatch) return false;
@@ -174,7 +187,7 @@ export default function SidebarBase({ role, links }: SidebarBaseProps) {
         {/* Navigation */}
         <nav className="mt-6 px-4 space-y-2 text-sm font-medium relative">
           {links.map((link) => {
-            const active = isActive(link.href);
+            const active = isActive(link);
             const Icon = link.icon;
 
             return (
