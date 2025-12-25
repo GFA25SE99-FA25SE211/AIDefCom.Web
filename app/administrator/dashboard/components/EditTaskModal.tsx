@@ -173,7 +173,7 @@ const EditTaskModal: React.FC<EditTaskModalProps> = ({
       : [
           { id: "chair", name: "Chair (No users found)" },
           { id: "secretary", name: "Secretary (No users found)" },
-        ];
+  ];
 
   const footer = (
     <div className="modal-footer">

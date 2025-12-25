@@ -1482,9 +1482,6 @@ export default function GradeGroupPage() {
                           <p className="text-sm font-medium text-gray-800">
                             {student.name}
                           </p>
-                          <p className="text-xs text-gray-500">
-                            {student.role} • ID: {student.id}
-                          </p>
                         </div>
                       ))}
                     </div>
@@ -1531,10 +1528,7 @@ export default function GradeGroupPage() {
                                 {student.name}
                               </Link>
                               <span className="text-xs text-gray-500 mt-1">
-                                ID: {student.id}
-                              </span>
-                              <span className="text-xs text-gray-500">
-                                {student.role}
+                                {student.id} • {student.role}
                               </span>
                             </div>
                           </td>
