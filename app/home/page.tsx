@@ -33,6 +33,9 @@ export default function HomePage() {
   const [sessionsData, setSessionsData] = useState<SessionWithGroup[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Filter state
+  const [filterDate, setFilterDate] = useState<string>("");
+
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 6;
@@ -250,22 +253,60 @@ export default function HomePage() {
     fetchSessions();
   }, [checkingVoice]);
 
-  const totalCount = sessionsData.length;
+  // Filter sessions by date
+  const filteredSessions = React.useMemo(() => {
+    if (!filterDate) return sessionsData;
+    
+    const filterDateObj = new Date(filterDate);
+    filterDateObj.setHours(0, 0, 0, 0);
+    
+    return sessionsData.filter((session) => {
+      const sessionDate = new Date(session.defenseDate);
+      sessionDate.setHours(0, 0, 0, 0);
+      return sessionDate.getTime() === filterDateObj.getTime();
+    });
+  }, [sessionsData, filterDate]);
+
+  const totalCount = filteredSessions.length;
 
   // Pagination calculations
   const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
   const endIndex = startIndex + ITEMS_PER_PAGE;
-  const paginatedSessions = sessionsData.slice(startIndex, endIndex);
+  const paginatedSessions = filteredSessions.slice(startIndex, endIndex);
 
-  // Reset to page 1 when data changes
+  // Reset to page 1 when data changes or filter changes
   React.useEffect(() => {
     setCurrentPage(1);
-  }, [totalCount]);
+  }, [totalCount, filterDate]);
 
   return (
     <div className="space-y-6">
       <Header totalCount={totalCount} />
+
+      {/* Date Filter */}
+      <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+        <div className="flex items-center gap-4">
+          <label htmlFor="date-filter" className="text-sm font-medium text-gray-700 whitespace-nowrap">
+            Filter by Date:
+          </label>
+          <input
+            id="date-filter"
+            type="date"
+            value={filterDate}
+            onChange={(e) => setFilterDate(e.target.value)}
+            className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none"
+          />
+          {filterDate && (
+            <button
+              onClick={() => setFilterDate("")}
+              className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              Clear Filter
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* Danh sách sessions */}
       {checkingVoice ? (

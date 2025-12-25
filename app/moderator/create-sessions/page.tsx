@@ -146,16 +146,40 @@ export default function CreateSessionsPage() {
             `Successfully imported ${successCount} defense session(s)`
           );
         } else {
-          // Build error message with details
+          // Build error message with details, grouping duplicate errors
           let errorDetails = `Success: ${successCount}, Failed: ${failureCount} out of ${totalRows} rows.\n\n`;
           
           if (result.errors && result.errors.length > 0) {
-            errorDetails += "Errors:\n";
-            result.errors.slice(0, 10).forEach((err, idx) => {
-              errorDetails += `${idx + 1}. Row ${err.row}, ${err.field}: ${err.errorMessage}\n`;
-            });
-            if (result.errors.length > 10) {
-              errorDetails += `... and ${result.errors.length - 10} more errors`;
+            // Separate duplicate errors from other errors
+            const duplicateErrors = result.errors.filter((err: any) => 
+              err.errorMessage?.toLowerCase().includes("duplicate") ||
+              err.errorMessage?.toLowerCase().includes("already exists") ||
+              err.errorMessage?.toLowerCase().includes("trùng") ||
+              err.errorMessage?.toLowerCase().includes("đã tồn tại")
+            );
+            const otherErrors = result.errors.filter((err: any) => 
+              !duplicateErrors.includes(err)
+            );
+            
+            if (duplicateErrors.length > 0) {
+              errorDetails += `⚠️ Duplicate Errors (${duplicateErrors.length}):\n`;
+              duplicateErrors.slice(0, 10).forEach((err: any, idx: number) => {
+                errorDetails += `${idx + 1}. Row ${err.row}, ${err.field}: ${err.errorMessage}\n`;
+              });
+              if (duplicateErrors.length > 10) {
+                errorDetails += `... and ${duplicateErrors.length - 10} more duplicate errors\n`;
+              }
+              errorDetails += "\n";
+            }
+            
+            if (otherErrors.length > 0) {
+              errorDetails += `Other Errors (${otherErrors.length}):\n`;
+              otherErrors.slice(0, 10).forEach((err: any, idx: number) => {
+                errorDetails += `${idx + 1}. Row ${err.row}, ${err.field}: ${err.errorMessage}\n`;
+              });
+              if (otherErrors.length > 10) {
+                errorDetails += `... and ${otherErrors.length - 10} more errors`;
+              }
             }
           }
           
@@ -176,12 +200,39 @@ export default function CreateSessionsPage() {
           // DefenseSessionImportResultDto with errors
           const result = errorData.data;
           if (result.errors && result.errors.length > 0) {
+            // Separate duplicate errors from other errors
+            const duplicateErrors = result.errors.filter((err: any) => 
+              err.errorMessage?.toLowerCase().includes("duplicate") ||
+              err.errorMessage?.toLowerCase().includes("already exists") ||
+              err.errorMessage?.toLowerCase().includes("trùng") ||
+              err.errorMessage?.toLowerCase().includes("đã tồn tại") ||
+              err.errorMessage?.toLowerCase().includes("active session")
+            );
+            const otherErrors = result.errors.filter((err: any) => 
+              !duplicateErrors.includes(err)
+            );
+            
             errorMessage = `Import failed: ${result.failureCount || 0} error(s) found.\n\n`;
-            result.errors.slice(0, 10).forEach((err: any, idx: number) => {
-              errorMessage += `${idx + 1}. Row ${err.row}, ${err.field}: ${err.errorMessage}\n`;
-            });
-            if (result.errors.length > 10) {
-              errorMessage += `... and ${result.errors.length - 10} more errors`;
+            
+            if (duplicateErrors.length > 0) {
+              errorMessage += `⚠️ Duplicate/Conflict Errors (${duplicateErrors.length}):\n`;
+              duplicateErrors.slice(0, 10).forEach((err: any, idx: number) => {
+                errorMessage += `${idx + 1}. Row ${err.row}, ${err.field}: ${err.errorMessage}\n`;
+              });
+              if (duplicateErrors.length > 10) {
+                errorMessage += `... and ${duplicateErrors.length - 10} more duplicate errors\n`;
+              }
+              errorMessage += "\n";
+            }
+            
+            if (otherErrors.length > 0) {
+              errorMessage += `Other Errors (${otherErrors.length}):\n`;
+              otherErrors.slice(0, 10).forEach((err: any, idx: number) => {
+                errorMessage += `${idx + 1}. Row ${err.row}, ${err.field}: ${err.errorMessage}\n`;
+              });
+              if (otherErrors.length > 10) {
+                errorMessage += `... and ${otherErrors.length - 10} more errors`;
+              }
             }
           } else if (result.message) {
             errorMessage = result.message;

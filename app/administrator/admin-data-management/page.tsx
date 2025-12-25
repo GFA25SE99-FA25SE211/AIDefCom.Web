@@ -1421,14 +1421,20 @@ export default function AdminDataManagementPage() {
               "Title",
               "Assigned By",
               "Assigned To",
+              "Rubric",
               "Actions",
             ],
-            paginatedTasks.map((t) => (
+            paginatedTasks.map((t) => {
+              const rubric = rubrics.find((r) => r.id === t.rubricId);
+              const rubricName = rubric?.rubricName || "N/A";
+              
+              return (
               <tr key={t.id}>
                 <td>{t.id}</td>
                 <td>{t.title}</td>
                 <td>{t.assignedByName || userMap.get(t.assignedBy) || t.assignedBy}</td>
                 <td>{t.assignedToName || userMap.get(t.assignedTo) || t.assignedTo}</td>
+                <td>{rubricName}</td>
                 <td className="text-center align-middle">
                   <div className="flex gap-2 justify-center items-center">
                     <button
@@ -1446,7 +1452,8 @@ export default function AdminDataManagementPage() {
                   </div>
                 </td>
               </tr>
-            ))
+              );
+            })
           )}
           {renderPagination(taskPage, taskTotalPages, setTaskPage)}
         </>

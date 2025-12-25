@@ -509,7 +509,7 @@ export default function ViewScorePage() {
       // Thư ký đã kết thúc phiên
       setSessionStarted(false);
     } else if (eventType === "question_mode_started") {
-      swalConfig.info("Bắt đầu ghi nhận câu hỏi");
+      swalConfig.info("Starting to record question");
       setHasQuestionFinalText(false);
     } else if (eventType === "question_mode_result") {
       if (questionTimeoutRef.current) {
@@ -986,8 +986,8 @@ export default function ViewScorePage() {
                     }`}
                     title={
                       !sessionStarted
-                        ? "Chờ thư ký bắt đầu phiên"
-                        : "Bắt đầu ghi âm"
+                        ? "Waiting for secretary to start session"
+                        : "Start Recording"
                     }
                   >
                     <Mic className="w-4 h-4" />
@@ -1016,12 +1016,12 @@ export default function ViewScorePage() {
                       {isAsking ? (
                         <>
                           <StopCircle className="w-4 h-4" />
-                          <span>Kết thúc câu hỏi</span>
+                          <span>End Question</span>
                         </>
                       ) : (
                         <>
                           <MessageSquare className="w-4 h-4" />
-                          <span>Đặt câu hỏi</span>
+                          <span>Ask Question</span>
                         </>
                       )}
                     </button>
@@ -1033,7 +1033,7 @@ export default function ViewScorePage() {
                   className={`w-2 h-2 rounded-full ${
                     wsConnected ? "bg-green-500" : "bg-gray-400"
                   }`}
-                  title={wsConnected ? "Đã kết nối" : "Chưa kết nối"}
+                  title={wsConnected ? "Connected" : "Not connected"}
                 />
               </div>
 
@@ -1120,8 +1120,8 @@ export default function ViewScorePage() {
                           <p className="text-sm font-medium text-gray-800">
                             {student.name}
                           </p>
-                          <p className="text-xs text-gray-500">
-                            {student.role} • ID: {student.id}
+                          <p className="text-xs text-gray-500 mt-1">
+                            {student.id} • {student.role}
                           </p>
                         </div>
                       ))}
@@ -1170,10 +1170,7 @@ export default function ViewScorePage() {
                                   {student.name}
                                 </Link>
                                 <span className="text-xs text-gray-500 mt-1">
-                                  ID: {student.id}
-                                </span>
-                                <span className="text-xs text-gray-500">
-                                  {student.role}
+                                  {student.id} • {student.role}
                                 </span>
                               </div>
                             </td>
