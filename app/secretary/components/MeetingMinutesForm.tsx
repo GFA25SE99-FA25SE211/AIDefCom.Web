@@ -107,19 +107,23 @@ export default function MeetingMinutesForm({
     );
 
     // Map student presentations
+    // API returns: presentationPoints (array of strings)
     const presentations = defenseProgress.studentPresentations.map(
       (p: any) => ({
         student: p.studentName,
-        content: p.presentationContent.map((c: string) => `- ${c}`).join("\n"),
+        content: (p.presentationPoints || [])
+          .map((c: string) => `- ${c}`)
+          .join("\n"),
       })
     );
 
     // Map Q&A
+    // API returns: lecturerName, respondentName, answerPoints (array)
     const qaList = defenseProgress.questionsAndAnswers.map((q: any) => ({
-      questioner: q.lecturer,
+      questioner: q.lecturerName,
       question: q.question,
-      respondent: q.respondent,
-      answer: q.answerContent,
+      respondent: q.respondentName,
+      answer: (q.answerPoints || []).map((a: string) => `- ${a}`).join("\n"),
       councilDiscussion: q.councilDiscussion || "",
     }));
 
@@ -763,6 +767,27 @@ export default function MeetingMinutesForm({
                               className="w-full min-h-[80px] outline-none resize-none bg-transparent"
                               placeholder="Nội dung câu hỏi..."
                             />
+                            {/* Council Discussion - Nhận xét của Hội đồng */}
+                            <div className="mt-3 pt-3 border-t border-gray-200">
+                              <div className="mb-1">
+                                <span className="text-sm font-semibold text-blue-700">
+                                  Nhận xét của Hội đồng /{" "}
+                                  <span className="italic font-normal">
+                                    Council Discussion:
+                                  </span>
+                                </span>
+                              </div>
+                              <textarea
+                                value={item.councilDiscussion}
+                                onChange={(e) => {
+                                  const newQA = [...formData.qa];
+                                  newQA[idx].councilDiscussion = e.target.value;
+                                  handleInputChange("qa", newQA);
+                                }}
+                                className="w-full min-h-[60px] outline-none resize-none bg-blue-50/50 rounded p-2 text-sm border border-blue-100 focus:border-blue-300"
+                                placeholder="Nhận xét về câu trả lời của sinh viên..."
+                              />
+                            </div>
                           </td>
                           <td className="p-2 align-top">
                             <div className="mb-1">
@@ -788,27 +813,6 @@ export default function MeetingMinutesForm({
                               className="w-full min-h-[80px] outline-none resize-none bg-transparent"
                               placeholder="Nội dung trả lời..."
                             />
-                            {/* Council Discussion - Nhận xét của Hội đồng */}
-                            <div className="mt-3 pt-3 border-t border-gray-200">
-                              <div className="mb-1">
-                                <span className="text-sm font-semibold text-blue-700">
-                                  Nhận xét của Hội đồng /{" "}
-                                  <span className="italic font-normal">
-                                    Council Discussion:
-                                  </span>
-                                </span>
-                              </div>
-                              <textarea
-                                value={item.councilDiscussion}
-                                onChange={(e) => {
-                                  const newQA = [...formData.qa];
-                                  newQA[idx].councilDiscussion = e.target.value;
-                                  handleInputChange("qa", newQA);
-                                }}
-                                className="w-full min-h-[60px] outline-none resize-none bg-blue-50/50 rounded p-2 text-sm border border-blue-100 focus:border-blue-300"
-                                placeholder="Nhận xét về câu trả lời của sinh viên..."
-                              />
-                            </div>
                           </td>
                         </tr>
                       ))}

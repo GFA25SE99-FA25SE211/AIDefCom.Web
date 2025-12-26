@@ -6,30 +6,6 @@ export async function POST(req: Request) {
   try {
     const { email, password } = await req.json();
 
-    // ============================
-    // HARDCODED CHAIR ACCOUNT
-    // ============================
-    if (email === "chair@fpt.edu.vn" && password === "123456") {
-      const role = "chair";
-
-      const user = {
-        id: "8EB5D9FB-4389-4587-A7AE-23AFBAF461CE",
-        email: "lecturer1@university.edu",
-        fullName: "PGS.TS Le Van Chien",
-        roles: ["Chair"],
-        role: "Chair",
-      };
-
-      const res = NextResponse.json({
-        role,
-        user,
-        accessToken: "dummy-token-chair",
-        refreshToken: "dummy-refresh-token-chair",
-      });
-
-      return res;
-    }
-
     const API_BASE_URL =
       process.env.NEXT_PUBLIC_API_BASE_URL || BACKEND_API_URL;
 
