@@ -76,6 +76,28 @@ export default function StudentHistoryListPage() {
         const uniqueSessions = Array.from(groupMap.values());
         const enrichedSessions: (GroupSessionData | null)[] = await Promise.all(uniqueSessions.map(async (session: DefenseSessionDto) => {
           try {
+            // Check if current user is a member in this session
+            let isUserMember = false;
+            try {
+              const lecturersRes = await defenseSessionsApi.getUsersBySessionId(
+                session.id
+              );
+              if (lecturersRes.data && lecturerId) {
+                const currentUserInSession = lecturersRes.data.find(
+                  (user: any) =>
+                    String(user.id).toLowerCase() ===
+                    String(lecturerId).toLowerCase()
+                );
+
+                if (currentUserInSession && currentUserInSession.role) {
+                  const roleInSession = currentUserInSession.role.toLowerCase();
+                  isUserMember = roleInSession === "member";
+                }
+              }
+            } catch (err) {
+              console.error("Failed to check session role:", err);
+            }
+
             const [groupRes, studentsRes] = await Promise.all([
               groupsApi.getById(session.groupId),
               studentsApi.getByGroupId(session.groupId).catch(() => ({ data: [] }))
@@ -96,6 +118,11 @@ export default function StudentHistoryListPage() {
             if (apiStatus === "completed") displayStatus = "Completed";
             else if (apiStatus === "inprogress") displayStatus = "InProgress";
             else if (apiStatus === "scheduled") displayStatus = "Scheduled";
+
+            // Only include if user is member AND status is completed
+            if (!isUserMember || displayStatus !== "Completed") {
+              return null;
+            }
 
             return {
               ...session,
