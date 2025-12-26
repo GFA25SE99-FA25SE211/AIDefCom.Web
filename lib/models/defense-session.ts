@@ -12,8 +12,11 @@ export interface DefenseSessionDto {
   createdAt: string; // ISO date string (DateTime from backend)
   totalScore?: number | null; // Nullable double from backend
   // Optional fields that might be populated from related entities
-  topicTitle_EN?: string; // English topic title (from Group)
-  topicTitle_VN?: string; // Vietnamese topic title (from Group)
+  topicTitle?: string;
+  studentRole?: string;
+  studentScore?: number;
+  grade?: string;
+  resultStatus?: string;
 }
 
 export interface DefenseSessionCreateDto {

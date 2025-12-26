@@ -246,7 +246,7 @@ export default function AdminDataManagementPage() {
     const map = new Map<number, string>();
     defenseSessions.forEach((session) => {
       // Create session name from topic title or defense date
-      let sessionName = session.topicTitle_VN || session.topicTitle_EN;
+      let sessionName = session.topicTitle;
       if (!sessionName && session.defenseDate) {
         sessionName = `Session ${new Date(
           session.defenseDate
@@ -1749,7 +1749,7 @@ export default function AdminDataManagementPage() {
           })
           .map((u) => ({ id: u.id, name: u.fullName }))}
         sessionOptions={defenseSessions.map((s) => {
-          let sessionName = s.topicTitle_VN || s.topicTitle_EN;
+          let sessionName = s.topicTitle;
           if (!sessionName && s.defenseDate) {
             sessionName = `Session ${new Date(s.defenseDate).toLocaleDateString("vi-VN")}`;
           }
@@ -1807,7 +1807,7 @@ export default function AdminDataManagementPage() {
             name: r.rubricName,
           }))}
           sessionOptions={defenseSessions.map((s) => {
-            let sessionName = s.topicTitle_VN || s.topicTitle_EN;
+            let sessionName = s.topicTitle;
             if (!sessionName && s.defenseDate) {
               sessionName = `Session ${new Date(s.defenseDate).toLocaleDateString("vi-VN")}`;
             }

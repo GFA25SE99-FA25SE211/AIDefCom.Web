@@ -22,6 +22,7 @@ interface SessionCardProps {
   endTime: string;
   status: SessionStatus;
   members?: string;
+  customHref?: string;
 }
 
 const SessionCard: React.FC<SessionCardProps> = ({
@@ -35,6 +36,7 @@ const SessionCard: React.FC<SessionCardProps> = ({
   endTime,
   status,
   members,
+  customHref,
 }) => {
   const router = useRouter();
   const [sessionRole, setSessionRole] = useState<string | null>(null);
@@ -94,6 +96,11 @@ const SessionCard: React.FC<SessionCardProps> = ({
   }, [sessionId]);
 
   const handleViewClick = () => {
+    if (customHref) {
+      router.push(customHref);
+      return;
+    }
+
     // KHÔNG lưu session role ở đây - chỉ lưu khi vào trang detail cụ thể
     // Redirect based on user's role in this session
     if (sessionRole === "chair") {

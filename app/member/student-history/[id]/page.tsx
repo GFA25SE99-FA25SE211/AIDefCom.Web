@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 import { studentsApi } from "@/lib/api/students";
 import { defenseSessionsApi } from "@/lib/api/defense-sessions";
+import { groupsApi } from "@/lib/api/groups";
+import { scoresApi } from "@/lib/api/scores";
 import type { StudentDto, DefenseSessionDto } from "@/lib/models";
 
 // ======= Types =======
@@ -137,23 +139,60 @@ export default function StudentHistoryDetailPage() {
         // Get sessions for this student using the API
         const studentSessions = sessionsRes.data || [];
 
+        // Fetch group details for each session to get accurate topic titles
+        const sessionsWithGroupInfo = await Promise.all(
+          studentSessions.map(async (s: DefenseSessionDto) => {
+            try {
+              const [groupRes, scoresRes] = await Promise.all([
+                groupsApi.getById(s.groupId),
+                scoresApi.getBySessionId(s.id).catch(() => ({ data: [] }))
+              ]);
+              
+              const group = groupRes.data;
+              const scores = scoresRes.data || [];
+              
+              // Calculate average score for this student in this session
+              const studentScores = scores.filter((score: any) => score.studentId === studentId);
+              const avgScore = studentScores.length > 0
+                ? studentScores.reduce((sum: number, score: any) => sum + (score.value || 0), 0) / studentScores.length
+                : s.studentScore || 0;
+              
+              return {
+                ...s,
+                topicFromGroup: group?.topicTitle_EN || group?.topicTitle_VN || s.topicTitle || "No Topic",
+                calculatedScore: avgScore
+              };
+            } catch (err) {
+              console.error(`Error fetching data for session ${s.id}:`, err);
+              return {
+                ...s,
+                topicFromGroup: s.topicTitle || "No Topic",
+                calculatedScore: s.studentScore || 0
+              };
+            }
+          })
+        );
+
+        // Calculate failed count from sessions with grade "F"
+        const failedCount = sessionsWithGroupInfo.filter((s: any) => s.grade === "F").length;
+
         // Transform to StudentDetail format
         const studentDetail: StudentDetail = {
           id: studentData.id,
           name: studentData.fullName || studentData.userName || "Unknown",
           email: studentData.email || "",
-          failedCount: 0, // TODO: Calculate from scores
-          attempts: studentSessions.map(
-            (s: DefenseSessionDto, index: number) => ({
-              attempt: `Attempt #${studentSessions.length - index}`,
-              id: `DEF-${s.id}`,
-              date: s.defenseDate || "",
-              group: s.groupId || "N/A", // Use groupId from session
-              topic: "Project", // TODO: Get project title from group
-              role: "Member",
-              score: 0, // TODO: Get from scores
-              grade: "N/A",
-              status: "Completed",
+          failedCount,
+          attempts: sessionsWithGroupInfo.map(
+            (s: any, index: number) => ({
+              attempt: `Attempt #${sessionsWithGroupInfo.length - index}`,
+              id: s.id.toString(), // Just the number
+              date: s.defenseDate ? new Date(s.defenseDate).toLocaleDateString() : "",
+              group: s.groupId || "N/A",
+              topic: s.topicFromGroup,
+              role: s.studentRole || "Member",
+              score: s.calculatedScore,
+              grade: s.grade || "N/A",
+              status: s.resultStatus || s.status || "Completed",
             })
           ),
         };
@@ -245,14 +284,11 @@ export default function StudentHistoryDetailPage() {
               <table className="min-w-full text-sm border-t">
                 <thead>
                   <tr className="text-gray-600 text-left">
-                    <th className="py-3 pr-4">Attempt</th>
-                    <th className="py-3 px-4">Session ID</th>
+                    <th className="py-3 pr-4">Session ID</th>
                     <th className="py-3 px-4">Date</th>
                     <th className="py-3 px-4">Group</th>
                     <th className="py-3 px-4">Topic</th>
-                    <th className="py-3 px-4">Role</th>
                     <th className="py-3 px-4 text-center">Score</th>
-                    <th className="py-3 px-4 text-center">Grade</th>
                     <th className="py-3 px-4">Status</th>
                   </tr>
                 </thead>
@@ -263,10 +299,7 @@ export default function StudentHistoryDetailPage() {
                       key={attempt.id}
                       className="border-t hover:bg-gray-50 transition"
                     >
-                      <td className="py-3 pr-4 font-medium text-gray-800">
-                        {attempt.attempt}
-                      </td>
-                      <td className="py-3 px-4 text-gray-700">{attempt.id}</td>
+                      <td className="py-3 pr-4 font-medium text-gray-800">{attempt.id}</td>
                       <td className="py-3 px-4 text-gray-700 flex items-center gap-1">
                         <Calendar className="w-4 h-4" /> {attempt.date}
                       </td>
@@ -276,16 +309,8 @@ export default function StudentHistoryDetailPage() {
                       <td className="py-3 px-4 text-gray-700">
                         {attempt.topic}
                       </td>
-                      <td className="py-3 px-4 text-gray-700">
-                        {attempt.role}
-                      </td>
                       <td className="py-3 px-4 text-center font-medium text-gray-800">
                         {attempt.score.toFixed(1)}
-                      </td>
-                      <td className="py-3 px-4 text-center">
-                        <span className="inline-block bg-red-50 text-red-700 px-3 py-1 rounded-md font-medium text-xs">
-                          {attempt.grade}
-                        </span>
                       </td>
                       <td className="py-3 px-4">
                         <span className="inline-block bg-yellow-50 text-yellow-700 px-3 py-1 rounded-full text-xs font-medium">
