@@ -438,7 +438,7 @@ export default function ProfilePage() {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Role
                       <span className="ml-2 text-xs text-gray-400 font-normal">
-                        (Assigned by admin)
+                        (Cannot be changed)
                       </span>
                     </label>
                     <div className="px-4 py-3 bg-gray-100 rounded-xl text-gray-600 capitalize cursor-not-allowed">
