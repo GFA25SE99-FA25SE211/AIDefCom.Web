@@ -25,7 +25,7 @@ export default function GroupStudentsPage() {
     const fetchData = async () => {
       try {
         setLoading(true);
-        
+
         // Fetch group details
         const groupRes = await groupsApi.getById(groupId);
         setGroup(groupRes.data);
@@ -137,7 +137,7 @@ export default function GroupStudentsPage() {
                   </div>
 
                   <Link
-                    href={`/member/student-history/${student.id}`}
+                    href={`/student-history/${student.id}`}
                     className="inline-flex items-center justify-center px-4 py-2 rounded-md text-sm font-semibold text-white bg-gradient-to-r from-purple-600 to-blue-500 shadow-md hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-purple-500 transition whitespace-nowrap"
                   >
                     View History

@@ -12,8 +12,18 @@ import { committeeAssignmentsApi } from "@/lib/api/committee-assignments";
 import { authApi } from "@/lib/api/auth";
 import { majorsApi } from "@/lib/api/majors";
 import type { CouncilDto, CommitteeAssignmentDto } from "@/lib/models";
-import { Plus, Shield, Users, UserCircle2, Edit, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  Plus,
+  Shield,
+  Users,
+  UserCircle2,
+  Edit,
+  Trash2,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 import { swalConfig } from "@/lib/utils/sweetAlert";
+import { getApiErrorMessage } from "@/lib/utils/apiError";
 import { authUtils } from "@/lib/utils/auth";
 
 const IconBadge = ({
@@ -83,7 +93,7 @@ export default function ManageCouncilPage() {
       }
 
       // Small delay to ensure token is available
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
       setLoading(true);
       const [councilsRes, assignmentsRes, usersRes, majorsRes] =
@@ -206,13 +216,18 @@ export default function ManageCouncilPage() {
       setCurrentPage(1); // Reset to first page when councils change
     } catch (error: any) {
       // Check if it's an authentication error
-      if (error?.message?.includes("Authentication required") || 
-          error?.status === 401 ||
-          error?.errorData?.code === "DEF401") {
+      if (
+        error?.message?.includes("Authentication required") ||
+        error?.status === 401 ||
+        error?.errorData?.code === "DEF401"
+      ) {
         window.location.href = "/login";
         return;
       }
-      await swalConfig.error("Load Failed", "Failed to load council information");
+      await swalConfig.error(
+        "Load Failed",
+        "Failed to load council information"
+      );
     } finally {
       setLoading(false);
     }
@@ -433,7 +448,27 @@ export default function ManageCouncilPage() {
         "The lecturer has been added to the council."
       );
     } catch (error: any) {
-      await swalConfig.error("Add Failed", "Member addition failed");
+      // Extract details from error response
+      const errorData =
+        error?.errorData || error?.data || error?.response?.data;
+      let errorMessage = "Member addition failed";
+
+      if (errorData?.details) {
+        // Simplify schedule conflict message
+        const details = errorData.details as string;
+        const match = details.match(
+          /Cannot assign lecturer '([^']+)' to Council (\d+).*lecturer is already assigned to Council (\d+)/i
+        );
+        if (match) {
+          errorMessage = `Cannot assign lecturer '${match[1]}' to Council ${match[2]}. Lecturer is already assigned to Council ${match[3]} which has a session at the same time.`;
+        } else {
+          errorMessage = details;
+        }
+      } else if (errorData?.message) {
+        errorMessage = errorData.message;
+      }
+
+      await swalConfig.error("Add Failed", errorMessage);
     }
   };
 
@@ -623,11 +658,12 @@ export default function ManageCouncilPage() {
                             </div>
                             <div>
                               <h4 className="font-medium">{member.name}</h4>
-                              {member.department && member.department !== "N/A" && (
-                                <p className="text-gray-500">
-                                  {member.department}
-                                </p>
-                              )}
+                              {member.department &&
+                                member.department !== "N/A" && (
+                                  <p className="text-gray-500">
+                                    {member.department}
+                                  </p>
+                                )}
                               <p className="text-gray-400 text-xs">
                                 {member.email}
                               </p>

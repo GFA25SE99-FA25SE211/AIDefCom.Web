@@ -44,7 +44,7 @@ export default function StudentHistoryListPage() {
     const fetchGroups = async () => {
       try {
         setLoading(true);
-        
+
         // Get current user's lecturer ID
         let lecturerId: string | null = null;
         try {
@@ -53,91 +53,107 @@ export default function StudentHistoryListPage() {
         } catch (err) {
           console.error("Error getting userId from token:", err);
         }
-        
+
         if (!lecturerId) {
           setLoading(false);
           return;
         }
 
         // Fetch defense sessions for this lecturer
-        const sessionsRes = await defenseSessionsApi.getByLecturerId(lecturerId).catch(() => ({ data: [] }));
+        const sessionsRes = await defenseSessionsApi
+          .getByLecturerId(lecturerId)
+          .catch(() => ({ data: [] }));
         const rawSessions = sessionsRes.data || [];
 
         // Group sessions by groupId and keep only the latest session for each group
         const groupMap = new Map<string, DefenseSessionDto>();
         rawSessions.forEach((session: DefenseSessionDto) => {
           const existing = groupMap.get(session.groupId);
-          if (!existing || new Date(session.defenseDate) > new Date(existing.defenseDate)) {
+          if (
+            !existing ||
+            new Date(session.defenseDate) > new Date(existing.defenseDate)
+          ) {
             groupMap.set(session.groupId, session);
           }
         });
 
         // Fetch groups and students for each unique group
         const uniqueSessions = Array.from(groupMap.values());
-        const enrichedSessions: (GroupSessionData | null)[] = await Promise.all(uniqueSessions.map(async (session: DefenseSessionDto) => {
-          try {
-            // Check if current user is a member in this session
-            let isUserMember = false;
+        const enrichedSessions: (GroupSessionData | null)[] = await Promise.all(
+          uniqueSessions.map(async (session: DefenseSessionDto) => {
             try {
-              const lecturersRes = await defenseSessionsApi.getUsersBySessionId(
-                session.id
-              );
-              if (lecturersRes.data && lecturerId) {
-                const currentUserInSession = lecturersRes.data.find(
-                  (user: any) =>
-                    String(user.id).toLowerCase() ===
-                    String(lecturerId).toLowerCase()
-                );
+              // Check if current user is a member in this session
+              let isUserMember = false;
+              try {
+                const lecturersRes =
+                  await defenseSessionsApi.getUsersBySessionId(session.id);
+                if (lecturersRes.data && lecturerId) {
+                  const currentUserInSession = lecturersRes.data.find(
+                    (user: any) =>
+                      String(user.id).toLowerCase() ===
+                      String(lecturerId).toLowerCase()
+                  );
 
-                if (currentUserInSession && currentUserInSession.role) {
-                  const roleInSession = currentUserInSession.role.toLowerCase();
-                  isUserMember = roleInSession === "member";
+                  if (currentUserInSession && currentUserInSession.role) {
+                    const roleInSession =
+                      currentUserInSession.role.toLowerCase();
+                    isUserMember = roleInSession === "member";
+                  }
                 }
+              } catch (err) {
+                console.error("Failed to check session role:", err);
               }
+
+              const [groupRes, studentsRes] = await Promise.all([
+                groupsApi.getById(session.groupId),
+                studentsApi
+                  .getByGroupId(session.groupId)
+                  .catch(() => ({ data: [] })),
+              ]);
+
+              if (!groupRes.data) return null;
+
+              const group = groupRes.data;
+              const students = studentsRes.data || [];
+
+              const members =
+                students.length > 0
+                  ? students
+                      .map(
+                        (s: StudentDto) => s.fullName || s.userName || "Unknown"
+                      )
+                      .join(", ")
+                  : "No members assigned";
+
+              // Map status
+              let displayStatus: SessionStatus = "Upcoming";
+              const apiStatus = session.status?.toLowerCase();
+              if (apiStatus === "completed") displayStatus = "Completed";
+              else if (apiStatus === "inprogress") displayStatus = "InProgress";
+              else if (apiStatus === "scheduled") displayStatus = "Scheduled";
+
+              // Only include if user is member AND status is completed
+              if (!isUserMember || displayStatus !== "Completed") {
+                return null;
+              }
+
+              return {
+                ...session,
+                groupName: group.id, // Use actual group ID like FA25SE086
+                projectTitle: getProjectTitle(group),
+                members,
+                displayStatus,
+              };
             } catch (err) {
-              console.error("Failed to check session role:", err);
-            }
-
-            const [groupRes, studentsRes] = await Promise.all([
-              groupsApi.getById(session.groupId),
-              studentsApi.getByGroupId(session.groupId).catch(() => ({ data: [] }))
-            ]);
-
-            if (!groupRes.data) return null;
-
-            const group = groupRes.data;
-            const students = studentsRes.data || [];
-            
-            const members = students.length > 0
-              ? students.map((s: StudentDto) => s.fullName || s.userName || "Unknown").join(", ")
-              : "No members assigned";
-
-            // Map status
-            let displayStatus: SessionStatus = "Upcoming";
-            const apiStatus = session.status?.toLowerCase();
-            if (apiStatus === "completed") displayStatus = "Completed";
-            else if (apiStatus === "inprogress") displayStatus = "InProgress";
-            else if (apiStatus === "scheduled") displayStatus = "Scheduled";
-
-            // Only include if user is member AND status is completed
-            if (!isUserMember || displayStatus !== "Completed") {
+              console.error(`Error enriching session ${session.id}:`, err);
               return null;
             }
+          })
+        );
 
-            return {
-              ...session,
-              groupName: group.id, // Use actual group ID like FA25SE086
-              projectTitle: getProjectTitle(group),
-              members,
-              displayStatus
-            };
-          } catch (err) {
-            console.error(`Error enriching session ${session.id}:`, err);
-            return null;
-          }
-        }));
-
-        setSessions(enrichedSessions.filter((s): s is GroupSessionData => s !== null));
+        setSessions(
+          enrichedSessions.filter((s): s is GroupSessionData => s !== null)
+        );
       } catch (error) {
         console.error("Error fetching groups:", error);
       } finally {
@@ -175,13 +191,13 @@ export default function StudentHistoryListPage() {
       {/* Custom Header for Student History */}
       <header className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 mb-6">
         <div>
-          <h1 className="text-xl font-semibold text-gray-800">Student History</h1>
+          <h1 className="text-xl font-semibold text-gray-800">
+            Student History
+          </h1>
           {totalCount !== undefined && (
             <p className="text-gray-500 text-sm">
               Total{" "}
-              <span className="font-medium text-indigo-600">
-                {totalCount}
-              </span>{" "}
+              <span className="font-medium text-indigo-600">{totalCount}</span>{" "}
               defense sessions
             </p>
           )}
@@ -227,7 +243,7 @@ export default function StudentHistoryListPage() {
                 startTime={session.startTime}
                 endTime={session.endTime}
                 status={session.displayStatus}
-                customHref={`/member/student-history/group/${session.groupId}`}
+                customHref={`/student-history/group/${session.groupId}`}
               />
             ))}
           </div>
@@ -248,23 +264,27 @@ export default function StudentHistoryListPage() {
               </button>
 
               <div className="flex items-center gap-1">
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                  <button
-                    key={page}
-                    onClick={() => setCurrentPage(page)}
-                    className={`w-10 h-10 rounded-lg text-sm font-medium transition-all ${
-                      currentPage === page
-                        ? "bg-purple-600 text-white shadow-md"
-                        : "bg-white text-gray-700 hover:bg-gray-50 border border-gray-200"
-                    }`}
-                  >
-                    {page}
-                  </button>
-                ))}
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(
+                  (page) => (
+                    <button
+                      key={page}
+                      onClick={() => setCurrentPage(page)}
+                      className={`w-10 h-10 rounded-lg text-sm font-medium transition-all ${
+                        currentPage === page
+                          ? "bg-purple-600 text-white shadow-md"
+                          : "bg-white text-gray-700 hover:bg-gray-50 border border-gray-200"
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  )
+                )}
               </div>
 
               <button
-                onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                onClick={() =>
+                  setCurrentPage((prev) => Math.min(prev + 1, totalPages))
+                }
                 disabled={currentPage === totalPages}
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                   currentPage === totalPages

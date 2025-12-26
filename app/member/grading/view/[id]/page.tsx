@@ -1164,7 +1164,7 @@ export default function ViewScorePage() {
                             <td className="py-4 pr-4 align-top w-64">
                               <div className="flex flex-col">
                                 <Link
-                                  href={`/member/student-history/${student.id}`}
+                                  href={`/student-history/${student.id}`}
                                   className="text-sm font-medium text-gray-800 hover:underline"
                                 >
                                   {student.name}
