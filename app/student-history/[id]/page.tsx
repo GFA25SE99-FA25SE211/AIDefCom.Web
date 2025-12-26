@@ -116,8 +116,13 @@ export default function StudentHistoryDetailPage() {
           })
         );
 
+        // Filter to only include Completed sessions
+        const completedSessions = sessionsWithGroupInfo.filter(
+          (s: any) => (s.status || "").toLowerCase() === "completed"
+        );
+
         // Calculate failed count from sessions with grade "F"
-        const failedCount = sessionsWithGroupInfo.filter(
+        const failedCount = completedSessions.filter(
           (s: any) => s.grade === "F"
         ).length;
 
@@ -127,8 +132,8 @@ export default function StudentHistoryDetailPage() {
           name: studentData.fullName || studentData.userName || "Unknown",
           email: studentData.email || "",
           failedCount,
-          attempts: sessionsWithGroupInfo.map((s: any, index: number) => ({
-            attempt: `Attempt #${sessionsWithGroupInfo.length - index}`,
+          attempts: completedSessions.map((s: any, index: number) => ({
+            attempt: `Attempt #${completedSessions.length - index}`,
             id: s.id.toString(), // Just the number
             sessionId: s.id,
             date: s.defenseDate
@@ -302,7 +307,7 @@ export default function StudentHistoryDetailPage() {
             <div className="flex items-center gap-2 mb-4">
               <Clock className="w-5 h-5 text-indigo-600" />
               <h2 className="text-lg font-semibold text-gray-800">
-                Previous Failed Defense Attempts
+                Previous Defense Attempts
               </h2>
             </div>
 
