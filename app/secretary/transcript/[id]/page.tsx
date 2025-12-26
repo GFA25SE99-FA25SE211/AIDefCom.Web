@@ -1190,7 +1190,7 @@ export default function TranscriptPage({
       if (entriesWithUnknownSpeaker.length > 0) {
         swalConfig.error(
           "Cannot Complete Session",
-          `There are ${entriesWithUnknownSpeaker.length} transcript entries with unknown speakers ("Guest", "Unknown"). Please identify all speakers before completing the session.`
+          `There are ${entriesWithUnknownSpeaker.length} transcript entries with unknown speakers ("Khách", "Unknown"). Please identify all speakers before completing the session.`
         );
         setSaving(false);
         return;
@@ -1617,7 +1617,7 @@ export default function TranscriptPage({
                           let rawSpeaker =
                             item.edited_speaker || item.speaker || "Unknown";
                           if (rawSpeaker.toLowerCase() === "khách") {
-                            rawSpeaker = "Guest";
+                            rawSpeaker = "Khách";
                           }
                           const displaySpeaker = rawSpeaker;
                           const speakerLower = displaySpeaker.toLowerCase();
@@ -1653,7 +1653,7 @@ export default function TranscriptPage({
                             roleColor = "text-amber-700 bg-amber-50";
                             roleLabel = "Member";
                           } else if (
-                            ["guest", "unknown", "identifying"].includes(
+                            ["khách", "unknown", "identifying"].includes(
                               speakerLower
                             )
                           ) {
