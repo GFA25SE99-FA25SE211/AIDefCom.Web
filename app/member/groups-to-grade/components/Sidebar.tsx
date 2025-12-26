@@ -10,7 +10,6 @@ export default function MemberSidebar() {
       href: "/home",
       label: "Defense Sessions",
       icon: Calendar,
-      matchPath: "/member",
     },
     {
       href: "/member/peer-score",

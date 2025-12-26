@@ -1,7 +1,7 @@
 "use client";
 
 import SidebarBase from "@/app/sidebar/SidebarBase";
-import { Calendar } from "lucide-react";
+import { Calendar, History } from "lucide-react";
 
 export default function HomeSidebar() {
   // Cấu hình các liên kết dành cho Lecturer
@@ -10,6 +10,11 @@ export default function HomeSidebar() {
       href: "/home",
       label: "Defense Sessions List",
       icon: Calendar,
+    },
+    {
+      href: "/member/student-history",
+      label: "Student History",
+      icon: History,
     },
   ];
 
