@@ -843,8 +843,26 @@ export default function MeetingMinutesForm({
                                 const newQA = [...formData.qa];
                                 newQA[idx].answer = e.target.value;
                                 handleInputChange("qa", newQA);
+                                // Auto-resize textarea
+                                e.target.style.height = "auto";
+                                e.target.style.height =
+                                  e.target.scrollHeight + "px";
                               }}
-                              className="w-full min-h-[80px] outline-none resize-none bg-transparent"
+                              onInput={(e) => {
+                                // Auto-resize on input
+                                const target = e.target as HTMLTextAreaElement;
+                                target.style.height = "auto";
+                                target.style.height =
+                                  target.scrollHeight + "px";
+                              }}
+                              ref={(el) => {
+                                // Auto-resize on mount
+                                if (el) {
+                                  el.style.height = "auto";
+                                  el.style.height = el.scrollHeight + "px";
+                                }
+                              }}
+                              className="w-full min-h-[80px] outline-none resize-none bg-transparent overflow-hidden"
                               placeholder="Nội dung trả lời..."
                             />
                           </td>
