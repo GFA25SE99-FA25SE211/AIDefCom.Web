@@ -48,6 +48,7 @@ export default function MeetingMinutesForm({
       respondent: string;
       answer: string;
       councilDiscussion: string;
+      showCouncilDiscussion: boolean;
     }[],
     assessments: {
       layout: "",
@@ -125,6 +126,7 @@ export default function MeetingMinutesForm({
       respondent: q.respondentName,
       answer: (q.answerPoints || []).map((a: string) => `- ${a}`).join("\n"),
       councilDiscussion: q.councilDiscussion || "",
+      showCouncilDiscussion: !!q.councilDiscussion, // Show if has content
     }));
 
     // Map students to official grades
@@ -234,10 +236,22 @@ export default function MeetingMinutesForm({
       }
     } catch (error: any) {
       console.error("Fill data error:", error);
-      swalConfig.error(
-        "Error",
-        error.message || "Failed to load defense report data"
-      );
+      // Check for 409 Conflict error - session not completed
+      if (
+        error.message?.includes("409") ||
+        error.message?.includes("conflict") ||
+        error.message?.includes("conflicts")
+      ) {
+        swalConfig.warning(
+          "Cannot Fill Data",
+          "Please complete the defense session first to fill data"
+        );
+      } else {
+        swalConfig.error(
+          "Error",
+          error.message || "Failed to load defense report data"
+        );
+      }
     } finally {
       setLoading(false);
     }
@@ -768,26 +782,46 @@ export default function MeetingMinutesForm({
                               placeholder="Nội dung câu hỏi..."
                             />
                             {/* Council Discussion - Nhận xét của Hội đồng */}
-                            <div className="mt-3 pt-3 border-t border-gray-200">
-                              <div className="mb-1">
-                                <span className="text-sm font-semibold text-blue-700">
-                                  Nhận xét của Hội đồng /{" "}
-                                  <span className="italic font-normal">
-                                    Council Discussion:
+                            {item.showCouncilDiscussion && (
+                              <div className="mt-3 pt-3 border-t border-gray-200">
+                                <div className="mb-1 flex items-center justify-between">
+                                  <span className="text-sm font-semibold text-blue-700">
+                                    Nhận xét của Hội đồng /{" "}
+                                    <span className="italic font-normal">
+                                      Council Discussion:
+                                    </span>
                                   </span>
-                                </span>
+                                  <div className="flex items-center gap-1">
+                                    {/* Delete Button - removes entire section */}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const newQA = [...formData.qa];
+                                        newQA[idx].councilDiscussion = "";
+                                        newQA[idx].showCouncilDiscussion =
+                                          false;
+                                        handleInputChange("qa", newQA);
+                                      }}
+                                      className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
+                                      title="Xoá nhận xét / Delete discussion"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </div>
+                                <textarea
+                                  value={item.councilDiscussion}
+                                  onChange={(e) => {
+                                    const newQA = [...formData.qa];
+                                    newQA[idx].councilDiscussion =
+                                      e.target.value;
+                                    handleInputChange("qa", newQA);
+                                  }}
+                                  className="w-full min-h-[60px] outline-none resize-none bg-blue-50/50 rounded p-2 text-sm border border-blue-100 focus:border-blue-300"
+                                  placeholder="Nhận xét về câu trả lời của sinh viên..."
+                                />
                               </div>
-                              <textarea
-                                value={item.councilDiscussion}
-                                onChange={(e) => {
-                                  const newQA = [...formData.qa];
-                                  newQA[idx].councilDiscussion = e.target.value;
-                                  handleInputChange("qa", newQA);
-                                }}
-                                className="w-full min-h-[60px] outline-none resize-none bg-blue-50/50 rounded p-2 text-sm border border-blue-100 focus:border-blue-300"
-                                placeholder="Nhận xét về câu trả lời của sinh viên..."
-                              />
-                            </div>
+                            )}
                           </td>
                           <td className="p-2 align-top">
                             <div className="mb-1">

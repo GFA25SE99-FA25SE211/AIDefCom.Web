@@ -96,7 +96,7 @@ export async function generateMeetingMinutesBlob(
       })
   );
 
-  // Create Q&A table rows - group by questioner
+  // Create Q&A table rows - group by questioner with Council Discussion
   const qaTableRows = formData.qa.map(
     (q: any) =>
       new TableRow({
@@ -115,6 +115,31 @@ export async function generateMeetingMinutesBlob(
               new Paragraph({
                 children: [new TextRun({ text: q.question, size: 24 })],
               }),
+              // Council Discussion - Nhận xét của Hội đồng
+              ...(q.councilDiscussion
+                ? [
+                    new Paragraph({
+                      children: [
+                        new TextRun({
+                          text: "Nhận xét của Hội đồng / Council Discussion:",
+                          bold: true,
+                          italics: true,
+                          size: 24,
+                          color: "1E40AF", // Blue color
+                        }),
+                      ],
+                      spacing: { before: 100 },
+                    }),
+                    new Paragraph({
+                      children: [
+                        new TextRun({
+                          text: q.councilDiscussion,
+                          size: 24,
+                        }),
+                      ],
+                    }),
+                  ]
+                : []),
             ],
             width: { size: 50, type: WidthType.PERCENTAGE },
           }),
