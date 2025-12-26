@@ -9,17 +9,22 @@ import {
   Clock,
   Calendar,
   ClipboardList,
+  Download,
 } from "lucide-react";
 import { studentsApi } from "@/lib/api/students";
 import { defenseSessionsApi } from "@/lib/api/defense-sessions";
 import { groupsApi } from "@/lib/api/groups";
 import { scoresApi } from "@/lib/api/scores";
+import { reportsApi } from "@/lib/api/reports";
+import { swalConfig } from "@/lib/utils/sweetAlert";
+import { BACKEND_API_URL } from "@/lib/config/api-urls";
 import type { StudentDto, DefenseSessionDto } from "@/lib/models";
 
 // ======= Types =======
 interface Attempt {
   attempt: string;
   id: string;
+  sessionId: number;
   date: string;
   group: string;
   topic: string;
@@ -36,77 +41,6 @@ interface StudentDetail {
   failedCount: number;
   attempts: Attempt[];
 }
-
-type StudentDetailData = {
-  [key: string]: StudentDetail;
-};
-
-// ======= Mock Data =======
-const studentDetailData: StudentDetailData = {
-  SV001: {
-    id: "SV001",
-    name: "Nguyen Van A",
-    email: "a.nguyen@example.com",
-    failedCount: 2,
-    attempts: [
-      {
-        attempt: "Attempt #2",
-        id: "DEF-2024-002",
-        date: "2024-02-10",
-        group: "Group 2",
-        topic: "Smart Learning Management System",
-        role: "Leader",
-        score: 4.2,
-        grade: "F",
-        status: "Not Passed",
-      },
-      {
-        attempt: "Attempt #1",
-        id: "DEF-2023-008",
-        date: "2023-12-10",
-        group: "Group 3",
-        topic: "Smart Learning Management System",
-        role: "Leader",
-        score: 4.8,
-        grade: "F",
-        status: "Not Passed",
-      },
-    ],
-  },
-  SV002: {
-    id: "SV002",
-    name: "Tran Thi B",
-    email: "b.tran@example.com",
-    failedCount: 0,
-    attempts: [],
-  },
-  SV003: {
-    id: "SV003",
-    name: "Le Van C",
-    email: "c.le@example.com",
-    failedCount: 1,
-    attempts: [
-      {
-        attempt: "Attempt #1",
-        id: "DEF-2023-008",
-        date: "2023-12-10",
-        group: "Group 3",
-        topic: "Smart Learning Management System",
-        role: "Member",
-        score: 4.5,
-        grade: "F",
-        status: "Not Passed",
-      },
-    ],
-  },
-  SV004: {
-    id: "SV004",
-    name: "Pham Van D",
-    email: "d.pham@example.com",
-    failedCount: 0,
-    attempts: [],
-  },
-};
 
 // ======= Component =======
 export default function StudentHistoryDetailPage() {
@@ -129,10 +63,9 @@ export default function StudentHistoryDetailPage() {
 
         const studentData = studentRes.data;
         if (!studentData) {
-          // Fallback to mock data if not found
-          setStudent(
-            studentDetailData[studentId] || studentDetailData["SV001"]
-          );
+          // Student not found
+          setStudent(null);
+          setLoading(false);
           return;
         }
 
@@ -145,36 +78,48 @@ export default function StudentHistoryDetailPage() {
             try {
               const [groupRes, scoresRes] = await Promise.all([
                 groupsApi.getById(s.groupId),
-                scoresApi.getBySessionId(s.id).catch(() => ({ data: [] }))
+                scoresApi.getBySessionId(s.id).catch(() => ({ data: [] })),
               ]);
-              
+
               const group = groupRes.data;
               const scores = scoresRes.data || [];
-              
+
               // Calculate average score for this student in this session
-              const studentScores = scores.filter((score: any) => score.studentId === studentId);
-              const avgScore = studentScores.length > 0
-                ? studentScores.reduce((sum: number, score: any) => sum + (score.value || 0), 0) / studentScores.length
-                : s.studentScore || 0;
-              
+              const studentScores = scores.filter(
+                (score: any) => score.studentId === studentId
+              );
+              const avgScore =
+                studentScores.length > 0
+                  ? studentScores.reduce(
+                      (sum: number, score: any) => sum + (score.value || 0),
+                      0
+                    ) / studentScores.length
+                  : s.studentScore || 0;
+
               return {
                 ...s,
-                topicFromGroup: group?.topicTitle_EN || group?.topicTitle_VN || s.topicTitle || "No Topic",
-                calculatedScore: avgScore
+                topicFromGroup:
+                  group?.topicTitle_EN ||
+                  group?.topicTitle_VN ||
+                  s.topicTitle ||
+                  "No Topic",
+                calculatedScore: avgScore,
               };
             } catch (err) {
               console.error(`Error fetching data for session ${s.id}:`, err);
               return {
                 ...s,
                 topicFromGroup: s.topicTitle || "No Topic",
-                calculatedScore: s.studentScore || 0
+                calculatedScore: s.studentScore || 0,
               };
             }
           })
         );
 
         // Calculate failed count from sessions with grade "F"
-        const failedCount = sessionsWithGroupInfo.filter((s: any) => s.grade === "F").length;
+        const failedCount = sessionsWithGroupInfo.filter(
+          (s: any) => s.grade === "F"
+        ).length;
 
         // Transform to StudentDetail format
         const studentDetail: StudentDetail = {
@@ -182,24 +127,26 @@ export default function StudentHistoryDetailPage() {
           name: studentData.fullName || studentData.userName || "Unknown",
           email: studentData.email || "",
           failedCount,
-          attempts: sessionsWithGroupInfo.map(
-            (s: any, index: number) => ({
-              attempt: `Attempt #${sessionsWithGroupInfo.length - index}`,
-              id: s.id.toString(), // Just the number
-              date: s.defenseDate ? new Date(s.defenseDate).toLocaleDateString() : "",
-              group: s.groupId || "N/A",
-              topic: s.topicFromGroup,
-              role: s.studentRole || "Member",
-              score: s.calculatedScore,
-              grade: s.grade || "N/A",
-              status: s.resultStatus || s.status || "Completed",
-            })
-          ),
+          attempts: sessionsWithGroupInfo.map((s: any, index: number) => ({
+            attempt: `Attempt #${sessionsWithGroupInfo.length - index}`,
+            id: s.id.toString(), // Just the number
+            sessionId: s.id,
+            date: s.defenseDate
+              ? new Date(s.defenseDate).toLocaleDateString()
+              : "",
+            group: s.groupId || "N/A",
+            topic: s.topicFromGroup,
+            role: s.studentRole || "Member",
+            score: s.calculatedScore,
+            grade: s.grade || "N/A",
+            status: s.resultStatus || s.status || "Completed",
+          })),
         };
 
         setStudent(studentDetail);
       } catch (error) {
-        setStudent(studentDetailData[studentId] || studentDetailData["SV001"]);
+        console.error("Error fetching student data:", error);
+        setStudent(null);
       } finally {
         setLoading(false);
       }
@@ -208,15 +155,102 @@ export default function StudentHistoryDetailPage() {
     fetchStudentData();
   }, [studentId]);
 
-  const handleBackToList = () => {
-    router.push("/member/student-history");
+  // Handle download report by sessionId
+  const handleDownloadReport = async (sessionId: number) => {
+    try {
+      // Get report by sessionId
+      const reportResponse = await reportsApi.getBySessionId(sessionId);
+      const reports = reportResponse.data;
+      const report = Array.isArray(reports) ? reports[0] : reports;
+
+      if (!report || !report.filePath) {
+        swalConfig.error(
+          "No Report Found",
+          "No report available for this defense session."
+        );
+        return;
+      }
+
+      // Get renewed download URL
+      const renewResponse = await fetch(
+        `${BACKEND_API_URL}/api/defense-reports/download?blobUrl=${encodeURIComponent(
+          report.filePath
+        )}&expiryMinutes=60`,
+        {
+          method: "GET",
+          headers: {
+            Accept: "*/*",
+          },
+        }
+      );
+
+      if (!renewResponse.ok) {
+        throw new Error("Failed to get download link");
+      }
+
+      const renewData = await renewResponse.json();
+      const downloadUrl = renewData.data || renewData.url || report.filePath;
+
+      const response = await fetch(downloadUrl);
+      if (!response.ok) {
+        throw new Error("Failed to download file");
+      }
+
+      // Extract original filename and extension from filePath
+      const originalFileName =
+        report.filePath.split("/").pop()?.split("?")[0] || "report";
+      const fileExtMatch = originalFileName.match(/\.[^.]+$/);
+      const fileExt = fileExtMatch ? fileExtMatch[0].toLowerCase() : ".docx";
+
+      // Determine correct MIME type based on extension
+      const mimeTypes: { [key: string]: string } = {
+        ".docx":
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ".doc": "application/msword",
+        ".pdf": "application/pdf",
+        ".xlsx":
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ".xls": "application/vnd.ms-excel",
+      };
+      const mimeType = mimeTypes[fileExt] || "application/octet-stream";
+
+      // Get the raw data and create blob with correct MIME type
+      const arrayBuffer = await response.arrayBuffer();
+      const blob = new Blob([arrayBuffer], { type: mimeType });
+
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = decodeURIComponent(originalFileName);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Download failed:", error);
+      swalConfig.error(
+        "Download Failed",
+        "Could not download the report. Please try again."
+      );
+    }
   };
 
-  if (loading || !student) {
+  if (loading) {
     return (
       <main className="main-content">
         <div className="text-center py-8 text-gray-500">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto mb-4"></div>
           Loading student data...
+        </div>
+      </main>
+    );
+  }
+
+  if (!student) {
+    return (
+      <main className="main-content">
+        <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-gray-200">
+          <p className="text-gray-500">Student not found.</p>
         </div>
       </main>
     );
@@ -235,14 +269,6 @@ export default function StudentHistoryDetailPage() {
               Detailed record of student’s past defense attempts
             </p>
           </div>
-
-          <button
-            onClick={handleBackToList}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 text-gray-700 text-sm font-medium shadow-sm hover:bg-gray-100 transition"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span>Back to Student List</span>
-          </button>
         </div>
 
         {/* Student Info Card */}
@@ -290,6 +316,7 @@ export default function StudentHistoryDetailPage() {
                     <th className="py-3 px-4">Topic</th>
                     <th className="py-3 px-4 text-center">Score</th>
                     <th className="py-3 px-4">Status</th>
+                    <th className="py-3 px-4 text-center">Report</th>
                   </tr>
                 </thead>
 
@@ -299,7 +326,9 @@ export default function StudentHistoryDetailPage() {
                       key={attempt.id}
                       className="border-t hover:bg-gray-50 transition"
                     >
-                      <td className="py-3 pr-4 font-medium text-gray-800">{attempt.id}</td>
+                      <td className="py-3 pr-4 font-medium text-gray-800">
+                        {attempt.id}
+                      </td>
                       <td className="py-3 px-4 text-gray-700 flex items-center gap-1">
                         <Calendar className="w-4 h-4" /> {attempt.date}
                       </td>
@@ -316,6 +345,18 @@ export default function StudentHistoryDetailPage() {
                         <span className="inline-block bg-yellow-50 text-yellow-700 px-3 py-1 rounded-full text-xs font-medium">
                           {attempt.status}
                         </span>
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <button
+                          onClick={() =>
+                            handleDownloadReport(attempt.sessionId)
+                          }
+                          className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition"
+                          title="Download Report"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          Download
+                        </button>
                       </td>
                     </tr>
                   ))}

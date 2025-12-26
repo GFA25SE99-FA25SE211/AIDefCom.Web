@@ -1,7 +1,7 @@
 "use client";
 
 import SidebarBase from "@/app/sidebar/SidebarBase";
-import { Calendar, Star, History } from "lucide-react";
+import { Calendar, Star } from "lucide-react";
 
 export default function MemberSidebar() {
   // Cấu hình các liên kết dành cho Member
@@ -15,11 +15,6 @@ export default function MemberSidebar() {
       href: "/member/peer-score",
       label: "Peer Scores",
       icon: Star,
-    },
-    {
-      href: "/member/student-history",
-      label: "Student History",
-      icon: History,
     },
   ];
 

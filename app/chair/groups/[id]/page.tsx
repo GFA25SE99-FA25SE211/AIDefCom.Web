@@ -748,7 +748,10 @@ export default function GroupDetailsPage() {
                     {students.map((student) => (
                       <div
                         key={student.id}
-                        className="flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-blue-50 to-cyan-50 border border-blue-100 hover:shadow-md transition-shadow"
+                        onClick={() =>
+                          router.push(`/student-history/${student.id}`)
+                        }
+                        className="flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-blue-50 to-cyan-50 border border-blue-100 hover:shadow-md transition-shadow cursor-pointer"
                       >
                         <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center text-white font-bold shadow-sm">
                           {student.userName

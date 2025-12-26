@@ -156,20 +156,12 @@ export default function DataManagementPage() {
   const [editingSession, setEditingSession] = useState<Session | null>(null);
   const [isEditSessionModalOpen, setIsEditSessionModalOpen] = useState(false);
 
-  const [isCouncilImportModalOpen, setIsCouncilImportModalOpen] =
-    useState(false);
-  const [councilImportMajorId, setCouncilImportMajorId] = useState("");
-  const councilFileInputRef = useRef<HTMLInputElement | null>(null);
-
   const [isStudentImportModalOpen, setIsStudentImportModalOpen] =
     useState(false);
 
   // Loading states for import/export operations
-  const [isDownloadingCouncilTemplate, setIsDownloadingCouncilTemplate] =
-    useState(false);
   const [isDownloadingStudentTemplate, setIsDownloadingStudentTemplate] =
     useState(false);
-  const [isImportingCouncil, setIsImportingCouncil] = useState(false);
   const [isImportingStudent, setIsImportingStudent] = useState(false);
   const [isDownloadingReport, setIsDownloadingReport] = useState(false);
   const studentFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -356,10 +348,6 @@ export default function DataManagementPage() {
       }));
       setMajors(majorsList);
 
-      setCouncilImportMajorId(
-        (prev) => prev || (majorsList.length ? String(majorsList[0].id) : "")
-      );
-
       // Transform councils
       const councilsData = (
         Array.isArray(councilsRes.data) ? councilsRes.data : []
@@ -527,151 +515,6 @@ export default function DataManagementPage() {
         "Error Creating Council",
         getSimpleErrorMessage(error, "Failed to create council")
       );
-    }
-  };
-
-  const handleOpenCouncilImport = () => {
-    if (!majors.length) {
-      swalConfig.error(
-        "No Majors",
-        "Please create at least one major before importing councils."
-      );
-      return;
-    }
-    setCouncilImportMajorId((prev) => prev || String(majors[0].id));
-    setIsCouncilImportModalOpen(true);
-  };
-
-  const handleCouncilDownloadTemplate = async () => {
-    try {
-      setIsDownloadingCouncilTemplate(true);
-      swalConfig.loading("Đang tải template...", "Vui lòng chờ trong giây lát");
-
-      await councilsApi.downloadTemplate();
-
-      await swalConfig.success(
-        "Template Downloaded",
-        "Council template has been downloaded successfully."
-      );
-    } catch (error: any) {
-      const errorMessage = error?.message || "Unable to download council template.";
-      await swalConfig.error(
-        "Download Failed",
-        errorMessage
-      );
-    } finally {
-      setIsDownloadingCouncilTemplate(false);
-    }
-  };
-
-  const handleCouncilFileChange = async (
-    event: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    if (!councilImportMajorId) {
-      await swalConfig.error(
-        "Missing Major",
-        "Please select a major before importing."
-      );
-      event.target.value = "";
-      return;
-    }
-
-    try {
-      setIsImportingCouncil(true);
-      swalConfig.loading("Importing...", "Processing file...");
-
-      const result = await councilsApi.importWithCommittees(
-        Number(councilImportMajorId),
-        file
-      );
-      
-      // Check for API error response (this usually comes from request function)
-      if (!result || (typeof result.code === 'number' && result.code >= 400) || (typeof result.code === 'string' && parseInt(result.code) >= 400)) {
-        setIsImportingCouncil(false);
-        const errorMsg = result?.message || "Import failed. Please try again.";
-        await swalConfig.error("Import Failed", errorMsg);
-        event.target.value = "";
-        return;
-      }
-      
-      const data = result?.data || result;
-      
-      // Check if import actually succeeded
-      const councilCount = (data as any)?.createdCouncilIds?.length || 0;
-      const assignmentCount = (data as any)?.createdCommitteeAssignmentIds?.length || 0;
-      const errors = (data as any)?.errors || [];
-      const hasErrors = errors.length > 0;
-      const failureCount = (data as any)?.failureCount || 0;
-      const successCount = (data as any)?.successCount || 0;
-      
-      // Import is considered failed if:
-      // 1. No councils created AND no assignments created (total failure)
-      const importFailed = councilCount === 0 && successCount === 0;
-      
-      // Partial success: some things were created but there were errors
-      const partialSuccess = (councilCount > 0 || successCount > 0) && hasErrors;
-      
-      if (importFailed) {
-        setIsImportingCouncil(false);
-        let errorMsg = "";
-        if (hasErrors) {
-          const firstError = errors[0];
-          errorMsg = `Import failed. ${failureCount} rows failed.\n\nFirst error (Row ${firstError.row}): ${firstError.errorMessage || 'Unknown error'}`;
-        } else {
-          errorMsg = (data as any)?.message || "Import failed. No councils or assignments were created. Please check your file format and data.";
-        }
-        await swalConfig.error("Import Failed", errorMsg);
-        event.target.value = "";
-        return;
-      }
-      
-      if (partialSuccess) {
-        setIsImportingCouncil(false);
-        let warningMsg = `Import completed with issues.\n\nSuccess: ${successCount} assignment(s)\nFailed: ${failureCount} row(s)\nCreated councils: ${councilCount}\n\n`;
-        
-        if (errors.length > 0) {
-          const firstError = errors[0];
-          warningMsg += `Example error (Row ${firstError.row}): ${firstError.errorMessage || 'Unknown error'}`;
-        }
-        
-        await swalConfig.warning("Partial Success", warningMsg);
-        await fetchData();
-        setIsCouncilImportModalOpen(false);
-        setCouncilImportMajorId("");
-        event.target.value = "";
-        return;
-      }
-      
-      // Show success with details
-      const message =
-        (data as any)?.message ||
-        `Successfully imported. Councils: ${councilCount}, Assignments: ${assignmentCount}`;
-      await swalConfig.success("Import Complete", message);
-      await fetchData();
-      setIsCouncilImportModalOpen(false);
-      setCouncilImportMajorId("");
-      event.target.value = "";
-    } catch (error: any) {
-      setIsImportingCouncil(false);
-      
-      // Try to extract detailed message if available
-      let detailMsg = getSimpleErrorMessage(error, "Unable to import councils.");
-      const errorData = error.errorData || (error as any).data;
-      
-      if (errorData?.errors && Array.isArray(errorData.errors) && errorData.errors.length > 0) {
-        const firstErr = errorData.errors[0];
-        detailMsg = `Import failed. Row ${firstErr.row}: ${firstErr.errorMessage}`;
-      } else if (errorData?.message) {
-        detailMsg = errorData.message;
-      }
-
-      await swalConfig.error("Import Failed", detailMsg);
-      event.target.value = "";
-    } finally {
-      setIsImportingCouncil(false);
     }
   };
 
@@ -844,23 +687,24 @@ export default function DataManagementPage() {
 
       const result = await studentsApi.import(file);
       const data = result?.data || result;
-      
+
       // Check if import actually succeeded
       const successCount = (data as any)?.successCount || 0;
       const failureCount = (data as any)?.failureCount || 0;
-      
+
       // If all imports failed or no students were imported, show error
       if (successCount === 0) {
         setIsImportingStudent(false);
-        const errorMsg = (data as any)?.message || 
-          (failureCount > 0 
-            ? `Import failed. All ${failureCount} student(s) could not be imported.` 
+        const errorMsg =
+          (data as any)?.message ||
+          (failureCount > 0
+            ? `Import failed. All ${failureCount} student(s) could not be imported.`
             : "Import failed. No students were imported.");
         await swalConfig.error("Import Failed", errorMsg);
         event.target.value = "";
         return;
       }
-      
+
       // Show success with details
       const message =
         (data as any)?.message ||
@@ -1286,8 +1130,6 @@ export default function DataManagementPage() {
     }
   };
 
-
-
   const handleDownloadReport = async (filePath: string) => {
     try {
       if (!filePath) {
@@ -1559,38 +1401,6 @@ export default function DataManagementPage() {
           Council Management
         </h2>
         <div className="flex items-center gap-2">
-          <button
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-md border border-green-500 text-sm font-medium text-green-600 hover:bg-green-50 disabled:opacity-50 disabled:cursor-not-allowed"
-            onClick={handleCouncilDownloadTemplate}
-            disabled={isDownloadingCouncilTemplate}
-          >
-            {isDownloadingCouncilTemplate ? (
-              <>
-                <div className="w-4 h-4 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
-                Downloading...
-              </>
-            ) : (
-              <>
-                <Download className="w-4 h-4" /> Template
-              </>
-            )}
-          </button>
-          <button
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-md border border-purple-500 text-sm font-medium text-purple-600 hover:bg-purple-50 disabled:opacity-50 disabled:cursor-not-allowed"
-            onClick={handleOpenCouncilImport}
-            disabled={isImportingCouncil}
-          >
-            {isImportingCouncil ? (
-              <>
-                <div className="w-4 h-4 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
-                Importing...
-              </>
-            ) : (
-              <>
-                <Upload className="w-4 h-4" /> Import File
-              </>
-            )}
-          </button>
           <button
             className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-gradient-to-r from-purple-600 to-blue-500 text-white text-sm"
             onClick={() => setIsAddCouncilModalOpen(true)}
@@ -2409,74 +2219,12 @@ export default function DataManagementPage() {
 
       {/* Hidden import inputs */}
       <input
-        ref={councilFileInputRef}
-        type="file"
-        accept=".xlsx,.xls"
-        className="hidden"
-        onChange={handleCouncilFileChange}
-      />
-      <input
         ref={studentFileInputRef}
         type="file"
         accept=".xlsx,.xls"
         className="hidden"
         onChange={handleStudentFileChange}
       />
-
-      {/* Council import modal */}
-      {isCouncilImportModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
-            <div className="mb-4 flex items-start justify-between">
-              <div>
-                <div className="flex items-center gap-2 text-lg font-semibold text-gray-900">
-                  <Upload className="w-5 h-5 text-purple-500" />
-                  Import Councils
-                </div>
-                <p className="text-sm text-gray-500">
-                  Select a major and upload the council-committee template.
-                </p>
-              </div>
-              <button
-                className="rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-                onClick={() => setIsCouncilImportModalOpen(false)}
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <label className="text-sm font-medium text-gray-700">
-                  Major
-                </label>
-                <select
-                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200"
-                  value={councilImportMajorId}
-                  onChange={(e) => setCouncilImportMajorId(e.target.value)}
-                >
-                  {majors.length === 0 && (
-                    <option value="">No majors available</option>
-                  )}
-                  {majors.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <button
-                className="inline-flex items-center gap-2 px-3 py-2 rounded-md border border-purple-500 text-sm font-medium text-purple-600 hover:bg-purple-50 w-full justify-center"
-                onClick={() => councilFileInputRef.current?.click()}
-                disabled={!councilImportMajorId}
-              >
-                <Upload className="w-4 h-4" /> Choose File
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Student import modal */}
       {isStudentImportModalOpen && (
