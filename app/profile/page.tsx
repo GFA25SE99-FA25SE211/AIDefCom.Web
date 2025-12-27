@@ -177,9 +177,22 @@ export default function ProfilePage() {
     try {
       setSavingProfile(true);
 
+      const token = localStorage.getItem("accessToken");
+      if (!token) {
+        swalConfig.error(
+          "Error",
+          "You are not authenticated. Please login again."
+        );
+        router.push("/login");
+        return;
+      }
+
       const res = await fetch("/api/auth/profile", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         credentials: "include",
         body: JSON.stringify({
           fullName: editFullName,
@@ -231,9 +244,22 @@ export default function ProfilePage() {
     try {
       setChangingPassword(true);
 
+      const token = localStorage.getItem("accessToken");
+      if (!token) {
+        swalConfig.error(
+          "Error",
+          "You are not authenticated. Please login again."
+        );
+        router.push("/login");
+        return;
+      }
+
       const res = await fetch("/api/auth/password", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         credentials: "include",
         body: JSON.stringify({ currentPassword, newPassword }),
       });

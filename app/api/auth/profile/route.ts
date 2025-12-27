@@ -5,8 +5,16 @@ import { BACKEND_API_URL } from "@/lib/config/api-urls";
 
 export async function PUT(request: Request) {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get("token")?.value;
+    // Try to get token from Authorization header first, then fall back to cookie
+    const authHeader = request.headers.get("Authorization");
+    let token: string | undefined;
+
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      token = authHeader.substring(7); // Remove "Bearer " prefix
+    } else {
+      const cookieStore = await cookies();
+      token = cookieStore.get("token")?.value;
+    }
 
     if (!token) {
       return NextResponse.json(
